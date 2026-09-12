@@ -1,0 +1,6 @@
+kind: mini
+read_first:
+  - path: README.md
+    note: mini POV — report done to master; not a worker seat
+vars:
+  job_role: "{{jobRole}}"

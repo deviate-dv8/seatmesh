@@ -8,7 +8,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadProfile, meshRuntimePaths, resolveDaemonPort, seatMeshPackageRoot } from "@seat-mesh/core";
+import { loadProfile, meshRuntimePaths, resolveDaemonPort, resolveDaemonScript } from "@seat-mesh/core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
   const metaPath = rt.meshInboxMeta;
   const stopPath = rt.meshInboxStop;
   const logPath = rt.meshInboxLog;
-  const serverJs = path.join(seatMeshPackageRoot(), "packages/daemon/dist/mesh-inbox-server.js");
+  const serverJs = resolveDaemonScript("mesh-inbox-server.js");
 
   if (!fs.existsSync(serverJs)) {
     console.error(`mesh-inbox-supervisor: missing ${serverJs} — run ./sm.sh reload`);

@@ -149,7 +149,11 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "-h" || cmd === "--help" || cmd === "help") {
-    usage(meshLoaded(profileArg));
+    try {
+      usage(profileArg ? meshLoaded(profileArg) : undefined);
+    } catch {
+      usage();
+    }
     return;
   }
 

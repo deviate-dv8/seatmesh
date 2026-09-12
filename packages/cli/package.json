@@ -1,9 +1,11 @@
 {
   "name": "seatmesh",
-  "version": "0.1.4",
+  "version": "0.1.7",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "profiles",
+    "templates"
   ],
   "bin": {
     "seatmesh": "dist/main.js"
@@ -15,13 +17,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "node scripts/bundle-profiles.mjs && npm run build"
   },
   "dependencies": {
-    "@seat-mesh/connectivity": "0.1.2",
-    "@seat-mesh/core": "0.1.2",
-    "@seat-mesh/providers": "0.1.2",
-    "@seat-mesh/tmux": "0.1.2",
+    "@seat-mesh/connectivity": "0.1.7",
+    "@seat-mesh/core": "0.1.7",
+    "@seat-mesh/daemon": "0.1.7",
+    "@seat-mesh/providers": "0.1.7",
+    "@seat-mesh/tmux": "0.1.7",
     "commander": "^15.0.0"
   }
 }

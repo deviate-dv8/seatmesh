@@ -4,7 +4,7 @@ import path from "node:path";
 import {
   meshRuntimePaths,
   resolveDaemonPort,
-  seatMeshPackageRoot,
+  resolveDaemonScript,
   type LoadedProfile,
 } from "@seat-mesh/core";
 
@@ -23,10 +23,9 @@ interface MeshInboxMeta {
 }
 
 function enginePaths() {
-  const engineRoot = seatMeshPackageRoot();
   return {
-    serverJs: path.join(engineRoot, "packages/daemon/dist/mesh-inbox-server.js"),
-    supervisorJs: path.join(engineRoot, "packages/daemon/dist/mesh-inbox-supervisor.js"),
+    serverJs: resolveDaemonScript("mesh-inbox-server.js"),
+    supervisorJs: resolveDaemonScript("mesh-inbox-supervisor.js"),
   };
 }
 

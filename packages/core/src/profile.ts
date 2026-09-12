@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
+import { seatMeshPackageRoot } from "./engine-paths.js";
 import { findDotSmConfig } from "./dotdir.js";
 import { MeshProfileSchema, type MeshProfile } from "./schema/profile.js";
 import { resolveWorkspace, resolveFromProfile } from "./paths.js";
@@ -38,10 +39,7 @@ export {
   runtimePathHint,
 } from "./runtime-paths.js";
 
-/** seatmesh package root (profiles/ lives here). */
-export function seatMeshPackageRoot(): string {
-  return path.resolve(import.meta.dirname, "../../..");
-}
+export { seatMeshPackageRoot, resolveDaemonScript } from "./engine-paths.js";
 
 /** Default profile: workspace `.sm/` when present, else bundled minimal. No flags required. */
 export function defaultProfilePath(): string {

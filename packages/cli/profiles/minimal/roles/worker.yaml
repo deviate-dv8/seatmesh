@@ -1,0 +1,9 @@
+kind: worker
+read_first:
+  - path: README.md
+    note: seatmesh worker demo index
+policies:
+  - id: mesh-cli
+    text: seatmesh whoami; pass --profile <dir> (see profiles/minimal)
+files:
+  - package.json
