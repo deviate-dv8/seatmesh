@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  findDotSmConfig,
   meshRuntimePaths,
   profilePaths,
   type LoadedProfile,
@@ -248,7 +249,24 @@ export async function printStatusReport(
     return report;
   }
 
+  const cwd = process.cwd();
+  const projectCfg = findDotSmConfig(cwd);
+  const usingBundled =
+    !projectCfg && !loaded.profilePath.includes(`${path.sep}.sm${path.sep}`);
   console.log(`seatmesh status  profile=${loaded.profile.name}  session=${loaded.sessionName}`);
+  if (!projectCfg) {
+    printSection("This folder");
+    console.log(`cwd=${cwd}`);
+    console.log(`project=MISSING  (no .sm/mesh.config.yaml here or above)`);
+    if (usingBundled) {
+      console.log(`note=using bundled demo profile (${loaded.profilePath})`);
+      console.log("next:  npx seatmesh init");
+    }
+  } else {
+    printSection("This folder");
+    console.log(`cwd=${cwd}`);
+    console.log(`project=FOUND  ${projectCfg}`);
+  }
   const pOk = printPrereqs(prereqs);
   printProfile(loaded);
   printInTmux();

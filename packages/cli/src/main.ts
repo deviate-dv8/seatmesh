@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { findDotSmConfig } from "@seat-mesh/core";
 import {
   loadProfile,
   profilePaths,
@@ -142,9 +143,15 @@ async function main(): Promise<void> {
   const [cmd, sub, ...tail] = rest;
 
   if (!cmd) {
+    const json = rest.includes("--json");
+    if (!profileArg && !findDotSmConfig()) {
+      const { printDiscoveryReport } = await import("./discovery-report.js");
+      const report = await printDiscoveryReport({ json });
+      process.exit(report.ok ? 0 : 1);
+    }
     const loaded = meshLoaded(profileArg);
     const { printStatusReport } = await import("./status-report.js");
-    const report = await printStatusReport(loaded, { json: rest.includes("--json") });
+    const report = await printStatusReport(loaded, { json });
     process.exit(report.ok ? 0 : 1);
   }
 
