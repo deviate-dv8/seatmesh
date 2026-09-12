@@ -4,8 +4,8 @@ import { z } from "zod";
  * Mesh-owned slot state file (`mesh-agents.json`).
  *
  * Replaces legacy `tmux-main-agents.json` as the source of truth for
- * which CLI type / resume id each slot runs. Write path is OFF until
- * TODO 4.1 is complete -- currently read-only seed for launch + scan.
+ * which CLI type / resume id each slot runs. Written by save/auto, set, tag,
+ * and switch-side scrape; profile yaml is fallback only.
  *
  * Field convention: camelCase (not snake_case). The legacy harness
  * format uses `resume_id`; mesh-agents.json normalises to `resumeId`.

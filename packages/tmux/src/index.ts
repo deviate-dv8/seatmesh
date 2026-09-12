@@ -22,6 +22,7 @@ export * from "./session/borders.js";
 export * from "./session/verify.js";
 export * from "./inject/flush.js";
 export * from "./agents/switch.js";
+export * from "./agents/set-tag.js";
 export * from "./roles/title-status.js";
 export * from "./inject/focus-brief.js";
 export * from "./roles/contexts.js";

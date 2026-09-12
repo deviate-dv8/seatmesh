@@ -56,6 +56,8 @@ import {
   runFlush,
   printFlushResults,
   runSwitch,
+  runSet,
+  runTag,
   setPaneTitle,
   setPaneStatus,
   printSeatContexts,
@@ -130,7 +132,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   launch [--now] [targets…]
   prompt | remind | flush
   contexts [--json] | peek | ppa
-  switch | handoff | title | status
+  switch | handoff | set | tag | title | status
   agent [target]              scoped can/cannot for this pane (profile role)
   whoami [target] | cold-start [--inject] | seat init
   room | chat | index | proxy | providers | manager | stack | profile show
@@ -803,6 +805,32 @@ async function main(): Promise<void> {
     const { printStatusReport } = await import("./status-report.js");
     const report = await printStatusReport(loaded, { json: rest.includes("--json") });
     process.exit(report.ok ? 0 : 1);
+  }
+
+  if (cmd === "set") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const target = sub;
+    const typeRaw = tail[0];
+    if (!target || !typeRaw) {
+      console.error("usage: set <target> <agent|kiro|claude|opencode|empty>");
+      process.exit(2);
+    }
+    runSet(loaded, reg, target, typeRaw);
+    return;
+  }
+
+  if (cmd === "tag") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const target = sub;
+    const resumeId = tail[0];
+    if (!target || !resumeId) {
+      console.error("usage: tag <target> <resume_id>");
+      process.exit(2);
+    }
+    runTag(loaded, reg, target, resumeId);
+    return;
   }
 
   if (cmd === "title") {

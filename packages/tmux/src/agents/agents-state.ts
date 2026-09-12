@@ -77,7 +77,7 @@ export function resolveLaunchCmd(
 }
 
 // ---------------------------------------------------------------------------
-// Mesh-owned state (mesh-agents.json) -- read-only until TODO 4.1 write path.
+// Mesh-owned state (mesh-agents.json) — read via loadMeshAgents; writes via save/set/tag.
 // ---------------------------------------------------------------------------
 
 /**

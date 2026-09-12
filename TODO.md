@@ -37,7 +37,7 @@
 - [x] **1.3** `prompt` / `prompt --manager` — enqueue PEER.jsonl; daemon inject (handoff/mini spawn still direct)
 - [x] **1.4** `flush` — `flush.ts` (Enter rescue / Esc stuck draft)
 - [x] **1.5** `switch` / `handoff` — relaunch + FOCUS handoff (`switch.ts`)
-- [ ] **1.6** `set` / `tag` — needs `mesh-agents.json`
+- [x] **1.6** `set` / `tag` — persist type/resumeId to `mesh-agents.json` (`set-tag.ts`; JSON only, no relaunch)
 - [~] **1.7** `save` / `auto` — scrape live mesh -> `mesh-agents.json` (layout.minis + slot CLI state)
 - [x] **1.8** `title` / `status` — `@mesh_title` / `@mesh_status` + border
 - [x] **1.9** `remind` — manager-only; enqueue PEER.jsonl (`remind.ts`)
@@ -76,7 +76,7 @@
 
 ## P4 — cutover (see `docs/SURPASS.md`)
 
-- [~] **4.1** `mesh-agents.json` (mesh-owned state) — save/read layout override; `set`/`tag`/`switch` persist still open
+- [~] **4.1** `mesh-agents.json` (mesh-owned state) — save/read layout + set/tag persist; switch relaunch still does not auto-save
 - [ ] **4.2** `session down` (never touch `dev`)
 - [ ] **4.3** kiro trust dialog on launch
 - [ ] **4.4** Cursor composer-ready wait before handoff
@@ -91,7 +91,7 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 
 - [ ] **5.1** `checkback start` — positional expect + optional positional duration + `--here` alias + `ensureMeshInbox()` loud-fail (fix documented shape; P0-1)
 - [~] **5.2** `inbox list|resolve` + `status --wait|--meta` + `log`/`instances` + daemon routes `GET /inbox` + `POST /inbox/resolve` (P0-2) — **workaround only:** bulk JSONL resolve used 23:28; CLI routes not shipped
-- [ ] **5.3** `tag` — `sm tag <slot|self> <rid|--auto>`, needs `mesh-agents.json` write (P1-1; blocks on 4.1)
+- [~] **5.3** `tag` — `set`/`tag` shipped (resume id); `--auto` + `self` alias still open
 - [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)
 - [ ] **5.5** `whoami --json` (P1-3)
 - [ ] **5.6** workers layout profile-config — `layoutWorkersFromProfile` replaces hard-coded `layoutWorkers3x2` (DAN req; P1-4)
