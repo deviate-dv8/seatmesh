@@ -101,6 +101,41 @@ export class JsonlStore {
     return row;
   }
 
+  findCheckback(id: string): CheckbackRow | null {
+    const needle = String(id || "").trim().toLowerCase();
+    if (!needle) return null;
+    return (
+      this.readCheckbacks().find(
+        (r) => r.id === id || r.id.toLowerCase().startsWith(needle),
+      ) ?? null
+    );
+  }
+
+  resetCheckback(id: string, expiresAt: string): CheckbackRow | null {
+    const row = this.findCheckback(id);
+    if (!row || Number.isNaN(Date.parse(expiresAt))) return null;
+    row.status = "active";
+    row.expiresAt = expiresAt;
+    row.updatedAt = new Date().toISOString();
+    return this.upsertCheckback(row);
+  }
+
+  ackCheckback(
+    id: string,
+    yes: boolean,
+  ): { ok: boolean; action?: string; id?: string; error?: string } {
+    const row = this.findCheckback(id);
+    if (!row) return { ok: false, error: "not found" };
+    if (row.status !== "active") return { ok: false, error: `status=${row.status}` };
+    if (yes) {
+      row.status = "cancelled";
+      row.updatedAt = new Date().toISOString();
+      this.upsertCheckback(row);
+      return { ok: true, action: "matched", id: row.id };
+    }
+    return { ok: true, action: "ignored", id: row.id };
+  }
+
   cancelCheckback(id: string): boolean {
     const rows = this.readCheckbacks();
     let hit = false;

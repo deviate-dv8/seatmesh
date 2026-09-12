@@ -42,6 +42,7 @@ raw-paste into tmux from scripts when a command exists.
 | Fan-out all agents | `room broadcast <msg>` |
 | Remind seats | `remind <slot\|all> [note]` |
 | Poll later | `checkback start 5m --renew 3m --expect "…" --here` |
+| Reset / ack intercept | `checkback reset <id> 5m` · `checkback ack <id> yes\|no` |
 
 **Multi-manager coordination:** `room say -r managers "SYNC: …"` (shared ledger).
 Use `peer manager` or `peer slot-N` when you need immediate inject to one pane.

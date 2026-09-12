@@ -335,6 +335,21 @@ async function main(): Promise<void> {
         return json(res, 200, { ok: true, entry: row });
       }
 
+      if (req.method === "POST" && url.pathname === "/patience/ack") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { id?: string; yes?: boolean | string; answer?: string };
+        const id = String(body.id ?? "").trim();
+        if (!id) return json(res, 400, { ok: false, error: "id required" });
+        const yes =
+          body.yes === true ||
+          body.yes === "true" ||
+          String(body.answer ?? "").toLowerCase() === "yes";
+        const result = store.ackCheckback(id, yes);
+        if (!result.ok) return json(res, 404, result);
+        log(`checkback ack id=${result.id} action=${result.action}`);
+        return json(res, 200, result);
+      }
+
       const cancelMatch = /^\/patience\/([^/]+)\/cancel$/.exec(url.pathname);
       if (req.method === "POST" && cancelMatch) {
         const id = decodeURIComponent(cancelMatch[1]);
@@ -344,6 +359,20 @@ async function main(): Promise<void> {
         }
         store.cancelCheckback(id);
         return json(res, 200, { ok: true, cancelled: id });
+      }
+
+      const resetMatch = /^\/patience\/([^/]+)\/reset$/.exec(url.pathname);
+      if (req.method === "POST" && resetMatch) {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { expiresAt?: string; at?: string };
+        const id = decodeURIComponent(resetMatch[1]);
+        const expiresAt = String(body.expiresAt || body.at || "").trim();
+        const entry = store.resetCheckback(id, expiresAt);
+        if (!entry) {
+          return json(res, 400, { ok: false, error: "not found or bad expiresAt" });
+        }
+        log(`checkback reset id=${entry.id} expiresAt=${entry.expiresAt ?? "?"}`);
+        return json(res, 200, { ok: true, entry });
       }
 
       if (req.method === "POST" && url.pathname === "/pane-ops/clear") {

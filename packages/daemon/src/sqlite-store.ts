@@ -236,6 +236,44 @@ export class SqliteStore {
     return row;
   }
 
+  findCheckback(id: string): CheckbackRow | null {
+    const needle = String(id || "").trim().toLowerCase();
+    if (!needle) return null;
+    const row = this.db
+      .prepare("SELECT * FROM checkback WHERE id = ? OR lower(id) LIKE ? LIMIT 1")
+      .get(id, `${needle}%`);
+    return row ? rowToCheckback(row as Record<string, unknown>) : null;
+  }
+
+  resetCheckback(id: string, expiresAt: string): CheckbackRow | null {
+    const row = this.findCheckback(id);
+    if (!row || Number.isNaN(Date.parse(expiresAt))) return null;
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        "UPDATE checkback SET status = 'active', expires_at = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(expiresAt, now, row.id);
+    return { ...row, status: "active", expiresAt, updatedAt: now };
+  }
+
+  ackCheckback(
+    id: string,
+    yes: boolean,
+  ): { ok: boolean; action?: string; id?: string; error?: string } {
+    const row = this.findCheckback(id);
+    if (!row) return { ok: false, error: "not found" };
+    if (row.status !== "active") return { ok: false, error: `status=${row.status}` };
+    if (yes) {
+      const now = new Date().toISOString();
+      this.db
+        .prepare("UPDATE checkback SET status = 'cancelled', updated_at = ? WHERE id = ?")
+        .run(now, row.id);
+      return { ok: true, action: "matched", id: row.id };
+    }
+    return { ok: true, action: "ignored", id: row.id };
+  }
+
   cancelCheckback(id: string): boolean {
     const r = this.db
       .prepare(

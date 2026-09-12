@@ -3,11 +3,14 @@ import {
   type LoadedProfile,
   type CheckbackEntry,
   armCheckback,
+  ackCheckback,
   cancelAllCheckbacks,
   cancelCheckback,
   chatRoomConfigForLoaded,
+  expiresAtUtcFromDuration,
   listCheckbacks,
   parseDurationToSeconds,
+  resetCheckback,
 } from "@seat-mesh/core";
 import {
   ensureMeshInbox,
@@ -19,8 +22,17 @@ import {
 function requireMeshInbox(loaded: LoadedProfile): void {
   if (ensureMeshInbox(loaded, { quiet: true })) return;
   const port = meshInboxPort(loaded);
-  console.error(`FAIL: mesh inbox down on :${port} — run: ./sm.sh inbox restart`);
+  console.error(
+    `FAIL: mesh inbox down on :${port} (auto-start failed) — run: ./sm.sh inbox restart`,
+  );
   process.exit(1);
+}
+
+function parseAckAnswer(raw: string): boolean | null {
+  const a = raw.trim().toLowerCase();
+  if (a === "y" || a === "yes" || a === "true" || a === "1") return true;
+  if (a === "n" || a === "no" || a === "false" || a === "0") return false;
+  return null;
 }
 
 function resolveTargetPane(
@@ -175,6 +187,50 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
       const cfg = chatRoomConfigForLoaded(loaded);
       const res = await cancelAllCheckbacks(cfg.inboxBase);
       console.log(`ok cancelled=${res.cancelled}`);
+    });
+
+  checkback
+    .command("reset")
+    .description("Reset checkback expiry (harness: reset <id> <duration>)")
+    .argument("<id>", "checkback id or prefix")
+    .argument("<duration>", "new duration from now (30s, 5m, 1h)")
+    .action(async (id: string, duration: string) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      const cfg = chatRoomConfigForLoaded(loaded);
+      const expiresAt = expiresAtUtcFromDuration(duration);
+      if (!expiresAt) {
+        console.error(`checkback reset: bad duration '${duration}'`);
+        process.exit(2);
+      }
+      const res = await resetCheckback(cfg.inboxBase, id, expiresAt);
+      if (!res.ok || !res.entry) {
+        console.error(`checkback reset: FAIL ${res.error ?? "?"}`);
+        process.exit(1);
+      }
+      console.log(`ok id=${res.entry.id} expiresAt=${res.entry.expiresAt ?? "-"}`);
+    });
+
+  checkback
+    .command("ack")
+    .description("Ack CHECKBACK? intercept — yes cancels (matched), no ignores")
+    .argument("<id>", "checkback id or prefix")
+    .argument("<answer>", "yes|no")
+    .action(async (id: string, answer: string) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      const cfg = chatRoomConfigForLoaded(loaded);
+      const yes = parseAckAnswer(answer);
+      if (yes == null) {
+        console.error("checkback ack: want yes|no");
+        process.exit(2);
+      }
+      const res = await ackCheckback(cfg.inboxBase, id, yes);
+      if (!res.ok) {
+        console.error(`checkback ack: FAIL ${res.error ?? "?"}`);
+        process.exit(1);
+      }
+      console.log(`ok action=${res.action ?? "?"} id=${res.id ?? id}`);
     });
 
   return checkback;

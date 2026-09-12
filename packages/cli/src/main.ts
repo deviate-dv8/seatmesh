@@ -145,7 +145,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   to-master | to-slot | to-mini <msg...>    enqueue (daemon injects)
   secretary start|dispatch|collect|status|watch …
   mini list|spawn|prompt|done|dispatch-all
-  checkback start|list|cancel|cancel-all  (alias: patience)
+  checkback start|list|cancel|cancel-all|reset|ack  (alias: patience)
   test                          smoke: layout, providers, inbox, proxy
   launch [--now] [targets…]
   prompt | remind | flush

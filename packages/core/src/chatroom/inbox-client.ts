@@ -129,3 +129,55 @@ export async function cancelAllCheckbacks(
     .post("patience/cancel-all")
     .json<CancelAllCheckbacksResult>();
 }
+
+export interface ResetCheckbackResult {
+  ok: boolean;
+  entry?: CheckbackEntry;
+  error?: string;
+}
+
+export async function resetCheckback(
+  inboxBase: string,
+  id: string,
+  expiresAt: string,
+): Promise<ResetCheckbackResult> {
+  const encoded = encodeURIComponent(id);
+  try {
+    return await inboxClient(inboxBase)
+      .post(`patience/${encoded}/reset`, { json: { expiresAt } })
+      .json<ResetCheckbackResult>();
+  } catch (e) {
+    const err = e as { response?: Response; message?: string };
+    if (err.response) {
+      const text = await err.response.text().catch(() => "");
+      return { ok: false, error: `inbox POST ${err.response.status}: ${text.slice(0, 200)}` };
+    }
+    return { ok: false, error: err.message ?? String(e) };
+  }
+}
+
+export interface AckCheckbackResult {
+  ok: boolean;
+  action?: string;
+  id?: string;
+  error?: string;
+}
+
+export async function ackCheckback(
+  inboxBase: string,
+  id: string,
+  yes: boolean,
+): Promise<AckCheckbackResult> {
+  try {
+    return await inboxClient(inboxBase)
+      .post("patience/ack", { json: { id, yes } })
+      .json<AckCheckbackResult>();
+  } catch (e) {
+    const err = e as { response?: Response; message?: string };
+    if (err.response) {
+      const text = await err.response.text().catch(() => "");
+      return { ok: false, error: `inbox POST ${err.response.status}: ${text.slice(0, 200)}` };
+    }
+    return { ok: false, error: err.message ?? String(e) };
+  }
+}

@@ -53,7 +53,7 @@
 - [~] **2.1** mesh inbox daemon (`mesh-inbox-server.ts` **:3100** — `JsonlStore` + `mesh-orchestrator` + `border-paint`; BullMQ when Redis reachable, poll fallback). **Radar:** health wedge ~1–2s post-restart; delivery proof landed (`isInboxDelivered`); list/resolve routes still open (see **5.2**)
 - [x] **2.2** `to-master` — enqueue + daemon inject (`deliverToPane`, `INBOX.jsonl` drain)
 - [~] **2.3** peer comms — `./sm.sh to-slot` / `to-mini` enqueue `PEER.jsonl`; room/chat ledger separate
-- [~] **2.4** `checkback` — `start|list|cancel` (`patience` alias) wrapping daemon `/patience`; no `schedule` yet
+- [x] **2.4** `checkback` — `start|list|cancel|reset|ack` (`patience` alias) + auto-start on down via `ensureMeshInbox`
 - [ ] **2.5** `schedule`
 - [ ] **2.6** `dc-feedback`
 
