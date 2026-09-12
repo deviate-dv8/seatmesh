@@ -32,7 +32,7 @@
 
 ## P1 — daily harness feel
 
-- [~] **1.1** `whoami` — works; harness POV doc map not wired
+- [x] **1.1** `whoami` — role YAML POV map + `./sm.sh whoami --validate` + init templates
 - [x] **1.2** `manager`
 - [x] **1.3** `prompt` / `prompt --manager` — enqueue PEER.jsonl; daemon inject (handoff/mini spawn still direct)
 - [x] **1.4** `flush` — `flush.ts` (Enter rescue / Esc stuck draft)

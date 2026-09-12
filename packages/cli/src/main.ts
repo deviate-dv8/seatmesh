@@ -14,6 +14,8 @@ import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
   printWhoami,
   whoamiJson,
+  whoamiJsonWithValidate,
+  validateWhoamiRoleIndex,
   printAgentCard,
   runWhoami,
   capturePaneSnapshot,
@@ -149,7 +151,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   night on|off|status | continue <slot|all>   (manager + night on)
   slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
   agent [target]              scoped can/cannot for this pane (profile role)
-  whoami [target] | cold-start [--inject] | seat init
+  whoami [target] [--validate] | cold-start [--inject] | seat init
   room | chat | index | proxy | providers | manager | stack | profile show
 
   --profile <dir|yaml>   override config (default: .sm/ walk-up or bundled profile)
@@ -992,13 +994,27 @@ async function main(): Promise<void> {
     }
     const loaded = meshLoaded(profileArg);
     const json = rest.includes("--json");
-    const targetArg = (sub === "--json" ? tail[0] : sub || tail.find((a) => a !== "--json")) as
+    const validate = rest.includes("--validate");
+    const targetArg = [sub, ...tail].find((a) => a !== "--json" && a !== "--validate") as
       | string
       | undefined;
     if (json) {
-      console.log(JSON.stringify(whoamiJson(loaded, targetArg), null, 2));
+      const payload = validate
+        ? whoamiJsonWithValidate(loaded, targetArg)
+        : whoamiJson(loaded, targetArg);
+      console.log(JSON.stringify(payload, null, 2));
     } else {
       printWhoami(loaded, targetArg);
+      if (validate) {
+        const result = validateWhoamiRoleIndex(loaded, targetArg);
+        if (!result.ok) {
+          console.error(
+            `FAIL: role=${result.kind} missing paths:\n${result.missing.map((m) => `  - ${m}`).join("\n")}`,
+          );
+          process.exit(1);
+        }
+        console.log(`OK: role=${result.kind} role-index paths exist`);
+      }
     }
     return;
   }

@@ -1,6 +1,22 @@
 kind: manager
+banner:
+  - "cold_start=./sm.sh whoami --validate | coordination; spawn/review minis; PROPOSAL gate"
 read_first:
-  - path: services/seatmesh/docs/ONE-PATH.md
-    note: one command per job
+  - path: .sm/mesh.config.yaml
+    note: layout + daemon port + seats.root
+  - path: docs/ROLE-YAML.md
+    note: extend .sm/roles/ with project playbooks
 files:
-  - services/seatmesh/docs/QUICKSTART.md
+  - docs/ONE-PATH.md
+  - docs/COMMS.md
+  - docs/DOTDIR.md
+  - docs/SURPASS.md
+  - packages/daemon/src/mesh-inbox-server.ts
+  - .sm/runtime/daemon/CHECKBACK.jsonl
+policies:
+  - id: manager_throughput
+    text: spawn minis for long generate; master stays coordination + PROPOSAL gate
+  - id: peer
+    cmd: ./sm.sh peer <target> "<msg>"
+  - id: minis
+    cmd: ./sm.sh mini list

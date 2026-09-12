@@ -3,6 +3,7 @@ import {
   profilePaths,
   loadRoleIndex,
   renderRoleIndex,
+  validateRoleIndex,
   portsForSlot,
   type LoadedProfile,
 } from "@seat-mesh/core";
@@ -96,22 +97,33 @@ export function runWhoami(loaded: LoadedProfile, target?: string): WhoamiResult 
 /** @deprecated use runWhoami */
 export const runWhere = runWhoami;
 
+export function roleKindFromWhoami(role: string): string {
+  if (role === "manager-mini") return "mini";
+  if (role === "secretary") return "secretary";
+  if (role === "manager-2") return "manager-2";
+  if (role === "manager") return "manager";
+  return "worker";
+}
+
+export function validateWhoamiRoleIndex(
+  loaded: LoadedProfile,
+  target?: string,
+): { ok: boolean; missing: string[]; kind: string } {
+  const w = runWhoami(loaded, target);
+  const paths = profilePaths(loaded);
+  const kind = roleKindFromWhoami(w.role);
+  const index = loadRoleIndex(paths.rolesDir, kind);
+  const result = validateRoleIndex(index, loaded.workspace);
+  return { ...result, kind };
+}
+
 export function whoamiJson(loaded: LoadedProfile, target?: string): Record<string, unknown> {
   const w = runWhoami(loaded, target);
   const paths = profilePaths(loaded);
   const mini = w.paneId ? tmuxDisplay(w.paneId, "#{@mesh_mini}") ?? "" : "";
   const jobRole = w.paneId ? tmuxDisplay(w.paneId, "#{@mesh_job_role}") ?? "" : "";
-  const kind =
-    w.role === "manager-mini"
-      ? "mini"
-      : w.role === "secretary"
-        ? "secretary"
-        : w.role === "manager-2"
-          ? "manager-2"
-          : w.role === "manager"
-            ? "manager"
-            : "worker";
-  return {
+  const kind = roleKindFromWhoami(w.role);
+  const payload: Record<string, unknown> = {
     profile: w.profile,
     workspace: w.workspace,
     workspaceId: loaded.workspaceId,
@@ -130,22 +142,28 @@ export function whoamiJson(loaded: LoadedProfile, target?: string): Record<strin
     dataRoot: paths.dataRoot,
     seatsRoot: paths.seatsRoot,
   };
+  return payload;
+}
+
+export function whoamiJsonWithValidate(
+  loaded: LoadedProfile,
+  target?: string,
+): Record<string, unknown> {
+  const payload = whoamiJson(loaded, target);
+  const validation = validateWhoamiRoleIndex(loaded, target);
+  payload.roleIndex = {
+    kind: validation.kind,
+    ok: validation.ok,
+    missing: validation.missing,
+  };
+  return payload;
 }
 
 export function printWhoami(loaded: LoadedProfile, target?: string): void {
   const w = runWhoami(loaded, target);
   const paths = profilePaths(loaded);
 
-  const kind =
-    w.role === "manager-mini"
-      ? "mini"
-      : w.role === "secretary"
-        ? "secretary"
-        : w.role === "manager-2"
-          ? "manager-2"
-          : w.role === "manager"
-            ? "manager"
-            : "worker";
+  const kind = roleKindFromWhoami(w.role);
 
   try {
     const index = loadRoleIndex(paths.rolesDir, kind);

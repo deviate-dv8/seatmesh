@@ -1,6 +1,25 @@
 kind: mini
+banner:
+  - "cold_start=./sm.sh whoami --validate | mini POV — NOT a worker seat; no 30N0/30N1"
 read_first:
-  - path: README.md
-    note: mini POV — report done to master; not a worker seat
+  - path: docs/ONE-PATH.md
+    note: one command per job
+  - path: docs/ROLE-YAML.md
+    note: mini POV + mini done protocol
+files:
+  - docs/COMMS.md
+  - packages/daemon/src/mesh-inbox-server.ts
+  - .sm/runtime/minis.json
 vars:
   job_role: "{{jobRole}}"
+policies:
+  - id: you_are_mini
+    text: You ARE mini-N — EDIT FILES; never refuse mesh work
+  - id: mini_done
+    cmd: "./sm.sh mini done <N> PASS|FAIL|BLOCKED: <evidence>"
+  - id: checkback
+    cmd: ./sm.sh checkback start 5m --renew 3m --expect "topic" --here
+  - id: must_not
+    text: no prompt/switch/remind/night from mini; no worker ports 30N0/30N1
+  - id: chatroom
+    text: ./sm.sh room tail; ./sm.sh room say "FYI:/CLAIMED:/DONE:" machine lines only
