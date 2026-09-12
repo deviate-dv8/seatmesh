@@ -1,15 +1,14 @@
 {
   "name": "seatmesh",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "files": [
-    "dist",
-    "templates"
+    "dist"
   ],
   "bin": {
-    "seat-mesh": "./dist/main.js",
-    "seatmesh": "./dist/main.js",
-    "sm": "./dist/main.js"
+    "seat-mesh": "dist/main.js",
+    "seatmesh": "dist/main.js",
+    "sm": "dist/main.js"
   },
   "publishConfig": {
     "access": "public"
@@ -17,13 +16,14 @@
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "seat-mesh-connectivity": "0.1.0",
-    "seat-mesh-core": "0.1.0",
-    "seat-mesh-providers": "0.1.0",
-    "seat-mesh-tmux": "0.1.0",
+    "seat-mesh-connectivity": "0.1.1",
+    "seat-mesh-core": "0.1.1",
+    "seat-mesh-providers": "0.1.1",
+    "seat-mesh-tmux": "0.1.1",
     "commander": "^15.0.0"
   }
 }

@@ -1,18 +1,19 @@
 {
   "name": "seat-mesh-daemon",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Inbox orchestrator — sole pane writer; BullMQ workers drain queues.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "seat-mesh-core": "0.1.0",
-    "seat-mesh-providers": "0.1.0",
-    "seat-mesh-tmux": "0.1.0",
+    "seat-mesh-core": "0.1.1",
+    "seat-mesh-providers": "0.1.1",
+    "seat-mesh-tmux": "0.1.1",
     "better-sqlite3": "^11.8.1"
   },
   "devDependencies": {
@@ -20,5 +21,8 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist"
+  ]
 }
