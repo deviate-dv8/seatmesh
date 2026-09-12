@@ -72,6 +72,7 @@ Targets for `peer`: `manager`, `secretary`, `slot-N`, `mini-N`, pane id.
 | Need | Command |
 |------|---------|
 | Inbox health | `inbox [--json]` (consumer **:31670** — see [PORTS.md](PORTS.md)) |
+| Inbox queue | `inbox list` \| `inbox all` \| `inbox resolve <id-prefix\|all>` |
 | Inbox lifecycle | `inbox stop\|restart` |
 | Canonical port | `profile show` → `daemon_port=` |
 | Proxy / connectivity | `proxy status\|check\|reset\|rotate` |

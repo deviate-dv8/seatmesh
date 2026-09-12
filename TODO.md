@@ -90,7 +90,7 @@
 Open rows from the sm-functions campaign. Each ships as one function per SPEC (SMFUNCTIONS-SPEC.md) and gets a ONE-PATH.md row.
 
 - [ ] **5.1** `checkback start` — positional expect + optional positional duration + `--here` alias + `ensureMeshInbox()` loud-fail (fix documented shape; P0-1)
-- [~] **5.2** `inbox list|resolve` + `status --wait|--meta` + `log`/`instances` + daemon routes `GET /inbox` + `POST /inbox/resolve` (P0-2) — **workaround only:** bulk JSONL resolve used 23:28; CLI routes not shipped
+- [~] **5.2** `inbox list|resolve` + daemon routes `GET /inbox` + `POST /inbox/resolve` — CLI shipped; `--wait|--meta` + log/instances still open
 - [~] **5.3** `tag` — `set`/`tag` shipped (resume id); `--auto` + `self` alias still open
 - [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)
 - [ ] **5.5** `whoami --json` (P1-3)

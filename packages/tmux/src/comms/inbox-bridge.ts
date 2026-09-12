@@ -137,6 +137,130 @@ function autoStartEnabled(loaded: LoadedProfile): boolean {
   return loaded.profile.daemon?.autoStart !== false;
 }
 
+export interface InboxEntry {
+  id: string;
+  at: string;
+  from: string;
+  slot: string | null;
+  ports: string | null;
+  msg: string;
+  sent: boolean;
+  sentAt?: string;
+  resolved: boolean;
+  read: boolean;
+}
+
+function inboxHttpGet(port: number, path: string): Record<string, unknown> | null {
+  const r = spawnSync("curl", ["-sS", "-m", "5", `${inboxBase(port)}${path}`], {
+    encoding: "utf8",
+  });
+  if (r.status !== 0 || !r.stdout?.trim()) return null;
+  try {
+    return JSON.parse(r.stdout) as Record<string, unknown>;
+  } catch {
+    return { raw: r.stdout.trim() };
+  }
+}
+
+function inboxHttpPost(port: number, path: string, body: Record<string, unknown>): Record<string, unknown> | null {
+  const r = spawnSync(
+    "curl",
+    [
+      "-sS",
+      "-m",
+      "5",
+      "-X",
+      "POST",
+      `${inboxBase(port)}${path}`,
+      "-H",
+      "Content-Type: application/json",
+      "-d",
+      JSON.stringify(body),
+    ],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0 || !r.stdout?.trim()) return null;
+  try {
+    return JSON.parse(r.stdout) as Record<string, unknown>;
+  } catch {
+    return { raw: r.stdout.trim() };
+  }
+}
+
+function requireInboxUp(loaded: LoadedProfile): number | null {
+  if (ensureMeshInbox(loaded, { quiet: true })) return meshInboxPort(loaded);
+  const port = meshInboxPort(loaded);
+  console.error(`inbox down on :${port} — run: ./sm.sh inbox restart`);
+  return null;
+}
+
+/** Unresolved manager inbox rows (mesh daemon GET /inbox). */
+export function listInbox(
+  loaded: LoadedProfile,
+  opts: { all?: boolean; json?: boolean } = {},
+): InboxEntry[] | null {
+  const port = requireInboxUp(loaded);
+  if (port == null) return null;
+  const path = opts.all ? "/inbox?all=1" : "/inbox";
+  const resp = inboxHttpGet(port, path);
+  if (!resp || resp.ok !== true) {
+    console.error(`inbox list failed on :${port}`);
+    return null;
+  }
+  const entries = (resp.entries ?? []) as InboxEntry[];
+  if (opts.json) {
+    console.log(JSON.stringify(resp, null, 2));
+    return entries;
+  }
+  if (!entries.length) {
+    console.log(`inbox: 0 ${opts.all ? "total" : "unresolved"} (session=${loaded.sessionName})`);
+    return entries;
+  }
+  for (const row of entries) {
+    const flags = [
+      row.resolved ? "resolved" : "open",
+      row.sent ? "sent" : "unsent",
+    ].join(",");
+    console.log(
+      `${row.at}  ${row.id.slice(0, 8)}  slot=${row.slot ?? "-"}  ${flags}  ${row.msg}`,
+    );
+  }
+  console.log(`inbox: ${entries.length} ${opts.all ? "total" : "unresolved"}`);
+  return entries;
+}
+
+/** Mark inbox rows resolved (mesh daemon POST /inbox/resolve). */
+export function resolveInbox(
+  loaded: LoadedProfile,
+  opts: { id?: string; all?: boolean; json?: boolean } = {},
+): { resolved: number; ids: string[] } | null {
+  const port = requireInboxUp(loaded);
+  if (port == null) return null;
+  const body: Record<string, unknown> = {};
+  if (opts.all) body.all = true;
+  else if (opts.id) body.id = opts.id;
+  else {
+    throw new Error("usage: inbox resolve <id-prefix>|all");
+  }
+  const resp = inboxHttpPost(port, "/inbox/resolve", body);
+  if (!resp || resp.ok !== true) {
+    console.error(`inbox resolve failed on :${port}`);
+    return null;
+  }
+  const result = {
+    resolved: Number(resp.resolved ?? 0),
+    ids: (resp.ids ?? []) as string[],
+  };
+  if (opts.json) {
+    console.log(JSON.stringify(resp, null, 2));
+  } else {
+    console.log(
+      `OK: resolved ${result.resolved} id(s) ${result.ids.map((i) => i.slice(0, 8)).join(",") || "(none)"}`,
+    );
+  }
+  return result;
+}
+
 export function sendToMaster(
   loaded: LoadedProfile,
   msg: string,
@@ -152,7 +276,7 @@ export function sendToMaster(
   });
   const r = spawnSync(
     "curl",
-    ["-sS", "-m", "5", "-X", "POST", `${inboxBase(port)}/inbox`, "-H", "Content-Type: application/json", "-d", body],
+    ["-sS", "-m", "5", "-X", "POST", `${inboxBase(port)}/to-master`, "-H", "Content-Type: application/json", "-d", body],
     { encoding: "utf8" },
   );
   if (r.status !== 0) return null;

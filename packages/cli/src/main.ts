@@ -27,6 +27,8 @@ import {
   stopMeshInbox,
   restartMeshInbox,
   printMeshInboxStatus,
+  listInbox,
+  resolveInbox,
   sendToMaster,
   secretaryLaunch,
   secretaryRestart,
@@ -122,7 +124,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   ops list|clear                pane-op queue (serial)
   save|auto                     scrape session -> mesh-agents.json (daemon also auto-scrapes every 10m)
   labels                        re-apply @mesh_* + border strip
-  inbox [--json] | inbox stop|restart
+  inbox [--json] | inbox list|resolve|stop|restart
   peer <target> <msg...>        manager -> any pane (one path; alias: prompt -m)
   to-master | to-slot | to-mini <msg...>    enqueue (daemon injects)
   secretary start|dispatch|collect|status|watch …
@@ -356,6 +358,24 @@ async function main(): Promise<void> {
     if (sub === "start") {
       startMeshInbox(loaded);
       return;
+    }
+    if (sub === "list" || sub === "all") {
+      const rows = listInbox(loaded, { all: sub === "all", json });
+      process.exit(rows ? 0 : 1);
+    }
+    if (sub === "resolve" || sub === "read") {
+      const idArg = tail[0];
+      try {
+        const result = resolveInbox(loaded, {
+          all: !idArg || idArg === "all",
+          id: idArg && idArg !== "all" ? idArg : undefined,
+          json,
+        });
+        process.exit(result ? 0 : 1);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(2);
+      }
     }
     // status (default): engine auto-starts, then one-line status
     ensureMeshInbox(loaded, { quiet: true });
