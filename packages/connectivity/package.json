@@ -16,7 +16,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@seat-mesh/core": "0.1.14"
+    "@seat-mesh/core": "0.1.15"
   },
   "publishConfig": {
     "access": "public"
