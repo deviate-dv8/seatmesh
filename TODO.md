@@ -41,7 +41,7 @@
 - [~] **1.7** `save` / `auto` — scrape live mesh -> `mesh-agents.json`; switch auto-save after relaunch
 - [x] **1.8** `title` / `status` — `@mesh_title` / `@mesh_status` + border
 - [x] **1.9** `remind` — manager-only; enqueue PEER.jsonl (`remind.ts`)
-- [ ] **1.10** `continue` + `night`
+- [x] **1.10** `continue` + `night` — manager-only; flag `.sm/seats/manager/night.on` + peer enqueue
 - [ ] **1.11** `slot-advice`
 - [x] **1.12** `providers list|scan`
 - [x] **1.13** `peek <target> status|full` — `roles/peek.ts`; operator 23:29; mini review pending

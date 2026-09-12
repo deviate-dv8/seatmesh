@@ -1,6 +1,6 @@
 {
   "name": "@seat-mesh/connectivity",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,7 +16,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@seat-mesh/core": "0.1.9"
+    "@seat-mesh/core": "0.1.10"
   },
   "publishConfig": {
     "access": "public"

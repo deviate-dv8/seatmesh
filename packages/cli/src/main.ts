@@ -50,6 +50,9 @@ import {
   enqueuePrompt,
   runRemind,
   printRemindResults,
+  runNight,
+  runContinue,
+  printContinueResults,
   verifyMeshSession,
   printVerify,
   labelMeshSession,
@@ -136,6 +139,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   prompt | remind | flush
   contexts [--json] | peek | ppa
   switch | handoff | set | tag | title | status
+  night on|off|status | continue <slot|all>   (manager + night on)
   agent [target]              scoped can/cannot for this pane (profile role)
   whoami [target] | cold-start [--inject] | seat init
   room | chat | index | proxy | providers | manager | stack | profile show
@@ -767,6 +771,34 @@ async function main(): Promise<void> {
       note: noteParts.length ? noteParts.join(" ") : undefined,
     });
     printRemindResults(results);
+    return;
+  }
+
+  if (cmd === "night") {
+    const loaded = meshLoaded(profileArg);
+    try {
+      runNight(loaded, sub ?? "status");
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "continue") {
+    const loaded = meshLoaded(profileArg);
+    const [target, ...noteParts] = [sub, ...tail].filter(Boolean) as string[];
+    if (!target) {
+      console.error("usage: continue <slot|all> [note...]   (manager-only, requires night on)");
+      process.exit(2);
+    }
+    try {
+      const results = runContinue(loaded, target, noteParts.join(" ") || undefined);
+      printContinueResults(results);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
     return;
   }
 

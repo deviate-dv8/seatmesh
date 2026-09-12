@@ -16,6 +16,7 @@ export * from "./session/session-env.js";
 export * from "./inject/inject.js";
 export * from "./inject/prompt.js";
 export * from "./inject/remind.js";
+export * from "./inject/night-continue.js";
 export * from "./session/window-panes.js";
 export * from "./lib/pane-meta.js";
 export * from "./session/borders.js";
