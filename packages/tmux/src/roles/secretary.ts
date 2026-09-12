@@ -497,7 +497,7 @@ export function secretarySupervise(
     id: MANAGER_NUDGE_ID,
     kind: "manager-nudge",
     renewSec: secs,
-    expect: "manager idle - continue authorized seat-mesh work",
+    expect: "manager idle - continue authorized seatmesh work",
     ownerPane: mgrResolved.paneId,
     expiresAt: expires,
     senderLabel: "secretary",

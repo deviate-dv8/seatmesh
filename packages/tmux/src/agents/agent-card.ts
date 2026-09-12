@@ -149,7 +149,7 @@ export function buildAgentCard(w: WhoamiResult): {
     ...(cannot.length ? cannot.map((c) => `  ${c}`) : ["  (none beyond operator gates)"]),
     "---",
     "full_hub=./sm.sh whoami",
-    "one_path=services/seat-mesh/docs/ONE-PATH.md",
+    "one_path=services/seatmesh/docs/ONE-PATH.md",
   ];
 
   return { lines, can, cannot };

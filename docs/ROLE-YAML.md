@@ -1,7 +1,7 @@
 # Role YAML — dotdir schema (manager, secretary, worker, mini)
 
 **Status:** spec (operator 2026-09-12) — implement with framework queue #1  
-**Canonical prefs:** `tasks/seat-mesh/queue/SEAT-MESH-PREFERENCES.md`
+**Canonical prefs:** `tasks/seatmesh/queue/SEAT-MESH-PREFERENCES.md`
 
 Every in-session agent gets POV docs + can/cannot from **consumer dotdir**, not from
 consumer paths baked into the npm package.
@@ -25,7 +25,7 @@ consumer paths baked into the npm package.
 **Engine package** ships **init templates** only:
 
 ```text
-services/seat-mesh/packages/cli/templates/init/roles/
+services/seatmesh/packages/cli/templates/init/roles/
   common.yaml
   manager.yaml        # not master.yaml
   secretary.yaml
@@ -33,7 +33,7 @@ services/seat-mesh/packages/cli/templates/init/roles/
   mini.yaml
 ```
 
-`npx seat-mesh init` copies templates -> `.sm/roles/`. User edits dotdir; init never
+`npx seatmesh init` copies templates -> `.sm/roles/`. User edits dotdir; init never
 overwrites on re-run unless `--force`.
 
 **Not in package `profiles/consumer/`** — consumer extends `.sm/roles/` with `.agent/` paths.
@@ -87,14 +87,14 @@ Paths in `read_first` / `files` are **relative to workspace root** (parent of `.
 ### `common.yaml`
 
 - Banner: engine pointer, `./sm.sh agent` + `./sm.sh whoami`
-- `read_first`: `services/seat-mesh/docs/ONE-PATH.md`, `.sm/README.md`
+- `read_first`: `services/seatmesh/docs/ONE-PATH.md`, `.sm/README.md`
 - `guards.deny`: `[merge, board.mutate]` for all roles
 - `external.default: allow` in `mesh.config.yaml` (not in role file)
 
 ### `manager.yaml`
 
 - `read_first`: manager coordination (package doc stub or `.sm/docs/manager.md` if user adds)
-- `files`: `ONE-PATH.md`, `CHATROOM.md`, minis/secretary charter stubs under seat-mesh docs
+- `files`: `ONE-PATH.md`, `CHATROOM.md`, minis/secretary charter stubs under seatmesh docs
 - `guards.allow`: coord, spawn.mini, prompt.worker, …
 - `funcs.allow`: all registered (or explicit list including `dc-sh`, `notify`)
 
@@ -125,13 +125,13 @@ Paths in `read_first` / `files` are **relative to workspace root** (parent of `.
 
 ## User extension (operator intent)
 
-1. Run `npx seat-mesh init` — get full role set with generic docs.
+1. Run `npx seatmesh init` — get full role set with generic docs.
 2. Edit `.sm/roles/worker.yaml` — add project `read_first` (consumer: `.agent/agent-seats.md`).
 3. Edit `.sm/roles/common.yaml` — shared banner for whole team.
 4. Add `deny_funcs` / `guards` on one role without copy-paste across eight minis.
 5. Optional `.sm/docs/*.md` — reference from `read_first` for long POV (keep yaml thin).
 
-**Do not** fork seat-mesh package to change agent POV — extend dotdir only.
+**Do not** fork seatmesh package to change agent POV — extend dotdir only.
 
 ---
 
@@ -155,11 +155,11 @@ After generic init, consumer adds to `.sm/roles/worker.yaml`:
 read_first:
   - path: .agent/agent-seats.md
     note: seat POV + worker gates
-  - path: tasks/seat-mesh/GATE-QUEUE.md
+  - path: tasks/seatmesh/GATE-QUEUE.md
     note: serial framework queue when on consumer-all
 funcs:
   deny: [docker-exec]
 ```
 
 Manager yaml adds `.agent/manager-agent.md`, etc. — **never** checked into
-`services/seat-mesh/profiles/consumer/`.
+`services/seatmesh/profiles/consumer/`.

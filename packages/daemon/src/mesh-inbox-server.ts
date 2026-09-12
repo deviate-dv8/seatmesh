@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** seat-mesh inbox daemon — sole pane inject consumer for mesh sessions. */
+/** seatmesh inbox daemon — sole pane inject consumer for mesh sessions. */
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";

@@ -46,11 +46,11 @@ export function runMigrateRuntime(opts: MigrateRuntimeOptions = {}): MigrateRunt
   const notes: string[] = [];
 
   const pairs: [string, string][] = [
-    [path.join(ws, "tasks/seat-mesh/daemon"), paths.daemonDir],
-    [path.join(ws, "tasks/seat-mesh/minis.json"), path.join(paths.dataRoot, "minis.json")],
-    [path.join(ws, "tasks/seat-mesh/mini-manifest.json"), path.join(paths.dataRoot, "mini-manifest.json")],
-    [path.join(ws, "tasks/seat-mesh/MINI-DONE.md"), path.join(paths.dataRoot, "MINI-DONE.md")],
-    [path.join(ws, "tasks/seat-mesh/GATE-QUEUE.md"), path.join(paths.dataRoot, "GATE-QUEUE.md")],
+    [path.join(ws, "tasks/seatmesh/daemon"), paths.daemonDir],
+    [path.join(ws, "tasks/seatmesh/minis.json"), path.join(paths.dataRoot, "minis.json")],
+    [path.join(ws, "tasks/seatmesh/mini-manifest.json"), path.join(paths.dataRoot, "mini-manifest.json")],
+    [path.join(ws, "tasks/seatmesh/MINI-DONE.md"), path.join(paths.dataRoot, "MINI-DONE.md")],
+    [path.join(ws, "tasks/seatmesh/GATE-QUEUE.md"), path.join(paths.dataRoot, "GATE-QUEUE.md")],
     [path.join(ws, "tasks/chat-rooms"), paths.chatRoomsRoot],
     [path.join(ws, "tasks/chat-files"), paths.chatFilesRoot],
     [path.join(ws, "mesh-agents.json"), paths.meshAgentsJson],
@@ -76,11 +76,11 @@ export function runMigrateRuntime(opts: MigrateRuntimeOptions = {}): MigrateRunt
       if (fs.existsSync(p) && !fs.existsSync(path.join(p, "README.migrated"))) {
         fs.writeFileSync(
           path.join(p, "README.migrated"),
-          `${msg}\nMigrated to dotdir — see services/seat-mesh/docs/DOTDIR.md\n`,
+          `${msg}\nMigrated to dotdir — see services/seatmesh/docs/DOTDIR.md\n`,
         );
       }
     };
-    stub(path.join(ws, "tasks/seat-mesh"), "Harness runtime moved to .sm/runtime/");
+    stub(path.join(ws, "tasks/seatmesh"), "Harness runtime moved to .sm/runtime/");
     stub(path.join(ws, "tasks/chat-rooms"), "Chat rooms moved to .sm/chat-rooms/");
   }
 

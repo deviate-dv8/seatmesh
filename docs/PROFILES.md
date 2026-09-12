@@ -11,11 +11,11 @@ Read with [PORTABILITY.md](PORTABILITY.md) and [CONFIG.md](CONFIG.md).
 
 | Layer | Location | Relative to | Contains |
 |-------|----------|-------------|----------|
-| **Engine package** | `services/seat-mesh/profiles/minimal/` | seat-mesh repo root | Generic session layout, daemon defaults, **no product paths** |
+| **Engine package** | `services/seatmesh/profiles/minimal/` | seatmesh repo root | Generic session layout, daemon defaults, **no product paths** |
 | **Consumer dotdir** | `<workspace>/.sm/` | consumer project root (`workspace: ..`) | Product seats, roles, func registry, connectivity hooks |
 
 ```text
-seat-mesh/                          # npm package / git submodule
+seatmesh/                          # npm package / git submodule
   profiles/minimal/mesh.config.yaml # default when no .sm
   profiles/minimal/roles/           # generic role stubs only
 
@@ -68,7 +68,7 @@ paths:
 Example (legacy bundled — **avoid**):
 
 ```yaml
-# services/seat-mesh/profiles/consumer/mesh.config.yaml
+# services/seatmesh/profiles/consumer/mesh.config.yaml
 workspace: ../../../../    # escapes package tree to monorepo root — fragile
 roles:
   dir: roles               # consumer-specific read_first inside package
@@ -78,8 +78,8 @@ roles:
 
 ## Why bundled `profiles/consumer/` is unclean
 
-1. **`workspace: ../../../../`** — profile dir is deep inside `services/seat-mesh/`; workspace pointer jumps out to consumer root instead of living in `.sm/`.
-2. **Role yaml cites consumer-only paths** — `.agent/*`, `AGENTS.md`, `tasks/seat-mesh/GATE-QUEUE.md`, `30N0/30N1` banners, `./dc.sh` policies.
+1. **`workspace: ../../../../`** — profile dir is deep inside `services/seatmesh/`; workspace pointer jumps out to consumer root instead of living in `.sm/`.
+2. **Role yaml cites consumer-only paths** — `.agent/*`, `AGENTS.md`, `tasks/seatmesh/GATE-QUEUE.md`, `30N0/30N1` banners, `./dc.sh` policies.
 3. **Duplicate config** — same content copied in `profiles/consumer/` and workspace `.sm/` (drift risk).
 4. **Default profile pick** — `defaultProfilePath()` prefers bundled consumer when `.sm` missing; couples engine default to one consumer.
 
@@ -94,10 +94,10 @@ roles:
 | 1 | `defaultProfilePath()` -> **minimal** only |
 | 2 | Treat `profiles/consumer/` as deprecated; document migration to `.sm/` |
 | 3 | All consumer role yaml only under `consumer/.sm/roles/` |
-| 4 | Package `roles/` = neutral stubs (`read_first: docs/ONE-PATH.md` under seat-mesh) |
-| 5 | Func registry + `guards` in consumer yaml (see `tasks/seat-mesh/queue/SEAT-MESH-PREFERENCES.md`) |
+| 4 | Package `roles/` = neutral stubs (`read_first: docs/ONE-PATH.md` under seatmesh) |
+| 5 | Func registry + `guards` in consumer yaml (see `tasks/seatmesh/queue/SEAT-MESH-PREFERENCES.md`) |
 
-Greenfield: `npx seat-mesh init` already emits `workspace: ..` and `.sm/runtime` — that shape is canonical.
+Greenfield: `npx seatmesh init` already emits `workspace: ..` and `.sm/runtime` — that shape is canonical.
 
 ---
 
@@ -114,7 +114,7 @@ Init must scaffold **complete** role yaml for all pane kinds — not empty stubs
 ```
 
 Each file carries predefined `read_first`, `files`, `banner`, `policies`, and (when
-implemented) `guards` / `funcs`. Generic docs point at seat-mesh package docs; the
+implemented) `guards` / `funcs`. Generic docs point at seatmesh package docs; the
 **user extends** with project paths (e.g. consumer `.agent/manager-agent.md`) in dotdir
 only.
 
@@ -129,7 +129,7 @@ Spec: [ROLE-YAML.md](ROLE-YAML.md), [DOTDIR.md](DOTDIR.md) (locked `_vendor/`, `
 | connectivity / CPE | off | on + workspace scripts |
 | stack passthrough | none | `./dc.sh` |
 | seats.root | `seats` → `.sm/seats/` | same (after migrate from `tasks/agent-seats`) |
-| data.root | `runtime` → `.sm/runtime/` | same (after migrate from `tasks/seat-mesh`) |
+| data.root | `runtime` → `.sm/runtime/` | same (after migrate from `tasks/seatmesh`) |
 | paths.json | generated | generated |
 | role read_first | ONE-PATH only | `.agent/` + GATE-QUEUE |
 | ports formula | optional | `30{n}0/30{n}1` |
@@ -138,13 +138,13 @@ Spec: [ROLE-YAML.md](ROLE-YAML.md), [DOTDIR.md](DOTDIR.md) (locked `_vendor/`, `
 
 ## FAQ
 
-**Why not put everything in the seat-mesh repo?**  
-seat-mesh is a reusable engine; seat-mesh is profile-driven. Mixing them forces every downstream user to inherit consumer paths.
+**Why not put everything in the seatmesh repo?**  
+seatmesh is a reusable engine; seatmesh is profile-driven. Mixing them forces every downstream user to inherit consumer paths.
 
 **Where do I edit roles for consumer agents?**  
-`consumer/.sm/roles/` — not `services/seat-mesh/profiles/consumer/roles/` (once cleanup lands).
+`consumer/.sm/roles/` — not `services/seatmesh/profiles/consumer/roles/` (once cleanup lands).
 
 **Relative paths — which root?**  
 - Harness keys (`data`, `seats`, `chatRooms`, `chatFiles`, `state.meshAgentsJson`, `roles.dir`) -> **profileDir** (`.sm/`). Engine resolves via **`paths.json`**.  
 - Stack driver + connectivity hooks -> **workspace root**.  
-- **No harness paths under `tasks/seat-mesh/` or workspace-root `mesh-agents.json`** (operator 2026-09-12).
+- **No harness paths under `tasks/seatmesh/` or workspace-root `mesh-agents.json`** (operator 2026-09-12).

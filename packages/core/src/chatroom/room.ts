@@ -199,7 +199,7 @@ export async function sayInRoom(
   }
   const dir = roomDir(workspace, cfg, slug);
   if (!fs.existsSync(dir)) {
-    throw new Error(`room not found: ${slug} (create with: seat-mesh room create ${slug})`);
+    throw new Error(`room not found: ${slug} (create with: seatmesh room create ${slug})`);
   }
 
   const kind = opts.kind ?? inferKind(body);

@@ -81,7 +81,7 @@ See [STATE.md](STATE.md).
 
 ## Init and portability
 
-- **`npx seat-mesh init`** — project `.sm/` dotdir with config and role templates.
+- **`npx seatmesh init`** — project `.sm/` dotdir with config and role templates.
 - **Profile discovery** — `--profile`, `.sm/mesh.config.yaml` walk-up, or bundled
   default profile in the package.
 

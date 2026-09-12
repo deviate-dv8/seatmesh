@@ -1,28 +1,28 @@
 # Parallel run (internal)
 
 Historical note for workspaces that still run a legacy tmux harness beside
-seat-mesh. **Not required reading** for new adopters — see [README.md](README.md).
+seatmesh. **Not required reading** for new adopters — see [README.md](README.md).
 
-# Parallel run: seat-mesh vs legacy harness
+# Parallel run: seatmesh vs legacy harness
 
-## seat-mesh is NOT a harness plugin
+## seatmesh is NOT a harness plugin
 
 **Wrong mental model:** "`./sm.sh` is how you run legacy harness" / "sm wraps dev" /
 "sm is a thin alias for `./legacy harness`."
 
-**Correct:** seat-mesh is a **separate** tmux workbench. It has its own session
+**Correct:** seatmesh is a **separate** tmux workbench. It has its own session
 name (`mesh` in the default profile), its own layout (see `ARCHITECTURE.md`), its
 own pane options (`@mesh_*`), and its own CLI (`whoami`, `room`, `session`, …).
 
 `legacy harness` is the **legacy consumer harness** for session `dev` (8 workers,
 manager, inbox, mini spawn, board triage, etc.). It does not load
-`mesh.config.yaml` and seat-mesh does not source it.
+`mesh.config.yaml` and seatmesh does not source it.
 
 ```text
   ./sm.sh                    ./legacy harness
        |                            |
        v                            v
-  seat-mesh CLI                bash harness
+  seatmesh CLI                bash harness
        |                            |
        v                            v
   tmux session "mesh"          tmux session "dev"
@@ -44,7 +44,7 @@ Nothing else from the harness is passthrough. Not `prompt`, not `mini`, not
 
 ## Command map
 
-| Concern | Legacy harness (`legacy harness`, session `dev`) | seat-mesh (`./sm.sh`, session `mesh`) |
+| Concern | Legacy harness (`legacy harness`, session `dev`) | seatmesh (`./sm.sh`, session `mesh`) |
 |---------|-----------------------------------------------|---------------------------------------|
 | Attach / create session | `./legacy harness` | `./sm.sh` or `./sm.sh session attach` |
 | Seat identity | `./legacy harness whoami` (harness) | `./sm.sh whoami` (`@mesh_*` + role index) |
@@ -62,4 +62,4 @@ Nothing else from the harness is passthrough. Not `prompt`, not `mini`, not
 
 Per-command migration: producers enqueue; daemon injects; harness commands shrink.
 Until then, agents on **dev** follow `.agent/` harness docs; agents on **mesh**
-follow seat-mesh profile + role index.
+follow seatmesh profile + role index.

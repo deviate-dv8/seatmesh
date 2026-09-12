@@ -1,6 +1,6 @@
 # Portability
 
-How to run seat-mesh on **any** workspace: custom proxy, optional connectivity,
+How to run seatmesh on **any** workspace: custom proxy, optional connectivity,
 and a single runtime data directory. Engine code stays free of checkout-specific
 paths; the profile supplies hooks and roots.
 
@@ -23,7 +23,7 @@ All daemon JSONL and inbox meta should live under one gitignored tree:
 
 ```yaml
 data:
-  root: .seat-mesh
+  root: .seatmesh
 ```
 
 ```text
@@ -109,7 +109,7 @@ Recovery runs **inside the daemon process**, never synchronously in an agent pan
 
 ## Seats without a fixed tree
 
-Use `npx seat-mesh init` and set `seats.root` to your layout. Minimal profile
+Use `npx seatmesh init` and set `seats.root` to your layout. Minimal profile
 works without chat rooms or stack passthrough.
 
 ## FAQ

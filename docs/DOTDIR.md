@@ -1,13 +1,13 @@
 # `.sm/` dotdir — layout, locked roles, contracts, runtime, update
 
 **Status:** spec (operator 2026-09-12) — implement with framework queue #1 / #1d  
-**Prefs:** `tasks/seat-mesh/queue/SEAT-MESH-PREFERENCES.md`
+**Prefs:** `tasks/seatmesh/queue/SEAT-MESH-PREFERENCES.md`
 
 ---
 
 ## Hard rule — no external harness paths
 
-**All seat-mesh runtime, logs, ledgers, and harness state live under the profile dotdir (`.sm/`).**
+**All seatmesh runtime, logs, ledgers, and harness state live under the profile dotdir (`.sm/`).**
 The engine must **not** read or write harness files outside `.sm/` except:
 
 | Allowed outside `.sm/` | Why |
@@ -18,11 +18,11 @@ The engine must **not** read or write harness files outside `.sm/` except:
 
 **Forbidden for new work:**
 
-- `tasks/seat-mesh/daemon/*` (INBOX, PEER, CHECKBACK, logs)
-- `tasks/seat-mesh/minis.json`, `GATE-QUEUE.md`, `MINI-DONE.md`, …
+- `tasks/seatmesh/daemon/*` (INBOX, PEER, CHECKBACK, logs)
+- `tasks/seatmesh/minis.json`, `GATE-QUEUE.md`, `MINI-DONE.md`, …
 - `tasks/chat-rooms/*`, `tasks/chat-files/*`
 - Workspace-root `mesh-agents.json`
-- Hardcoded `tasks/seat-mesh` in TS — resolve **only** from profile + manifest
+- Hardcoded `tasks/seatmesh` in TS — resolve **only** from profile + manifest
 
 **Consumer:** `.sm/mesh.config.yaml` must use dotdir-relative harness paths (see target yaml below). Run `npx seatmesh migrate-runtime` once; then stop using external copies.
 
@@ -62,7 +62,7 @@ Engine canonical map: **`.sm/paths.json`** (generated on `init`, `update`, `prof
 
 ## CLI entry
 
-**Primary:** `npx seatmesh` (package bin alias — today: `seat-mesh` / `./sm.sh` wrapper).
+**Primary:** `npx seatmesh` (package bin alias — today: `seatmesh` / `./sm.sh` wrapper).
 
 ```bash
 npx seatmesh init              # create .sm/ + paths.json
@@ -99,7 +99,7 @@ Workspace `./sm.sh` (when present) wraps `npx seatmesh --profile .sm`.
       cold-start.json
       ppa-state.json
       cpe-wifi-probe.lock
-    minis.json               # campaign state (was tasks/seat-mesh/)
+    minis.json               # campaign state (was tasks/seatmesh/)
     mini-manifest.json
     MINI-DONE.md
     GATE-QUEUE.md            # optional; framework queue mirror
@@ -181,7 +181,7 @@ paths:
 
 **Migration (one-time, implement):**
 
-1. `npx seatmesh migrate-runtime` (or `update --migrate`): copy `tasks/seat-mesh/daemon/*` → `.sm/runtime/daemon/`, `tasks/chat-rooms/*` → `.sm/chat-rooms/`, `mesh-agents.json` → `.sm/mesh-agents.json`, `tasks/agent-seats/*` → `.sm/seats/` if `--seats`.
+1. `npx seatmesh migrate-runtime` (or `update --migrate`): copy `tasks/seatmesh/daemon/*` → `.sm/runtime/daemon/`, `tasks/chat-rooms/*` → `.sm/chat-rooms/`, `mesh-agents.json` → `.sm/mesh-agents.json`, `tasks/agent-seats/*` → `.sm/seats/` if `--seats`.
 2. Rewrite `paths.json`; print diff of old vs new paths.
 3. Leave legacy dirs in place with `README.migrated` stub pointing at `.sm/` — do not dual-write.
 
@@ -216,7 +216,7 @@ User **never edits `_vendor/`**. Project POV goes in `*.extend.yaml` only.
 ```bash
 npx seatmesh update
 npx seatmesh update --dry-run
-npx seatmesh update --migrate   # also move legacy tasks/seat-mesh → .sm/runtime
+npx seatmesh update --migrate   # also move legacy tasks/seatmesh → .sm/runtime
 ```
 
 ---
@@ -263,7 +263,7 @@ Greenfield: commit `_vendor/` + extend stubs; gitignore `runtime/daemon/*.log` a
 ## Engine changes (implement checklist)
 
 - [ ] `resolveDataRoot` / `meshRuntimePaths` / chatroom / chatfile / seat paths → **profileDir-relative** via `paths.json`
-- [ ] Remove defaults `tasks/chat-rooms`, `tasks/seat-mesh`, workspace `mesh-agents.json` from schema defaults → dotdir defaults
+- [ ] Remove defaults `tasks/chat-rooms`, `tasks/seatmesh`, workspace `mesh-agents.json` from schema defaults → dotdir defaults
 - [ ] Daemon startup: refuse if resolved path escapes `.sm/` (safety guard)
 - [ ] Consumer `.sm/mesh.config.yaml` + `migrate-runtime` command
 - [ ] Docs: ONE-PATH, COMMS, PROFILES, `.agent/agent-seats.md` seat path → `.sm/seats/`
@@ -282,4 +282,4 @@ cut (optional wake only). See [STORAGE.md](STORAGE.md). Implement after paths (#
 - [STORAGE.md](STORAGE.md) — SQLite vs JSONL, Redis cut, phased plan
 - [ROLE-YAML.md](ROLE-YAML.md) — role sections
 - [PROFILES.md](PROFILES.md) — package vs consumer
-- [AGENT-FUNC-GUARDS.md](../../tasks/seat-mesh/queue/AGENT-FUNC-GUARDS.md) — guards + chat comms
+- [AGENT-FUNC-GUARDS.md](../../tasks/seatmesh/queue/AGENT-FUNC-GUARDS.md) — guards + chat comms

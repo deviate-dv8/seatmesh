@@ -1,4 +1,4 @@
-# seat-mesh
+# seatmesh
 
 Profile-driven tmux workbench for multi-agent coordination. One session layout,
 one inbox daemon, pluggable agent CLIs (Cursor, Claude, Kiro, OpenCode), and
@@ -6,17 +6,17 @@ enqueue-only comms so nothing stomps a live composer.
 
 ## Install and cold start
 
-The CLI entry (`bin/seat-mesh`) **auto-builds on first run**: if `dist/` is missing
+The CLI entry (`bin/seatmesh`) **auto-builds on first run**: if `dist/` is missing
 or stale, it runs `npm install` and `npm run build` in the package root, then execs
 the CLI. No manual build step required for normal use.
 
 ```bash
-npx --package=seatmesh seat-mesh
-npx --package=seatmesh seat-mesh init
-npx --package=seatmesh seat-mesh session up
+npx seatmesh
+npx seatmesh init
+npx seatmesh session up
 
 # Git checkout (development)
-./bin/seat-mesh --help
+./bin/seatmesh --help
 
 # Consumer wrapper (example: workspace-root sm.sh)
 ./sm.sh session up
@@ -50,8 +50,8 @@ belong in each project's `.sm/` dotdir, not in the engine docs above.
 ## Package layout
 
 ```text
-services/seat-mesh/
-  bin/seat-mesh          CLI entry (cold start + node dist)
+services/seatmesh/
+  bin/seatmesh          CLI entry (cold start + node dist)
   packages/
     core/                Schemas, profile loader, chatroom, paths
     cli/                 Command router (npm package seatmesh)

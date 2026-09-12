@@ -103,14 +103,14 @@ function meshLoaded(profileArg?: string) {
 
 function usage(loaded?: ReturnType<typeof loadProfile>): void {
   const prof = loaded ? `profile=${loaded.profile.name}` : "";
-  console.log(`seat-mesh${prof ? ` (${prof})` : ""} — profile-driven tmux multi-agent CLI
+  console.log(`seatmesh${prof ? ` (${prof})` : ""} — profile-driven tmux multi-agent CLI
 
   Docs: README.md + docs/ONE-PATH.md + docs/QUICKSTART.md
-  Cold start: bin/seat-mesh auto-runs npm install + build when dist is stale
+  Cold start: bin/seatmesh auto-runs npm install + build when dist is stale
 
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
   update [--dry-run] [--migrate]        refresh _vendor templates + paths.json
-  report [--json]         full stack report (same as bare npx seat-mesh)
+  report [--json]         full stack report (same as bare npx seatmesh)
   session attach|up|status
   verify              layout + labels health
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
     console.log(`  config: ${r.configPath}`);
     console.log(`  created: ${r.created.length} file(s)`);
     if (r.skipped.length) console.log(`  skipped (exists): ${r.skipped.length}`);
-    console.log("  next: npx seat-mesh session up  (or ./sm.sh if wired)");
+    console.log("  next: npx seatmesh session up  (or ./sm.sh if wired)");
     return;
   }
 

@@ -1,5 +1,5 @@
 # Moved
 
-**Use `seat-mesh/TODO.md`** — this file was renamed. Same content, clearer name.
+**Use `seatmesh/TODO.md`** — this file was renamed. Same content, clearer name.
 
-See also: `seat-mesh/NOW.md`, `tasks/seat-mesh/FOCUS.md`, `tasks/seat-mesh/TASKS.md`.
+See also: `seatmesh/NOW.md`, `tasks/seatmesh/FOCUS.md`, `tasks/seatmesh/TASKS.md`.

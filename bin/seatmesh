@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# seat-mesh CLI entry (product-agnostic). Consumers: --profile <dir|yaml>
+# seatmesh CLI entry (product-agnostic). Consumers: --profile <dir|yaml>
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CLI="$ROOT/packages/cli/dist/main.js"
@@ -14,10 +14,10 @@ fi
 
 if [[ "$needs" -eq 1 ]]; then
   if ! command -v npm >/dev/null 2>&1; then
-    echo "seat-mesh: npm not found (need Node/npm for cold start build)" >&2
+    echo "seatmesh: npm not found (need Node/npm for cold start build)" >&2
     exit 1
   fi
-  echo "seat-mesh: cold start — npm install + build in $ROOT ..." >&2
+  echo "seatmesh: cold start — npm install + build in $ROOT ..." >&2
   (cd "$ROOT" && npm install && npm run build)
 fi
 

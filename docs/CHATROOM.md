@@ -21,12 +21,12 @@ Workers and minis: `room say` without `--room` → global. `room tail` at turn
 start reads the same ledger.
 
 ```bash
-seat-mesh room say "FYI: starting auth slice"
-seat-mesh room tail
+seatmesh room say "FYI: starting auth slice"
+seatmesh room tail
 
-seat-mesh room broadcast "Pause until integration check passes"
+seatmesh room broadcast "Pause until integration check passes"
 
-seat-mesh room say --room my-contract "CLAIMED: module X"
+seatmesh room say --room my-contract "CLAIMED: module X"
 ```
 
 ## Inbox vs room

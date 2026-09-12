@@ -299,7 +299,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
           state.phase === "plain_shell";
         if (idle) {
           const msg =
-            "[mesh-inbox] CONTINUE: read manager/FOCUS + seat-mesh/TODO; next authorized slice (no operator yes/continue)";
+            "[mesh-inbox] CONTINUE: read manager/FOCUS + seatmesh/TODO; next authorized slice (no operator yes/continue)";
           const r = deliverToPane(mgrPane, msg, ctx.registry, { skipVerify: true });
           ctx.log(
             `manager-nudge ${r.ok ? "delivered" : `held:${r.reason}`} pane=${mgrPane}`,

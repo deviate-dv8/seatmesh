@@ -198,7 +198,7 @@ describe("looksLikeExpectsReply", () => {
 });
 
 describe("room file ops", () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seat-mesh-room-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seatmesh-room-"));
   const workspace = tmp;
   const minimalDir = path.resolve(import.meta.dirname, "../../../../profiles/minimal");
   const loaded = loadProfile(minimalDir);

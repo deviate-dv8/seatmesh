@@ -13,7 +13,7 @@ Appends to the room ledger, optionally fan-outs to peer panes, optionally arms
 checkback on the sender.
 
 ```bash
-seat-mesh room say "DONE: slice complete" [-r global] [--kind claim] [--no-checkback]
+seatmesh room say "DONE: slice complete" [-r global] [--kind claim] [--no-checkback]
 ```
 
 1. `sayInRoom()` appends to `{chatRooms.root}/<slug>/ROOM.jsonl`.

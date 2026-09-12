@@ -3,7 +3,7 @@
 Planning doc — not part of the public handout. See [README.md](README.md).
 
 **Status:** proposal  
-**North star:** `npx seat-mesh` / `./sm.sh` is a thin engine. All durable behavior
+**North star:** `npx seatmesh` / `./sm.sh` is a thin engine. All durable behavior
 lives in **dotdir `.sm/`** + `mesh-agents.json`. No project-specific branches in
 packages. OC-LIMIT, proxy recovery, coord repair, launch, comms prefixes,
 checkback — all config, not TypeScript magic.
@@ -15,8 +15,8 @@ checkback — all config, not TypeScript magic.
 ```bash
 # Greenfield project:
 cd /path/to/myapp
-npx seat-mesh init
-npx seat-mesh session up
+npx seatmesh init
+npx seatmesh session up
 
 # Consumer (existing seat tree preserved):
 # .sm/mesh.config.yaml → seats.root: tasks/agent-seats
@@ -28,7 +28,7 @@ npx seat-mesh session up
 | `.sm/mesh.config.yaml` | Layout, daemon, connectivity, **seats.root pointer** |
 | `.sm/roles/*.yaml` | Agent cold-start context (whoami banners) |
 | `.sm/mesh-agents.json` | Live slot state (greenfield default) |
-| `.sm/runtime/` | Daemon jsonl (target; runtime may use `tasks/seat-mesh` until Phase A) |
+| `.sm/runtime/` | Daemon jsonl (target; runtime may use `tasks/seatmesh` until Phase A) |
 | `seats.root` (yaml key) | **FOCUS/TASKS/REMINDER** — may be `tasks/agent-seats` (consumer) or `.sm/seats` (new) |
 
 **Profile discovery order:** `--profile` > walk up for `.sm/mesh.config.yaml` >
@@ -43,7 +43,7 @@ moving seat files), `--name slug`.
 
 | File | Owns | Mutated by |
 |------|------|------------|
-| `.sm/mesh.config.yaml` | Layout, daemon poll/settle, connectivity recovery, comms prefixes, guards, roles dir, seats.root | Humans / `npx seat-mesh init` |
+| `.sm/mesh.config.yaml` | Layout, daemon poll/settle, connectivity recovery, comms prefixes, guards, roles dir, seats.root | Humans / `npx seatmesh init` |
 | `mesh-agents.json` (path from yaml `state.meshAgentsJson`) | Per-pane CLI type, resumeId/resumeCmd, minis grid override, runtime convention overrides | `./sm.sh save`, future switch/set/tag |
 
 **Merge rule (canonical):**
@@ -56,10 +56,10 @@ moving seat files), `--name slug`.
 
 ```bash
 # Today (consumer wrapper — stays at workspace root):
-./sm.sh …   # → services/seat-mesh --profile .sm/ (or services/seat-mesh/profiles/consumer)
+./sm.sh …   # → services/seatmesh --profile .sm/ (or services/seatmesh/profiles/consumer)
 
 # Portable shape:
-seat-mesh --profile /path/to/profile …
+seatmesh --profile /path/to/profile …
 ```
 
 ---
@@ -155,8 +155,8 @@ daemon:
     ackPatterns: ["^ACK:", "^FYI:", …]
 
 data:
-  root: tasks/seat-mesh
-  daemonSubdir: daemon        # replaces hardcoded tasks/seat-mesh/daemon strings
+  root: tasks/seatmesh
+  daemonSubdir: daemon        # replaces hardcoded tasks/seatmesh/daemon strings
 ```
 
 ### 3.3 Launch / agent commands
@@ -274,7 +274,7 @@ profiles/consumer/
   mesh.config.yaml     # consumer layout + CPE + comms
   roles/*.yaml         # cold-start banners (already profile-local)
 
-seat-mesh/packages/
+seatmesh/packages/
   core/                # Zod schemas ONLY — no consumer strings
   tmux/                # generic tmux verbs (layout, launch, labels, reload)
   daemon/              # inbox drain — reads connectivity.* + daemon.*
@@ -282,7 +282,7 @@ seat-mesh/packages/
   cli/                 # argv → load profile → dispatch (no business rules)
 ```
 
-**Delete over time:** hardcoded `tasks/seat-mesh/daemon` paths, duplicated
+**Delete over time:** hardcoded `tasks/seatmesh/daemon` paths, duplicated
 defaults in `base-layout.ts` when yaml always supplies `cli`, env-only settle
 knobs, legacy `tmux-main-agents.json` write path.
 
@@ -357,9 +357,9 @@ knobs, legacy `tmux-main-agents.json` write path.
 - `docs/STATE.md` — full conventions + connectivity.recovery
 - `docs/ARCHITECTURE.md` — engine vs profile boundary
 - `docs/COMMS.md` — add `comms.prefixes` to schema (currently doc-only)
-- `tasks/seat-mesh/TODO.md` — Phase A–E rows
+- `tasks/seatmesh/TODO.md` — Phase A–E rows
 
 ---
 
-*Draft v0.1 — 2026-09-12. Source: full seat-mesh grep audit (cli, tmux, daemon,
+*Draft v0.1 — 2026-09-12. Source: full seatmesh grep audit (cli, tmux, daemon,
 providers, schema vs runtime).*

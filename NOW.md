@@ -1,10 +1,10 @@
-# seat-mesh NOW
+# seatmesh NOW
 
 **Updated:** 2026-09-11 23:34
 
 **Slice:** **Surpass harness** — Gate A first (inbox list/resolve + :3100 wedge).
 
-**Read:** [docs/SURPASS.md](docs/SURPASS.md) · [docs/ONE-PATH.md](docs/ONE-PATH.md) · [IMPLEMENT-CHECK.md](../tasks/seat-mesh/IMPLEMENT-CHECK.md)
+**Read:** [docs/SURPASS.md](docs/SURPASS.md) · [docs/ONE-PATH.md](docs/ONE-PATH.md) · [IMPLEMENT-CHECK.md](../tasks/seatmesh/IMPLEMENT-CHECK.md)
 
 ## Done this session
 
@@ -20,4 +20,4 @@
 2. **Mini tester** — peek + delivery proof + `room broadcast` visible in `room tail`
 3. **:3100 wedge** — async health / proxy probe off event loop
 
-**Tracker:** [TODO.md](TODO.md) · [IMPLEMENT-CHECK.md](../tasks/seat-mesh/IMPLEMENT-CHECK.md)
+**Tracker:** [TODO.md](TODO.md) · [IMPLEMENT-CHECK.md](../tasks/seatmesh/IMPLEMENT-CHECK.md)

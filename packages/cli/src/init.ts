@@ -48,7 +48,7 @@ function copyTree(srcDir: string, destDir: string, created: string[], skipped: s
   }
 }
 
-/** Create `.sm/` dotdir in a project (npx seat-mesh init). Never touches existing seat FOCUS/TASKS. */
+/** Create `.sm/` dotdir in a project (npx seatmesh init). Never touches existing seat FOCUS/TASKS. */
 export function runInit(opts: InitOptions = {}): InitResult {
   const workspace = path.resolve(opts.workspace ?? process.cwd());
   const smDir = path.join(workspace, SM_DIR);

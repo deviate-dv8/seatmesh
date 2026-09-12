@@ -38,7 +38,7 @@ export {
   runtimePathHint,
 } from "./runtime-paths.js";
 
-/** seat-mesh package root (profiles/ lives here). */
+/** seatmesh package root (profiles/ lives here). */
 export function seatMeshPackageRoot(): string {
   return path.resolve(import.meta.dirname, "../../..");
 }

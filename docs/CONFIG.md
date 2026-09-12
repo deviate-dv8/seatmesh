@@ -112,7 +112,7 @@ Paths are relative to `workspace` unless absolute.
 
 ```yaml
 data:
-  root: .seat-mesh    # or any path; daemon jsonl under {root}/daemon/
+  root: .seatmesh    # or any path; daemon jsonl under {root}/daemon/
 ```
 
 Target layout:
@@ -217,7 +217,7 @@ stack:
 ## Project init (`.sm/`)
 
 ```bash
-npx seat-mesh init [--force] [--seats-root PATH] [--name NAME]
+npx seatmesh init [--force] [--seats-root PATH] [--name NAME]
 ```
 
 Creates `.sm/mesh.config.yaml`, `.sm/roles/`, and README. Does not move or delete

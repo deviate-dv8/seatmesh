@@ -1,18 +1,18 @@
-# seat-mesh TODO — harness parity (incremental)
+# seatmesh TODO — harness parity (incremental)
 
-**Canonical tracker.** Agents: read this before touching `seat-mesh/`. Update checkboxes every slice.
+**Canonical tracker.** Agents: read this before touching `seatmesh/`. Update checkboxes every slice.
 
 | File | Job |
 |------|-----|
 | **TODO.md** (this) | Full parity checklist vs `legacy harness.sh` |
-| **tasks/seat-mesh/IMPLEMENT-CHECK.md** | **Impl + mini review + smoke** per item (slot-2 style) |
+| **tasks/seatmesh/IMPLEMENT-CHECK.md** | **Impl + mini review + smoke** per item (slot-2 style) |
 | **NOW.md** | Current slice only — what we're doing *this* turn |
 | **README.md** | Handout + high-level status |
 | **docs/** | Architecture / parallel / comms (not a task list) |
 
 **Harness reference:** `legacy harness.sh` → `usage()` (~lines 51–187).
 
-**Rules:** `./sm.sh` ≠ harness plugin. Code in `seat-mesh/packages/*` only. Do **not** write `tmux-main-agents.json` from sm (read-only seed until `mesh-agents.json` exists).
+**Rules:** `./sm.sh` ≠ harness plugin. Code in `seatmesh/packages/*` only. Do **not** write `tmux-main-agents.json` from sm (read-only seed until `mesh-agents.json` exists).
 
 **Status:** `[x]` done · `[~]` partial · `[ ]` not started · `[-]` defer
 
@@ -85,7 +85,7 @@
 
 ---
 
-## P5 — brainstorm backlog (aggregated in `tasks/seat-mesh/docs/SM-FUNCTIONS.md`, mini-8 synth)
+## P5 — brainstorm backlog (aggregated in `tasks/seatmesh/docs/SM-FUNCTIONS.md`, mini-8 synth)
 
 Open rows from the sm-functions campaign. Each ships as one function per SPEC (SMFUNCTIONS-SPEC.md) and gets a ONE-PATH.md row.
 

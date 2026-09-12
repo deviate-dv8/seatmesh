@@ -64,7 +64,7 @@ function checkPrereqs(loaded: LoadedProfile): PrereqRow[] {
     "dotdir",
     false,
     fs.existsSync(smDir),
-    fs.existsSync(smDir) ? smDir : "run: npx seat-mesh init",
+    fs.existsSync(smDir) ? smDir : "run: npx seatmesh init",
   );
 
   const providerBins: Record<string, string> = {
@@ -119,7 +119,7 @@ function printSession(loaded: LoadedProfile): boolean {
   const exists = tmuxHasSession(session);
   console.log(`session=${session} exists=${exists}`);
   if (!exists) {
-    console.log("  next: npx seat-mesh session up");
+    console.log("  next: npx seatmesh session up");
     return false;
   }
   const issues = verifyMeshSession(loaded);
@@ -151,11 +151,11 @@ function printInbox(loaded: LoadedProfile): { ok: boolean; health: Record<string
       console.log(`  oc_limit_active=${String(h.ocLimitActive)}`);
     }
     if (!ok) {
-      console.log(`  fix: npx seat-mesh inbox restart   (or session up / reload)`);
+      console.log(`  fix: npx seatmesh inbox restart   (or session up / reload)`);
     }
   } else {
     const rt = meshRuntimePaths(loaded);
-    console.log(`  fix: npx seat-mesh inbox start   (or session up / reload)`);
+    console.log(`  fix: npx seatmesh inbox start   (or session up / reload)`);
     if (fs.existsSync(rt.meshInboxLog)) console.log(`  log: ${rt.meshInboxLog}`);
   }
   return { ok, health: h };
@@ -189,7 +189,7 @@ function printInTmux(): void {
   if (pane) {
     console.log(`in_tmux=yes pane=${pane}`);
   } else {
-    console.log("in_tmux=no (attach: npx seat-mesh session attach)");
+    console.log("in_tmux=no (attach: npx seatmesh session attach)");
   }
 }
 
@@ -205,7 +205,7 @@ export interface StatusReport {
   layoutOk: boolean;
 }
 
-/** Full stack status — default when `npx seat-mesh` runs with no subcommand. */
+/** Full stack status — default when `npx seatmesh` runs with no subcommand. */
 export async function printStatusReport(
   loaded: LoadedProfile,
   opts: StatusReportOptions = {},
@@ -248,7 +248,7 @@ export async function printStatusReport(
     return report;
   }
 
-  console.log(`seat-mesh status  profile=${loaded.profile.name}  session=${loaded.sessionName}`);
+  console.log(`seatmesh status  profile=${loaded.profile.name}  session=${loaded.sessionName}`);
   const pOk = printPrereqs(prereqs);
   printProfile(loaded);
   printInTmux();
@@ -269,7 +269,7 @@ export async function printStatusReport(
   }
   report.ok = pOk && inbox.ok && (!sessionOk || layoutOk);
   if (!report.ok) {
-    console.log("\nHint: npx seat-mesh init  ->  session up  ->  inbox (auto on reload)");
+    console.log("\nHint: npx seatmesh init  ->  session up  ->  inbox (auto on reload)");
   } else {
     console.log("\nOK: stack ready");
   }

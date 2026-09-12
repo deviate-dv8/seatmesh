@@ -1,4 +1,4 @@
-# seat-mesh documentation
+# seatmesh documentation
 
 Product documentation for the engine. Paths and defaults are **profile-driven**
 (`mesh.config.yaml` or project `.sm/mesh.config.yaml`); examples use placeholders

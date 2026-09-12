@@ -28,8 +28,8 @@ export interface ReloadOptions {
 }
 
 /**
- * Lazy reload: rebuild seat-mesh CLI, refresh labels/borders — no session kill.
- * `bin/seat-mesh` also auto-builds on stale dist; this is the explicit "keep hacking" path.
+ * Lazy reload: rebuild seatmesh CLI, refresh labels/borders — no session kill.
+ * `bin/seatmesh` also auto-builds on stale dist; this is the explicit "keep hacking" path.
  */
 export function reloadMesh(loaded: LoadedProfile, opts: ReloadOptions = {}): void {
   const session = loaded.sessionName;

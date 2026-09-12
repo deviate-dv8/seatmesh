@@ -2,19 +2,19 @@
 
 ## Cold start (automatic)
 
-`bin/seat-mesh` checks for a built CLI (`packages/cli/dist/main.js`) and
+`bin/seatmesh` checks for a built CLI (`packages/cli/dist/main.js`) and
 `node_modules`. If anything is missing or `package.json` is newer than dist, it
 runs `npm install` and `npm run build` once, then starts Node. You do not need a
-separate build step before the first `./sm.sh` or `./bin/seat-mesh` call.
+separate build step before the first `./sm.sh` or `./bin/seatmesh` call.
 
 ## New project
 
 ```bash
 cd your-project
-npx seat-mesh init              # creates .sm/mesh.config.yaml + roles/
-npx seat-mesh profile show      # confirm workspace + seats.root
-npx seat-mesh session up        # create tmux session from profile
-npx seat-mesh whoami            # identity in a pane (or pass slot target)
+npx seatmesh init              # creates .sm/mesh.config.yaml + roles/
+npx seatmesh profile show      # confirm workspace + seats.root
+npx seatmesh session up        # create tmux session from profile
+npx seatmesh whoami            # identity in a pane (or pass slot target)
 ```
 
 `init` never deletes existing seat files under your configured `seats.root`.
@@ -62,7 +62,7 @@ Runtime files live under the profile `data.root` (see [CONFIG.md](CONFIG.md)).
 ## Stack passthrough (optional)
 
 If the profile defines `stack.command`, `./sm.sh stack …` execs that command
-(docker, compose, etc.). seat-mesh does not embed a stack driver; the profile
+(docker, compose, etc.). seatmesh does not embed a stack driver; the profile
 names the external script.
 
 ## Next

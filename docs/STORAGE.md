@@ -1,7 +1,7 @@
 # Storage — JSONL today, SQLite target, Redis optional cut
 
 **Status:** proposal (operator 2026-09-12) — record only; implement after continue  
-**Prefs:** `tasks/seat-mesh/queue/SEAT-MESH-PREFERENCES.md`  
+**Prefs:** `tasks/seatmesh/queue/SEAT-MESH-PREFERENCES.md`  
 **Related:** [DOTDIR.md](DOTDIR.md) (#1d runtime paths), [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
@@ -10,26 +10,26 @@
 
 | Layer | Role | Location (legacy) | Target |
 |-------|------|-------------------------|--------|
-| **JSONL** | Source of truth (INBOX, PEER, CHECKBACK, PANE_OPS) | `tasks/seat-mesh/daemon/*.jsonl` | `.sm/runtime/daemon/` then **SQLite** |
+| **JSONL** | Source of truth (INBOX, PEER, CHECKBACK, PANE_OPS) | `tasks/seatmesh/daemon/*.jsonl` | `.sm/runtime/daemon/` then **SQLite** |
 | **Redis + BullMQ** | Optional wake for drain (`drain-tick`, row nudge) | `orchestrator.redisUrl` in mesh.config | **Remove** (see phase 1) |
 | **Poll loop** | Reliable drain when Redis down | `daemon.pollMs` in inbox daemon | **Keep** (primary wake) |
 | **HTTP inbox** | Sole mutator for queue rows | localhost `:31670` | unchanged |
 
 Producers (CLI) already POST to the daemon — they do **not** append JSONL directly. That makes a single-writer SQLite store feasible.
 
-**Out of scope:** product-app Redis (email/webhook Bull queues) — separate stack; this doc is **seat-mesh harness only**.
+**Out of scope:** product-app Redis (email/webhook Bull queues) — separate stack; this doc is **seatmesh harness only**.
 
 ---
 
 ## operator direction (2026-09-12)
 
-Move harness persistence toward **SQLite under `.sm/`**, drop external Redis dependency for seat-mesh, keep everything defined in profile + `paths.json` (no scattered paths).
+Move harness persistence toward **SQLite under `.sm/`**, drop external Redis dependency for seatmesh, keep everything defined in profile + `paths.json` (no scattered paths).
 
 ---
 
 ## Recommendation (phased)
 
-### Phase 1 — Drop Redis for seat-mesh (low risk, do with #1d)
+### Phase 1 — Drop Redis for seatmesh (low risk, do with #1d)
 
 **Action:** Remove `orchestrator.redisUrl` / BullMQ path; poll + in-process coalesce only.
 
@@ -37,7 +37,7 @@ Move harness persistence toward **SQLite under `.sm/`**, drop external Redis dep
 
 - Redis adds **zero durability** today — jobs only trigger `runDrain()`; rows live in JSONL.
 - Docs already say Redis is optional ([PORTABILITY.md](PORTABILITY.md)).
-- A sibling product stack may still run Redis for its API; seat-mesh does not need a second reason to require it.
+- A sibling product stack may still run Redis for its API; seatmesh does not need a second reason to require it.
 - One less moving part for agents (`agent-golf`).
 
 **Config after cut:**
@@ -161,7 +161,7 @@ npx seatmesh migrate-storage   # or update --migrate-storage
 
 **Not recommended:**
 
-- SQLite as cross-machine queue (seat-mesh is single-host tmux).
+- SQLite as cross-machine queue (seatmesh is single-host tmux).
 - Sharing one DB with product Postgres — different domains.
 - libSQL/Turso — overkill for local daemon.
 

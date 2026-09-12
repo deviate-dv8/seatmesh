@@ -1,8 +1,8 @@
 # Supervisor contract (secretary) + dual manager (manager-2)
 
 **Status:** spec (operator 2026-09-12, approved) — contract seed + CI; layout implement follows  
-**Prefs:** `tasks/seat-mesh/queue/SEAT-MESH-PREFERENCES.md`  
-**Related:** [DOTDIR.md](DOTDIR.md), [STORAGE.md](STORAGE.md), [AGENT-FUNC-GUARDS.md](../../tasks/seat-mesh/queue/AGENT-FUNC-GUARDS.md)
+**Prefs:** `tasks/seatmesh/queue/SEAT-MESH-PREFERENCES.md`  
+**Related:** [DOTDIR.md](DOTDIR.md), [STORAGE.md](STORAGE.md), [AGENT-FUNC-GUARDS.md](../../tasks/seatmesh/queue/AGENT-FUNC-GUARDS.md)
 
 ---
 
@@ -84,9 +84,9 @@ Either may `peer` workers; **only one** merges product (operator gate). Both rea
 
 ---
 
-## CI test (seat-mesh package)
+## CI test (seatmesh package)
 
-**Job:** `npm test` in `services/seat-mesh/` must include harness CI slices:
+**Job:** `npm test` in `services/seatmesh/` must include harness CI slices:
 
 | Test file | Proves |
 |-----------|--------|
@@ -96,7 +96,7 @@ Either may `peer` workers; **only one** merges product (operator gate). Both rea
 
 **Future (mesh layout):** smoke that `columns` includes `manager-2` and secretary lock exists when `contract on supervise` ran.
 
-**Not product CI** — application repo MR pipelines unchanged; this is **seat-mesh engine** CI only.
+**Not product CI** — application repo MR pipelines unchanged; this is **seatmesh engine** CI only.
 
 ---
 

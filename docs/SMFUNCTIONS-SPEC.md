@@ -1,9 +1,9 @@
 # SM functions: the convention
 
-**Scope:** every `seat-mesh` command ("sm function") an agent types on session
+**Scope:** every `seatmesh` command ("sm function") an agent types on session
 `mesh` via `./sm.sh`. Governs new functions proposed in
-`tasks/seat-mesh/brainstorm/slot-N.md` and accepted into the aggregate
-`tasks/seat-mesh/docs/SM-FUNCTIONS.md`.
+`tasks/seatmesh/brainstorm/slot-N.md` and accepted into the aggregate
+`tasks/seatmesh/docs/SM-FUNCTIONS.md`.
 
 **Anchor:** `doc-inputs/patterns.md` --
 "Single Command, Zero Decisions" and "Fewer CLI commands = better token efficiency".
@@ -194,9 +194,9 @@ routine path is toast-and-continue.
 
 | Doc | Role |
 |-----|------|
-| `tasks/seat-mesh/brainstorm/slot-N.md` (1-5) | Candidate functions, evidence file:line |
-| `tasks/seat-mesh/brainstorm/slot-6.md` | Collision/test pass - scores vs this spec |
-| `tasks/seat-mesh/docs/SM-FUNCTIONS.md` | Aggregated accepted list (priority-ranked) |
+| `tasks/seatmesh/brainstorm/slot-N.md` (1-5) | Candidate functions, evidence file:line |
+| `tasks/seatmesh/brainstorm/slot-6.md` | Collision/test pass - scores vs this spec |
+| `tasks/seatmesh/docs/SM-FUNCTIONS.md` | Aggregated accepted list (priority-ranked) |
 | `doc-inputs/patterns.md` | North star: single command, zero decisions, fewer commands |
 | `docs/ONE-PATH.md` | Runtime command picker for what exists today |
 

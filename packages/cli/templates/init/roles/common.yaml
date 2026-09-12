@@ -1,5 +1,5 @@
 banner:
-  - "engine=seat-mesh | ./sm.sh whoami every turn; config in .sm/"
+  - "engine=seatmesh | ./sm.sh whoami every turn; config in .sm/"
 read_first:
   - path: .sm/README.md
     note: project sm config + seat layout

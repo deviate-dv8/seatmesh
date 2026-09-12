@@ -36,7 +36,7 @@ function tmuxBatch(args: string[][]): void {
   }
 }
 
-/** Create seat-mesh session: base always; nvim/workers/minis optional on cold start. */
+/** Create seatmesh session: base always; nvim/workers/minis optional on cold start. */
 export function sessionUp(loaded: LoadedProfile): void {
   const session = loaded.sessionName;
   const wd = loaded.workspace;

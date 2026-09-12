@@ -1,5 +1,5 @@
 name: minimal
-workspace: ../..   # services/seat-mesh package root when demo; override per checkout
+workspace: ../..   # services/seatmesh package root when demo; override per checkout
 
 session:
   name: dev

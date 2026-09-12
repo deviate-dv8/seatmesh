@@ -4,7 +4,7 @@ How many Plasma toasts to expect when the CPE proxy rotates or OpenCode panes hi
 PROXY-DOWN / OC-LIMIT. All **mesh-owned** toasts use title prefix **`inbox ·`**
 (not `manager ·`).
 
-Canonical notifier: `services/seat-mesh/packages/daemon/src/oc-resume.ts`
+Canonical notifier: `services/seatmesh/packages/daemon/src/oc-resume.ts`
 (`INBOX_NOTIFY_SLOT = "inbox"`). Manual / standalone scripts use
 `scripts/notify-inbox.sh` (same title shape).
 

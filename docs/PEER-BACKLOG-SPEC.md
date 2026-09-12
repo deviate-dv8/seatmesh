@@ -1,4 +1,4 @@
-# Peer + inbox backlogging (seat-mesh)
+# Peer + inbox backlogging (seatmesh)
 
 **Status:** spec (operator 2026-09-12). Agents keep working the active hub; comms do not hijack priority.
 
@@ -57,7 +57,7 @@ Normal FIFO from backlog + live queue (prompt before room).
 3. **Do not** read backlog prompts until hub DONE and composer idle (daemon promotes then).
 4. **Done signal:** `./sm.sh to-master DONE: <HUB> <evidence>` then Mark OPEN or next hub.
 
-## Daemon (seat-mesh)
+## Daemon (seatmesh)
 
 - `peer-backlog.ts`: on `held:busy|held:typing`, park row → `PEER-BACKLOG.jsonl`, **continue draining other panes** (no global wedge).
 - `promotePeerBacklog`: when target pane idle, re-queue oldest backlog row to `PEER.jsonl`.

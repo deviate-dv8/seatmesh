@@ -1,4 +1,4 @@
-# Inbox ports: seat-mesh vs harness
+# Inbox ports: seatmesh vs harness
 
 Agent inbox daemons live in a **dedicated 316xx block** — outside consumer product ports
 (`3000`–`3091` feature slots, `:5080` gateway, etc.).
@@ -52,7 +52,7 @@ Workspace-scoped mode (multi-checkout on one host):
 port = portBase + (hash(workspace_absolute_path) mod portRange)
 ```
 
-## Legacy harness `:31699` (not seat-mesh)
+## Legacy harness `:31699` (not seatmesh)
 
 | Item | Detail |
 |------|--------|

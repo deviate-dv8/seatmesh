@@ -71,8 +71,8 @@ Exact dir names use `seats.dirs` templates (`slot-{n}`, `mini-{n}`, …).
 ## CLI
 
 ```bash
-seat-mesh snapshot here my-slug
-seat-mesh snapshot capture
-seat-mesh contexts
-seat-mesh contexts --snapshots
+seatmesh snapshot here my-slug
+seatmesh snapshot capture
+seatmesh contexts
+seatmesh contexts --snapshots
 ```
