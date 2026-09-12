@@ -38,7 +38,7 @@
 - [x] **1.4** `flush` — `flush.ts` (Enter rescue / Esc stuck draft)
 - [x] **1.5** `switch` / `handoff` — relaunch + FOCUS handoff (`switch.ts`)
 - [x] **1.6** `set` / `tag` — persist type/resumeId to `mesh-agents.json` (`set-tag.ts`; JSON only, no relaunch)
-- [~] **1.7** `save` / `auto` — scrape live mesh -> `mesh-agents.json` (layout.minis + slot CLI state)
+- [~] **1.7** `save` / `auto` — scrape live mesh -> `mesh-agents.json`; switch auto-save after relaunch
 - [x] **1.8** `title` / `status` — `@mesh_title` / `@mesh_status` + border
 - [x] **1.9** `remind` — manager-only; enqueue PEER.jsonl (`remind.ts`)
 - [ ] **1.10** `continue` + `night`
@@ -89,7 +89,7 @@
 
 Open rows from the sm-functions campaign. Each ships as one function per SPEC (SMFUNCTIONS-SPEC.md) and gets a ONE-PATH.md row.
 
-- [ ] **5.1** `checkback start` — positional expect + optional positional duration + `--here` alias + `ensureMeshInbox()` loud-fail (fix documented shape; P0-1)
+- [x] **5.1** `checkback start` — harness shape `start <duration> --expect "topic" [--renew] [--here|--slot|--mini]` + loud-fail inbox down
 - [~] **5.2** `inbox list|resolve` + daemon routes `GET /inbox` + `POST /inbox/resolve` — CLI shipped; `--wait|--meta` + log/instances still open
 - [~] **5.3** `tag` — `set`/`tag` shipped (resume id); `--auto` + `self` alias still open
 - [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)

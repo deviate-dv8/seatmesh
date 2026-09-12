@@ -10,6 +10,7 @@ import { invalidatePaneContext } from "../seats/cold-start-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { tmux } from "../lib/tmux-run.js";
+import { saveMeshSession } from "../session/save-session.js";
 
 const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "empty"]);
 
@@ -111,6 +112,7 @@ export function runSwitch(
       tmux(["send-keys", "-t", paneId, "clear", "Enter"]);
     });
     console.log(`cleared CLI -> plain terminal on ${paneId}`);
+    persistAfterSwitch(loaded, registry);
     return;
   }
 
@@ -166,4 +168,14 @@ export function runSwitch(
     `${newType}${opts.reason ? ` · ${opts.reason}` : ""}`,
   ]);
   console.log(`launched: ${cmd}`);
+  persistAfterSwitch(loaded, registry);
+}
+
+function persistAfterSwitch(loaded: LoadedProfile, registry: ProviderRegistry): void {
+  try {
+    const file = saveMeshSession(loaded, registry);
+    console.log(`saved mesh-agents.json after switch (${file})`);
+  } catch (e) {
+    console.error(`WARN: post-switch save failed: ${(e as Error).message}`);
+  }
 }

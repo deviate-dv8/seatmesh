@@ -7,13 +7,47 @@ import {
   cancelCheckback,
   chatRoomConfigForLoaded,
   listCheckbacks,
+  parseDurationToSeconds,
 } from "@seat-mesh/core";
-import { ensureMeshInbox, runWhoami } from "@seat-mesh/tmux";
+import {
+  ensureMeshInbox,
+  meshInboxPort,
+  resolvePaneTarget,
+  runWhoami,
+} from "@seat-mesh/tmux";
 
-function resolvePane(loaded: LoadedProfile, explicit?: string): string | undefined {
-  if (explicit) return explicit;
-  if (process.env.TMUX_PANE) return process.env.TMUX_PANE;
-  return runWhoami(loaded).paneId ?? undefined;
+function requireMeshInbox(loaded: LoadedProfile): void {
+  if (ensureMeshInbox(loaded, { quiet: true })) return;
+  const port = meshInboxPort(loaded);
+  console.error(`FAIL: mesh inbox down on :${port} — run: ./sm.sh inbox restart`);
+  process.exit(1);
+}
+
+function resolveTargetPane(
+  loaded: LoadedProfile,
+  opts: { here?: boolean; slot?: string; mini?: string; pane?: string },
+): string {
+  if (opts.pane) {
+    const hit = resolvePaneTarget(opts.pane, loaded);
+    if ("error" in hit) throw new Error(hit.error);
+    return hit.paneId;
+  }
+  if (opts.mini) {
+    const hit = resolvePaneTarget(`mini-${opts.mini}`, loaded);
+    if ("error" in hit) throw new Error(hit.error);
+    return hit.paneId;
+  }
+  if (opts.slot) {
+    const hit = resolvePaneTarget(opts.slot, loaded);
+    if ("error" in hit) throw new Error(hit.error);
+    return hit.paneId;
+  }
+  if (opts.here || !opts.pane) {
+    const hit = resolvePaneTarget("here", loaded);
+    if ("error" in hit) throw new Error(hit.error);
+    return hit.paneId;
+  }
+  throw new Error("checkback start: no target pane (--here|--slot N|--mini N|--pane %id)");
 }
 
 function printEntry(e: CheckbackEntry): void {
@@ -27,55 +61,76 @@ function printEntry(e: CheckbackEntry): void {
 export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command {
   const checkback = new Command("checkback")
     .alias("patience")
-    .description("Mesh inbox :3100 /patience poll-later entries (daemon injects on expiry)");
+    .description("Mesh inbox poll-later (daemon injects Check: on expiry)");
 
   checkback
-    .command("start")
-    .description("Arm a checkback — daemon writes 'Check: <expect>' into a tmux pane on expiry")
-    .requiredOption("--expect <text>", "what to be checked back on")
-    .option("--duration <dur>", "how long until fire (default: profile 5m)", "5m")
-    .option("--renew <dur>", "re-arm with this interval after firing (default: 3m)", "3m")
-    .option("--pane <id>", "target tmux pane id (default: current pane)")
-    .option("--kind <kind>", "entry kind (default: checkback)", "checkback")
-    .option("--from <id>", "sender agent id")
-    .action(
-      async (opts: {
-        expect: string;
-        duration: string;
-        renew: string;
-        pane?: string;
-        kind: string;
-        from?: string;
-      }) => {
-        const loaded = getLoaded();
-        const cfg = chatRoomConfigForLoaded(loaded);
-        ensureMeshInbox(loaded, { quiet: true });
-        const ownerPane = resolvePane(loaded, opts.pane);
-        if (!ownerPane) {
-          console.error("checkback start: no target pane");
-          process.exit(2);
-        }
-        const res = await armCheckback({
-          inboxBase: cfg.inboxBase,
-          ownerPane,
-          expect: opts.expect,
-          duration: opts.duration,
-          renew: opts.renew,
-          kind: opts.kind,
-          senderPane: ownerPane,
+    .command("start <duration>")
+    .description(
+      'Arm checkback — harness shape: start 5m --expect "topic" [--renew 3m] [--here|--slot N|--mini N]',
+    )
+    .option("--expect <text>", "what to verify when timer fires")
+    .option("--renew <dur>", "re-arm interval after fire", "3m")
+    .option("--here", "target current tmux pane")
+    .option("--slot <n>", "target worker slot pane")
+    .option("--mini <n>", "target mini pane")
+    .option("--pane <id>", "target tmux pane id")
+    .option("--kind <kind>", "entry kind", "checkback")
+    .allowExcessArguments(true)
+    .action(async (duration: string, opts, cmd) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      const cfg = chatRoomConfigForLoaded(loaded);
+
+      if (parseDurationToSeconds(duration) == null) {
+        console.error(`checkback start: bad duration '${duration}' (use 30s, 5m, 1h)`);
+        process.exit(2);
+      }
+
+      const trailing = (cmd.args as string[]).slice(1).filter(Boolean);
+      let expect = (opts.expect as string | undefined)?.trim() ?? "";
+      if (!expect && trailing.length) {
+        expect = trailing.join(" ").trim();
+      }
+      if (!expect) {
+        console.error(
+          'usage: checkback start <duration> --expect "topic" [--renew 3m] [--here|--slot N|--mini N]',
+        );
+        process.exit(2);
+      }
+
+      let ownerPane: string;
+      try {
+        ownerPane = resolveTargetPane(loaded, {
+          here: opts.here as boolean | undefined,
+          slot: opts.slot as string | undefined,
+          mini: opts.mini as string | undefined,
+          pane: opts.pane as string | undefined,
         });
-        if (!res.ok) {
-          console.error(`checkback start: FAIL ${res.reason ?? "?"}`);
-          process.exit(1);
-        }
-        const entry = (res.response as { entry?: CheckbackEntry } | undefined)?.entry;
-        if (!entry) {
-          console.error("checkback start: FAIL no entry returned");
-          process.exit(1);
-        }
-        console.log(`ok id=${entry.id} expiresAt=${entry.expiresAt ?? "-"} expect=${opts.expect}`);
-      },
-    );
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+
+      const res = await armCheckback({
+        inboxBase: cfg.inboxBase,
+        ownerPane,
+        expect,
+        duration,
+        renew: opts.renew as string,
+        kind: opts.kind as string,
+        senderPane: runWhoami(loaded).paneId ?? ownerPane,
+      });
+      if (!res.ok) {
+        console.error(`checkback start: FAIL ${res.reason ?? "?"}`);
+        process.exit(1);
+      }
+      const entry = (res.response as { entry?: CheckbackEntry } | undefined)?.entry;
+      if (!entry) {
+        console.error("checkback start: FAIL no entry returned");
+        process.exit(1);
+      }
+      console.log(`ok id=${entry.id} expiresAt=${entry.expiresAt ?? "-"} expect=${expect}`);
+    });
 
   checkback
     .command("list")
@@ -85,8 +140,8 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
     .option("--json", "raw JSON")
     .action(async (opts: { all?: boolean; json?: boolean }) => {
       const loaded = getLoaded();
+      requireMeshInbox(loaded);
       const cfg = chatRoomConfigForLoaded(loaded);
-      ensureMeshInbox(loaded, { quiet: true });
       const out = await listCheckbacks(cfg.inboxBase, { all: opts.all });
       if (opts.json) {
         console.log(JSON.stringify(out, null, 2));
@@ -105,8 +160,8 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
     .argument("<id>", "checkback id or prefix")
     .action(async (id: string) => {
       const loaded = getLoaded();
+      requireMeshInbox(loaded);
       const cfg = chatRoomConfigForLoaded(loaded);
-      ensureMeshInbox(loaded, { quiet: true });
       const res = await cancelCheckback(cfg.inboxBase, id);
       console.log(`ok cancelled=${res.cancelled}`);
     });
@@ -116,8 +171,8 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
     .description("Cancel every active checkback (mesh inbox poll-later)")
     .action(async () => {
       const loaded = getLoaded();
+      requireMeshInbox(loaded);
       const cfg = chatRoomConfigForLoaded(loaded);
-      ensureMeshInbox(loaded, { quiet: true });
       const res = await cancelAllCheckbacks(cfg.inboxBase);
       console.log(`ok cancelled=${res.cancelled}`);
     });
