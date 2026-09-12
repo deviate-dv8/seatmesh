@@ -7,6 +7,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "bin": {
+    "seatmesh": "./bin/seatmesh"
+  },
   "scripts": {
     "build": "npm run build -w @seat-mesh/core && npm run build -w @seat-mesh/providers && npm run build -w @seat-mesh/tmux && npm run build -w @seat-mesh/connectivity && npm run build -w @seat-mesh/daemon && npm run build -w seatmesh",
     "typecheck": "npm run typecheck -ws --if-present",

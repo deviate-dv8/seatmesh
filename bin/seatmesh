@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # seatmesh CLI entry (product-agnostic). Consumers: --profile <dir|yaml>
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "$SCRIPT")/.." && pwd)"
 CLI="$ROOT/packages/cli/dist/main.js"
 PKG="$ROOT/package.json"
 
