@@ -5,11 +5,11 @@ import { defaultProfilePath, loadProfile, portsForSlot } from "./index.js";
 describe("loadProfile", () => {
   it("loads default profile without --profile", () => {
     const loaded = loadProfile();
-    expect(["zsign", "minimal"]).toContain(loaded.profile.name);
+    expect(["consumer", "minimal"]).toContain(loaded.profile.name);
     expect(loaded.workspace).toBeTruthy();
   });
 
-  it("default profile prefers zsign when present", () => {
+  it("default profile resolves bundled minimal mesh.config.yaml", () => {
     const cfg = defaultProfilePath();
     expect(cfg).toContain("profiles");
     expect(cfg.endsWith("mesh.config.yaml")).toBe(true);

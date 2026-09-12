@@ -10,9 +10,15 @@ import type {
 import {
   cmdlines,
   composerFromCapture,
+  extractOpenCodeSession,
   matchAny,
   modelFromCmdlines,
+  normalizeOpenCodeSessionId,
+  opencodeComposerReady,
+  paneStoredOpenCodeSession,
+  scrapeOpenCodeSessionFromCapture,
   scrapePromptTurnGeneric,
+  sessionIdFromDetection,
 } from "./shared.js";
 
 const PATTERNS = [/opencode/];
@@ -48,12 +54,28 @@ export const opencodeProvider: AgentProvider = {
   id: "opencode",
 
   detect(pane: PaneSnapshot): Detection | null {
-    if (!matchAny(cmdlines(pane), PATTERNS)) return null;
-    return { providerId: "opencode" };
+    const lines = cmdlines(pane);
+    if (!matchAny(lines, PATTERNS)) return null;
+    let resumeId: string | undefined;
+    for (const line of lines) {
+      resumeId = extractOpenCodeSession(line) ?? resumeId;
+    }
+    if (!resumeId) {
+      resumeId = paneStoredOpenCodeSession(pane.options);
+    }
+    if (!resumeId) {
+      resumeId = scrapeOpenCodeSessionFromCapture(pane.captureTail);
+    }
+    resumeId = normalizeOpenCodeSessionId(resumeId);
+    return { providerId: "opencode", resumeId };
   },
 
   composerState(pane: PaneSnapshot) {
     return composerFromCapture(pane, "opencode");
+  },
+
+  composerReady(pane: PaneSnapshot) {
+    return opencodeComposerReady(pane);
   },
 
   injectPlan(_pane: PaneSnapshot): InjectPlan {
@@ -67,8 +89,8 @@ export const opencodeProvider: AgentProvider = {
 
   limits: [ocLimitDetector, ocConnectDetector],
 
-  sessionId() {
-    return undefined;
+  sessionId(_pane, detection) {
+    return sessionIdFromDetection(detection);
   },
 
   modelId(pane) {

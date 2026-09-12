@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "@seat-mesh/core";
-import { createBuiltinRegistry } from "@seat-mesh/providers";
+import fs from "node:fs";
+import path from "node:path";
+import { meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
+import { createRegistryForProfile, formatOpenCodeResumeCommand } from "@seat-mesh/providers";
 import { snapshotConnectivity } from "@seat-mesh/connectivity";
 import { inboxHealth, meshInboxPort } from "./comms/inbox-bridge.js";
 import { resolvePaneTarget } from "./lib/resolve-pane.js";
@@ -8,6 +10,10 @@ import { capturePaneSnapshot, listSessionPanes } from "./lib/snapshot.js";
 import { verifyMeshSession } from "./session/verify.js";
 import { tmuxHasSession } from "./lib/tmux-run.js";
 import { listWindowPaneIds } from "./session/window-panes.js";
+import { buildColdStartBrief } from "./seats/cold-start.js";
+import { gateQueuePath } from "./seats/seat-paths.js";
+import { ensureSeatFiles } from "./seats/seat-init.js";
+import { runWhoami } from "./agents/whoami.js";
 
 export interface SmokeResult {
   name: string;
@@ -37,8 +43,8 @@ function testOcLimitRegex(): SmokeResult {
 }
 
 function testProviderScan(loaded: LoadedProfile): SmokeResult {
-  const reg = createBuiltinRegistry(loaded.profile.providers);
-  const session = loaded.profile.session.name;
+  const reg = createRegistryForProfile(loaded.profile);
+  const session = loaded.sessionName;
   const panes = listSessionPanes(session);
   if (!panes.length) return row("providers-scan", false, "no panes");
   let live = 0;
@@ -60,7 +66,7 @@ function testProviderScan(loaded: LoadedProfile): SmokeResult {
 }
 
 function testPaneTargets(loaded: LoadedProfile): SmokeResult {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const targets = [
     "manager",
     "secretary",
@@ -69,7 +75,7 @@ function testPaneTargets(loaded: LoadedProfile): SmokeResult {
   ];
   const missing: string[] = [];
   for (const t of targets) {
-    const r = resolvePaneTarget(t, session);
+    const r = resolvePaneTarget(t, loaded);
     if ("error" in r) missing.push(`${t}:${r.error}`);
   }
   return row(
@@ -91,7 +97,7 @@ function testMeshInbox(loaded: LoadedProfile): SmokeResult {
     );
   }
   const session = String(h.session ?? "");
-  const want = loaded.profile.session.name;
+  const want = loaded.sessionName;
   if (session !== want) {
     return row("mesh-inbox", false, `session=${session} want ${want}`);
   }
@@ -107,13 +113,40 @@ function testMeshInbox(loaded: LoadedProfile): SmokeResult {
   );
 }
 
+function testInboxSupervisor(loaded: LoadedProfile): SmokeResult {
+  if (loaded.profile.daemon?.watch === false) {
+    return row("inbox-supervisor", true, "watch disabled in profile");
+  }
+  const metaPath = meshRuntimePaths(loaded).meshInboxMeta;
+  if (!fs.existsSync(metaPath)) {
+    return row("inbox-supervisor", false, "mesh-inbox.json missing");
+  }
+  let meta: { supervisorPid?: number; watch?: boolean; hmr?: boolean };
+  try {
+    meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as typeof meta;
+  } catch {
+    return row("inbox-supervisor", false, "mesh-inbox.json unreadable");
+  }
+  const sup = meta.supervisorPid ?? 0;
+  const alive =
+    sup > 0 &&
+    spawnSync("kill", ["-0", String(sup)], { stdio: "ignore" }).status === 0;
+  return row(
+    "inbox-supervisor",
+    alive && meta.watch === true,
+    alive
+      ? `supervisorPid=${sup} watch=${String(meta.watch)} hmr=${String(meta.hmr)}`
+      : `supervisor not running (pid=${sup || "?"})`,
+  );
+}
+
 function testSecretaryPane(loaded: LoadedProfile): SmokeResult {
-  const r = resolvePaneTarget("secretary", loaded.profile.session.name);
+  const r = resolvePaneTarget("secretary", loaded);
   if ("error" in r) {
     return row("secretary-pane", false, r.error);
   }
   const snap = capturePaneSnapshot(r.paneId);
-  const hasCli = Boolean(snap && createBuiltinRegistry(loaded.profile.providers).detect(snap));
+  const hasCli = Boolean(snap && createRegistryForProfile(loaded.profile).detect(snap));
   return row(
     "secretary-pane",
     hasCli,
@@ -133,13 +166,111 @@ async function testProxy(loaded: LoadedProfile): Promise<SmokeResult> {
   );
 }
 
+function testWifiProbe(loaded: LoadedProfile): SmokeResult {
+  const script = `${loaded.workspace}/scripts/cpe-wifi-probe.sh`;
+  const r = spawnSync("bash", [script, "--check"], {
+    encoding: "utf8",
+    cwd: loaded.workspace,
+    timeout: 15_000,
+  });
+  const detail = (r.stdout || r.stderr || "").trim().split("\n").pop() ?? `exit ${r.status ?? 1}`;
+  return row("wifi-cpe-probe", r.status === 0, detail);
+}
+
+function testOcSessionIds(loaded: LoadedProfile): SmokeResult {
+  const reg = createRegistryForProfile(loaded.profile);
+  const session = loaded.sessionName;
+  const panes = listSessionPanes(session);
+  let ocTotal = 0;
+  let badStored = 0;
+  let unresolved = 0;
+  const sesRe = /^ses_[A-Za-z0-9]+$/;
+  for (const paneId of panes) {
+    const snap = capturePaneSnapshot(paneId);
+    if (!snap) continue;
+    const prov = reg.detect(snap);
+    if (prov?.id !== "opencode") continue;
+    ocTotal++;
+    const stored = snap.options.mesh_oc_session?.trim() ?? "";
+    if (stored && !sesRe.test(stored)) badStored++;
+    if (!formatOpenCodeResumeCommand(snap)) unresolved++;
+  }
+  const pass = ocTotal > 0 && badStored === 0 && unresolved === 0;
+  return row(
+    "oc-session-ids",
+    pass,
+    ocTotal
+      ? `${ocTotal} panes, bad_stored=${badStored}, no_resume_cmd=${unresolved}`
+      : "no opencode panes (skip)",
+  );
+}
+
+function testOcAgents(loaded: LoadedProfile): SmokeResult {
+  const reg = createRegistryForProfile(loaded.profile);
+  const session = loaded.sessionName;
+  const panes = listSessionPanes(session);
+  let ocTotal = 0;
+  let connectErr = 0;
+  let limit = 0;
+  let ok = 0;
+  const ocLimit = /rate limit|usage limit|limit reached|too many requests/i;
+  const ocConn = /cannot connect to api|unable to connect|socket connection was closed/i;
+  for (const paneId of panes) {
+    const snap = capturePaneSnapshot(paneId);
+    if (!snap) continue;
+    const prov = reg.detect(snap);
+    if (prov?.id !== "opencode") continue;
+    ocTotal++;
+    const tail = snap.captureTail;
+    if (ocLimit.test(tail)) limit++;
+    else if (ocConn.test(tail)) connectErr++;
+    else ok++;
+  }
+  const pass = ocTotal > 0 && connectErr === 0;
+  return row(
+    "oc-agents",
+    pass,
+    ocTotal
+      ? `${ok} ok, ${connectErr} connect_err, ${limit} limit (${ocTotal} opencode panes)`
+      : "no opencode panes in session",
+  );
+}
+
+function testColdStartHub(loaded: LoadedProfile): SmokeResult {
+  const init = ensureSeatFiles(loaded);
+  const gq = gateQueuePath(loaded);
+  if (!fs.existsSync(gq)) {
+    return row("cold-start-hub", false, "GATE-QUEUE.md missing after ensureSeatFiles");
+  }
+  const miniDir = path.join(
+    loaded.workspace,
+    loaded.profile.seats.root,
+    (loaded.profile.seats.dirs?.mini ?? "mini-{n}").replace("{n}", "1"),
+  );
+  if (!fs.existsSync(path.join(miniDir, "FOCUS.md"))) {
+    return row("cold-start-hub", false, `mini-1 FOCUS missing (${miniDir})`);
+  }
+  const brief = buildColdStartBrief(loaded, runWhoami(loaded, "slot-1"));
+  const ok =
+    brief.includes("GATE-QUEUE") &&
+    brief.includes("OPEN TASKS") &&
+    brief.includes("NO chat reply");
+  return row(
+    "cold-start-hub",
+    ok,
+    ok
+      ? `ensure created=${init.created.length}; brief=${brief.length} chars`
+      : "buildColdStartBrief missing required sections",
+  );
+}
+
 export async function runMeshSmoke(loaded: LoadedProfile): Promise<SmokeResult[]> {
   const results: SmokeResult[] = [];
-  if (!tmuxHasSession(loaded.profile.session.name)) {
-    results.push(row("session", false, `session ${loaded.profile.session.name} missing`));
+  if (!tmuxHasSession(loaded.sessionName)) {
+    results.push(row("session", false, `session ${loaded.sessionName} missing`));
     return results;
   }
-  results.push(row("session", true, loaded.profile.session.name));
+  results.push(row("session", true, loaded.sessionName));
 
   const verify = verifyMeshSession(loaded);
   results.push(
@@ -152,10 +283,17 @@ export async function runMeshSmoke(loaded: LoadedProfile): Promise<SmokeResult[]
 
   results.push(testOcLimitRegex());
   results.push(testPaneTargets(loaded));
+  results.push(testColdStartHub(loaded));
   results.push(testProviderScan(loaded));
   results.push(testMeshInbox(loaded));
+  results.push(testInboxSupervisor(loaded));
   results.push(testSecretaryPane(loaded));
+  if (loaded.profile.connectivity?.enabled) {
+    results.push(testWifiProbe(loaded));
+  }
   results.push(await testProxy(loaded));
+  results.push(testOcAgents(loaded));
+  results.push(testOcSessionIds(loaded));
   return results;
 }
 

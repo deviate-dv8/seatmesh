@@ -1,13 +1,20 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import type { LoadedProfile } from "@seat-mesh/core";
+import { seatMeshPackageRoot, type LoadedProfile } from "@seat-mesh/core";
 import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
 import { ensureMeshInbox } from "../comms/inbox-bridge.js";
 import { assertRelayoutSafe } from "./layout-guard.js";
 import { submitPaneOp } from "../ops/pane-ops-client.js";
 import { relayoutMeshSession } from "./session.js";
+import { activeSessionWindows } from "./session-windows.js";
 import { tmuxHasSession } from "../lib/tmux-run.js";
+import { ensureSeatFiles } from "../seats/seat-init.js";
+import { ensureBaseLayout } from "./base-layout.js";
+import {
+  logCoordSyncResults,
+  syncCoordClisFromProfile,
+} from "../agents/coord-cli-sync.js";
 
 export interface ReloadOptions {
   /** Re-run equal 3x2 / 4x2 grid (disruptive — kills extra panes). */
@@ -25,7 +32,7 @@ export interface ReloadOptions {
  * `bin/seat-mesh` also auto-builds on stale dist; this is the explicit "keep hacking" path.
  */
 export function reloadMesh(loaded: LoadedProfile, opts: ReloadOptions = {}): void {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
@@ -33,7 +40,7 @@ export function reloadMesh(loaded: LoadedProfile, opts: ReloadOptions = {}): voi
   }
 
   if (!opts.skipBuild) {
-    const seatMeshRoot = path.join(loaded.workspace, "seat-mesh");
+    const seatMeshRoot = seatMeshPackageRoot();
     const r = spawnSync("npm", ["run", "build"], {
       cwd: seatMeshRoot,
       stdio: "inherit",
@@ -60,12 +67,10 @@ export function reloadMesh(loaded: LoadedProfile, opts: ReloadOptions = {}): voi
     return;
   }
 
+  ensureSeatFiles(loaded);
+  ensureBaseLayout(loaded, session);
   labelMeshSession(loaded, session);
-  applyMeshSessionBorders(session, [
-    layout.nvim.window,
-    layout.base.window,
-    layout.workers.window,
-    layout.minis.window,
-  ]);
+  applyMeshSessionBorders(session, activeSessionWindows(loaded, session));
   ensureMeshInbox(loaded, { quiet: true });
+  logCoordSyncResults(syncCoordClisFromProfile(loaded, { trigger: "reload" }));
 }

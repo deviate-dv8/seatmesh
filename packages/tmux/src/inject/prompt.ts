@@ -1,6 +1,8 @@
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { formatWorkerInjectStamp, portsForSlot } from "@seat-mesh/core";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
+import { paneMetaForPane } from "../lib/pane-meta.js";
 import { injectToPane } from "./inject.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";
 
@@ -25,6 +27,25 @@ export function buildPromptBody(
   return prefix + text;
 }
 
+function steeringHeader(loaded: LoadedProfile, paneId: string, row: { role: string; slot?: string | null; mini?: string | null }): string {
+  const meta = paneMetaForPane(paneId);
+  const slotNum = row.slot ? Number(row.slot) : meta?.slot ? Number(meta.slot) : null;
+  const ports =
+    meta?.ports?.trim() ||
+    (slotNum != null && Number.isFinite(slotNum)
+      ? portsForSlot(loaded.profile.ports.worker, slotNum)
+      : undefined);
+  const ctx = {
+    role: row.role,
+    slot: slotNum && Number.isFinite(slotNum) ? slotNum : null,
+    mini: row.mini ?? meta?.mini ?? null,
+    ports: ports ?? meta?.ports ?? null,
+    workerCount: loaded.profile.session.workerCount,
+    miniMax: loaded.profile.session.miniMax,
+  };
+  return `${formatWorkerInjectStamp(ctx)} `;
+}
+
 /** Enqueue manager/worker prompt (daemon injects when target idle). */
 export function enqueuePrompt(
   loaded: LoadedProfile,
@@ -32,13 +53,13 @@ export function enqueuePrompt(
   text: string,
   opts: PromptOptions = {},
 ): { paneId: string; targetLabel: string } {
-  const session = loaded.profile.session.name;
-  const resolved = resolvePaneTarget(target, session);
+  const resolved = resolvePaneTarget(target, loaded);
   if ("error" in resolved) {
     throw new Error(resolved.error);
   }
 
-  const body = buildPromptBody(loaded, text, opts);
+  let body = buildPromptBody(loaded, text, opts);
+  body = steeringHeader(loaded, resolved.paneId, resolved.row) + body;
   const targetLabel =
     resolved.row.role === "worker" && resolved.row.slot != null
       ? `slot-${resolved.row.slot}`
@@ -71,8 +92,7 @@ export function injectPromptDirect(
   text: string,
   opts: PromptOptions = {},
 ): { paneId: string; providerId: string } {
-  const session = loaded.profile.session.name;
-  const resolved = resolvePaneTarget(target, session);
+  const resolved = resolvePaneTarget(target, loaded);
   if ("error" in resolved) {
     throw new Error(resolved.error);
   }

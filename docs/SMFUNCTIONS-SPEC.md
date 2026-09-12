@@ -158,7 +158,7 @@ sm notify "<session>" "<check>"            # single shape, both args positional
   `slot-N`; main -> `main`; manager/secretary/mini -> their ids). No `--slot`.
 - No auto-open (matches notify.sh convention; toast only).
 - URL: none. `--url <url>` is the only flag, and it is a rare override (link
-  to mdview / localhost when Dan asked for a link).
+  to mdview / localhost when operator asked for a link).
 
 **Idempotent**
 
@@ -185,7 +185,7 @@ Output is exactly the `ok`/`FAIL` line above; title/body built by notify.sh
 (ASCII enforced there). One line out, nothing echoed back.
 
 **Subshape risk:** notify's `--confirm` (approve/reject buttons) does NOT spawn
-a second function or a mode flag. It is out of scope unless Dan asks - the
+a second function or a mode flag. It is out of scope unless operator asks - the
 routine path is toast-and-continue.
 
 ---

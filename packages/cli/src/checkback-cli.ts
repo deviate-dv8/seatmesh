@@ -3,8 +3,9 @@ import {
   type LoadedProfile,
   type CheckbackEntry,
   armCheckback,
+  cancelAllCheckbacks,
   cancelCheckback,
-  chatRoomConfig,
+  chatRoomConfigForLoaded,
   listCheckbacks,
 } from "@seat-mesh/core";
 import { ensureMeshInbox, runWhoami } from "@seat-mesh/tmux";
@@ -47,7 +48,7 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
         from?: string;
       }) => {
         const loaded = getLoaded();
-        const cfg = chatRoomConfig(loaded.profile);
+        const cfg = chatRoomConfigForLoaded(loaded);
         ensureMeshInbox(loaded, { quiet: true });
         const ownerPane = resolvePane(loaded, opts.pane);
         if (!ownerPane) {
@@ -84,7 +85,7 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
     .option("--json", "raw JSON")
     .action(async (opts: { all?: boolean; json?: boolean }) => {
       const loaded = getLoaded();
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       ensureMeshInbox(loaded, { quiet: true });
       const out = await listCheckbacks(cfg.inboxBase, { all: opts.all });
       if (opts.json) {
@@ -104,9 +105,20 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
     .argument("<id>", "checkback id or prefix")
     .action(async (id: string) => {
       const loaded = getLoaded();
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       ensureMeshInbox(loaded, { quiet: true });
       const res = await cancelCheckback(cfg.inboxBase, id);
+      console.log(`ok cancelled=${res.cancelled}`);
+    });
+
+  checkback
+    .command("cancel-all")
+    .description("Cancel every active checkback (mesh inbox poll-later)")
+    .action(async () => {
+      const loaded = getLoaded();
+      const cfg = chatRoomConfigForLoaded(loaded);
+      ensureMeshInbox(loaded, { quiet: true });
+      const res = await cancelAllCheckbacks(cfg.inboxBase);
       console.log(`ok cancelled=${res.cancelled}`);
     });
 

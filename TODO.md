@@ -4,12 +4,13 @@
 
 | File | Job |
 |------|-----|
-| **TODO.md** (this) | Full parity checklist vs `tmux-zsign.sh` |
+| **TODO.md** (this) | Full parity checklist vs `legacy harness.sh` |
+| **tasks/seat-mesh/IMPLEMENT-CHECK.md** | **Impl + mini review + smoke** per item (slot-2 style) |
 | **NOW.md** | Current slice only — what we're doing *this* turn |
 | **README.md** | Handout + high-level status |
 | **docs/** | Architecture / parallel / comms (not a task list) |
 
-**Harness reference:** `tmux-zsign.sh` → `usage()` (~lines 51–187).
+**Harness reference:** `legacy harness.sh` → `usage()` (~lines 51–187).
 
 **Rules:** `./sm.sh` ≠ harness plugin. Code in `seat-mesh/packages/*` only. Do **not** write `tmux-main-agents.json` from sm (read-only seed until `mesh-agents.json` exists).
 
@@ -43,12 +44,13 @@
 - [ ] **1.10** `continue` + `night`
 - [ ] **1.11** `slot-advice`
 - [x] **1.12** `providers list|scan`
+- [x] **1.13** `peek <target> status|full` — `roles/peek.ts`; operator 23:29; mini review pending
 
 ---
 
 ## P2 — inbox / comms
 
-- [~] **2.1** mesh inbox daemon (`mesh-inbox-server.ts` **:3100** — `JsonlStore` + `mesh-orchestrator` + `border-paint`; BullMQ when Redis reachable, poll fallback)
+- [~] **2.1** mesh inbox daemon (`mesh-inbox-server.ts` **:3100** — `JsonlStore` + `mesh-orchestrator` + `border-paint`; BullMQ when Redis reachable, poll fallback). **Radar:** health wedge ~1–2s post-restart; delivery proof landed (`isInboxDelivered`); list/resolve routes still open (see **5.2**)
 - [x] **2.2** `to-master` — enqueue + daemon inject (`deliverToPane`, `INBOX.jsonl` drain)
 - [~] **2.3** peer comms — `./sm.sh to-slot` / `to-mini` enqueue `PEER.jsonl`; room/chat ledger separate
 - [~] **2.4** `checkback` — `start|list|cancel` (`patience` alias) wrapping daemon `/patience`; no `schedule` yet
@@ -72,13 +74,33 @@
 
 ---
 
-## P4 — cutover
+## P4 — cutover (see `docs/SURPASS.md`)
 
 - [~] **4.1** `mesh-agents.json` (mesh-owned state) — save/read layout override; `set`/`tag`/`switch` persist still open
 - [ ] **4.2** `session down` (never touch `dev`)
 - [ ] **4.3** kiro trust dialog on launch
 - [ ] **4.4** Cursor composer-ready wait before handoff
-- [ ] **4.5** cutover doc: when workers leave `dev`
+- [ ] **4.5** cutover doc: when workers leave `dev` — **surpass gate D**
+- [ ] **4.6** **Surpass gate A** — inbox list/resolve + fix :3100 health wedge (beats harness :3099 for manager ops)
+
+---
+
+## P5 — brainstorm backlog (aggregated in `tasks/seat-mesh/docs/SM-FUNCTIONS.md`, mini-8 synth)
+
+Open rows from the sm-functions campaign. Each ships as one function per SPEC (SMFUNCTIONS-SPEC.md) and gets a ONE-PATH.md row.
+
+- [ ] **5.1** `checkback start` — positional expect + optional positional duration + `--here` alias + `ensureMeshInbox()` loud-fail (fix documented shape; P0-1)
+- [~] **5.2** `inbox list|resolve` + `status --wait|--meta` + `log`/`instances` + daemon routes `GET /inbox` + `POST /inbox/resolve` (P0-2) — **workaround only:** bulk JSONL resolve used 23:28; CLI routes not shipped
+- [ ] **5.3** `tag` — `sm tag <slot|self> <rid|--auto>`, needs `mesh-agents.json` write (P1-1; blocks on 4.1)
+- [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)
+- [ ] **5.5** `whoami --json` (P1-3)
+- [ ] **5.6** workers layout profile-config — `layoutWorkersFromProfile` replaces hard-coded `layoutWorkers3x2` (DAN req; P1-4)
+- [ ] **5.7** `notify` — `sm notify "<session>" ["<check>"]`, seat from TMUX_PANE, loud FAIL on missing notify-send (P2-1)
+- [ ] **5.8** `preview` — `sm preview <file...> [--set <days>] [--notify]` wrapping publish-mdview.sh (P2-3)
+- [ ] **5.9** `worktree` — `sm worktree new|rm|backlog <slug>` wrapping the three scripts (P2-4)
+- [ ] **5.10** `room say` dedupe window + `cb=<id>` output; `room tail` id/pane/truncate + `--json`; `room get <id>` (P3-1/P3-2)
+- [ ] **5.11** `chat put|get` — positional upsert + id/turnHash lookup (P3-3)
+- [ ] **5.12** base layer `pane-meta|panes|capture|inject|interrupt|restart` — surface tmux primitives as verbs (P4-2)
 
 ---
 
@@ -87,5 +109,5 @@
 ```bash
 ./sm.sh verify
 ./sm.sh providers scan
-# Dan: attach mesh in Ghostty — eyeball borders + CLIs
+# operator: attach mesh in Ghostty — eyeball borders + CLIs
 ```

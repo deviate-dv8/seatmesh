@@ -1,31 +1,74 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import type { LoadedProfile } from "@seat-mesh/core";
+import {
+  meshRuntimePaths,
+  resolveDaemonPort,
+  seatMeshPackageRoot,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 
-/** Mesh-owned daemon — NOT harness :3099 / scripts/inbox-server.mjs */
-const DEFAULT_PORT = 3100;
-
-function inboxBase(port = DEFAULT_PORT): string {
+function inboxBase(port: number): string {
   return `http://127.0.0.1:${port}`;
 }
 
-function meshDaemonPaths(workspace: string) {
-  const stateDir = path.join(workspace, "tasks/seat-mesh/daemon");
+interface MeshInboxMeta {
+  supervisorPid?: number;
+  pid?: number;
+  port?: number;
+  watch?: boolean;
+  hmr?: boolean;
+  session?: string;
+  workspaceId?: string;
+}
+
+function enginePaths() {
+  const engineRoot = seatMeshPackageRoot();
   return {
-    stateDir,
-    metaPath: path.join(stateDir, "mesh-inbox.json"),
-    logPath: path.join(stateDir, "mesh-inbox.log"),
-    serverJs: path.join(workspace, "seat-mesh/packages/daemon/dist/mesh-inbox-server.js"),
-    profileDir: path.join(workspace, "seat-mesh/profiles/zsign"),
+    serverJs: path.join(engineRoot, "packages/daemon/dist/mesh-inbox-server.js"),
+    supervisorJs: path.join(engineRoot, "packages/daemon/dist/mesh-inbox-supervisor.js"),
   };
 }
 
-export function meshInboxPort(loaded: LoadedProfile): number {
-  return loaded.profile.daemon?.port ?? DEFAULT_PORT;
+function meshDaemonPaths(loaded: LoadedProfile) {
+  const rt = meshRuntimePaths(loaded);
+  const engine = enginePaths();
+  return {
+    stateDir: rt.daemonDir,
+    metaPath: rt.meshInboxMeta,
+    stopPath: rt.meshInboxStop,
+    logPath: rt.meshInboxLog,
+    serverJs: engine.serverJs,
+    supervisorJs: engine.supervisorJs,
+    profileDir: loaded.profileDir,
+  };
 }
 
-export function inboxHealth(port = DEFAULT_PORT): Record<string, unknown> | null {
+function readMeshInboxMeta(loaded: LoadedProfile): MeshInboxMeta | null {
+  const { metaPath } = meshDaemonPaths(loaded);
+  if (!fs.existsSync(metaPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(metaPath, "utf8")) as MeshInboxMeta;
+  } catch {
+    return null;
+  }
+}
+
+function pidAlive(pid: number | undefined): boolean {
+  if (!pid || pid <= 0) return false;
+  const r = spawnSync("kill", ["-0", String(pid)], { stdio: "ignore" });
+  return r.status === 0;
+}
+
+function watchEnabled(loaded: LoadedProfile): boolean {
+  return loaded.profile.daemon?.watch !== false;
+}
+
+export function meshInboxPort(loaded: LoadedProfile): number {
+  return resolveDaemonPort(loaded.profile, loaded.workspace);
+}
+
+export function inboxHealth(port: number): Record<string, unknown> | null {
   const r = spawnSync("curl", ["-sS", "-m", "2", `${inboxBase(port)}/health`], {
     encoding: "utf8",
   });
@@ -38,7 +81,6 @@ export function inboxHealth(port = DEFAULT_PORT): Record<string, unknown> | null
 }
 
 export interface InboxStartOptions {
-  /** Engine path: no JSON dump, one line max. */
   quiet?: boolean;
 }
 
@@ -48,9 +90,7 @@ export interface SendToMasterOptions {
   ports?: string;
 }
 
-/** Enqueue a to-master row (INBOX.jsonl). Enqueue only — no pane inject (daemon owns inject).
- * Returns the parsed daemon response, or null when the daemon is down / errors. */
-export type PeerEnqueueKind = "to-slot" | "to-mini" | "prompt" | "remind";
+export type PeerEnqueueKind = "to-slot" | "to-mini" | "prompt" | "remind" | "room";
 
 export interface EnqueuePeerOptions {
   kind: PeerEnqueueKind;
@@ -59,72 +99,36 @@ export interface EnqueuePeerOptions {
   targetLabel: string;
   fromSlot?: string;
   fromPorts?: string | null;
+  roomSlug?: string | null;
+  fromAgent?: string | null;
+  /** Fan-out batch: caller already ensured inbox once. */
+  skipEnsure?: boolean;
 }
 
-/** Enqueue peer/coord delivery (daemon injects when target pane idle). */
 export function enqueuePeer(
   loaded: LoadedProfile,
   opts: EnqueuePeerOptions,
 ): Record<string, unknown> | null {
-  ensureMeshInbox(loaded, { quiet: true });
   const port = meshInboxPort(loaded);
+  if (!opts.skipEnsure && !ensureMeshInbox(loaded, { quiet: true })) return null;
+  const body = JSON.stringify({
+    kind: opts.kind,
+    msg: opts.msg,
+    targetPane: opts.targetPane,
+    targetLabel: opts.targetLabel,
+    fromSlot: opts.fromSlot,
+    fromPorts: opts.fromPorts,
+    roomSlug: opts.roomSlug,
+    fromAgent: opts.fromAgent,
+  });
   const r = spawnSync(
     "curl",
-    [
-      "-sS",
-      "-m",
-      "5",
-      "-X",
-      "POST",
-      `${inboxBase(port)}/to-peer`,
-      "-H",
-      "Content-Type: application/json",
-      "-d",
-      JSON.stringify({
-        kind: opts.kind,
-        fromSlot: opts.fromSlot ?? "manager",
-        fromPorts: opts.fromPorts ?? null,
-        targetPane: opts.targetPane,
-        targetLabel: opts.targetLabel,
-        msg: opts.msg,
-      }),
-    ],
+    ["-sS", "-m", "5", "-X", "POST", `${inboxBase(port)}/to-peer`, "-H", "Content-Type: application/json", "-d", body],
     { encoding: "utf8" },
   );
   if (r.status !== 0) return null;
   try {
-    return JSON.parse(r.stdout || "{}") as Record<string, unknown>;
-  } catch {
-    return { raw: r.stdout };
-  }
-}
-
-export function sendToMaster(
-  loaded: LoadedProfile,
-  msg: string,
-  opts: SendToMasterOptions = {},
-): Record<string, unknown> | null {
-  ensureMeshInbox(loaded, { quiet: true });
-  const port = meshInboxPort(loaded);
-  const r = spawnSync(
-    "curl",
-    [
-      "-sS",
-      "-m",
-      "5",
-      "-X",
-      "POST",
-      `${inboxBase(port)}/to-master`,
-      "-H",
-      "Content-Type: application/json",
-      "-d",
-      JSON.stringify({ msg, from: opts.from, slot: opts.slot, ports: opts.ports }),
-    ],
-    { encoding: "utf8" },
-  );
-  if (r.status !== 0) return null;
-  try {
-    return JSON.parse(r.stdout || "{}") as Record<string, unknown>;
+    return JSON.parse(r.stdout) as Record<string, unknown>;
   } catch {
     return { raw: r.stdout };
   }
@@ -134,51 +138,61 @@ function autoStartEnabled(loaded: LoadedProfile): boolean {
   return loaded.profile.daemon?.autoStart !== false;
 }
 
+export function sendToMaster(
+  loaded: LoadedProfile,
+  msg: string,
+  opts: SendToMasterOptions = {},
+): Record<string, unknown> | null {
+  ensureMeshInbox(loaded, { quiet: true });
+  const port = meshInboxPort(loaded);
+  const body = JSON.stringify({
+    msg,
+    from: opts.from,
+    slot: opts.slot,
+    ports: opts.ports,
+  });
+  const r = spawnSync(
+    "curl",
+    ["-sS", "-m", "5", "-X", "POST", `${inboxBase(port)}/inbox`, "-H", "Content-Type: application/json", "-d", body],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) return null;
+  try {
+    return JSON.parse(r.stdout) as Record<string, unknown>;
+  } catch {
+    return { raw: r.stdout };
+  }
+}
+
 export function meshInboxStatusLine(
   loaded: LoadedProfile,
   h: Record<string, unknown> | null,
 ): string {
   const port = meshInboxPort(loaded);
-  if (!h || h.engine !== "seat-mesh-daemon") {
-    return `inbox: DOWN (:${port})`;
-  }
-  return [
-    "inbox: up",
-    `:${port}`,
-    `session=${String(h.session ?? "?")}`,
-    `workers=${String(h.workerPanes ?? "?")}`,
-    `minis=${String(h.miniPanes ?? "?")}`,
-    `ocLimit=${String(h.ocLimitActive ?? 0)}`,
-    `checkback=${String(h.checkbackActive ?? 0)}`,
-  ].join(" ");
+  const ok = Boolean(h && h.engine === "seat-mesh-daemon");
+  const watch = watchEnabled(loaded) ? " watch" : "";
+  if (!ok) return `inbox: down :${port} session=${loaded.sessionName}${watch}`;
+  return (
+    `inbox: up :${port} session=${String(h?.session ?? loaded.sessionName)} ` +
+    `workers=${String(h?.workerPanes ?? "?")} minis=${String(h?.miniPanes ?? "?")} ` +
+    `ocLimit=${String(h?.ocLimitActive ?? 0)} checkback=${String(h?.checkbackActive ?? 0)}${watch}`
+  );
 }
 
-export function printMeshInboxStatus(
-  loaded: LoadedProfile,
-  opts: { json?: boolean } = {},
-): boolean {
+export function printInboxStatus(loaded: LoadedProfile): boolean {
   const port = meshInboxPort(loaded);
   const h = inboxHealth(port);
   const ok = Boolean(h && h.engine === "seat-mesh-daemon");
-  if (opts.json) {
-    if (!h) {
-      console.log(JSON.stringify({ ok: false, port, engine: null }, null, 2));
-    } else {
-      console.log(JSON.stringify(h, null, 2));
-    }
-    return ok;
-  }
   console.log(meshInboxStatusLine(loaded, h));
   if (ok && h?.stateDir) {
     console.log(`  state: ${String(h.stateDir)}`);
   }
   if (!ok) {
-    console.log(`  log: ${meshDaemonPaths(loaded.workspace).logPath}`);
+    console.log(`  log: ${meshDaemonPaths(loaded).logPath}`);
   }
   return ok;
 }
 
-/** Idempotent — start mesh inbox if down. Part of engine (session/reload), not manual ops. */
 export function ensureMeshInbox(
   loaded: LoadedProfile,
   opts: InboxStartOptions = {},
@@ -187,6 +201,16 @@ export function ensureMeshInbox(
   const port = meshInboxPort(loaded);
   const existing = inboxHealth(port);
   if (existing?.engine === "seat-mesh-daemon") return true;
+
+  const meta = readMeshInboxMeta(loaded);
+  if (pidAlive(meta?.supervisorPid)) {
+    for (let i = 0; i < 40; i++) {
+      const h = inboxHealth(port);
+      if (h?.engine === "seat-mesh-daemon") return true;
+      spawnSync("sleep", ["0.25"]);
+    }
+  }
+
   if (existing) {
     if (!opts.quiet) {
       throw new Error(
@@ -208,83 +232,144 @@ export function startMeshInbox(
   opts: InboxStartOptions = {},
 ): void {
   const port = meshInboxPort(loaded);
-  const { logPath, serverJs, profileDir } = meshDaemonPaths(loaded.workspace);
+  const { logPath, serverJs, supervisorJs, profileDir, stopPath } = meshDaemonPaths(loaded);
+  const useWatch = watchEnabled(loaded);
 
   const existing = inboxHealth(port);
   if (existing?.engine === "seat-mesh-daemon") {
     if (!opts.quiet) {
-      console.log(`mesh-inbox already up session=${String(existing.session ?? "?")}`);
+      console.log(`mesh-inbox already up session=${String(existing.session ?? loaded.sessionName)}`);
     }
     return;
   }
+
+  const meta = readMeshInboxMeta(loaded);
+  if (pidAlive(meta?.supervisorPid)) {
+    if (!opts.quiet) {
+      console.log(`mesh-inbox supervisor already running pid=${meta?.supervisorPid}`);
+    }
+    for (let i = 0; i < 40; i++) {
+      const h = inboxHealth(port);
+      if (h?.engine === "seat-mesh-daemon") {
+        if (opts.quiet) console.log(meshInboxStatusLine(loaded, h));
+        return;
+      }
+      spawnSync("sleep", ["0.25"]);
+    }
+  }
+
   if (existing) {
     throw new Error(
-      `port :${port} answered but not seat-mesh-daemon (engine=${String(existing.engine ?? "?")}) — pick another daemon.port`,
+      `port :${port} answered but not seat-mesh-daemon (engine=${String(existing.engine ?? "?")}) — pick another daemon.port / portScope`,
     );
   }
 
-  if (!fs.existsSync(serverJs)) {
-    throw new Error(`missing ${serverJs} — run: ./sm.sh reload`);
+  const entryJs = useWatch ? supervisorJs : serverJs;
+  if (!fs.existsSync(entryJs)) {
+    throw new Error(`missing ${entryJs} — run reload (cold start builds dist automatically)`);
+  }
+  if (useWatch && !fs.existsSync(supervisorJs)) {
+    throw new Error(`missing ${supervisorJs} — run reload`);
+  }
+
+  try {
+    fs.unlinkSync(stopPath);
+  } catch {
+    /* ignore */
   }
 
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
-
-  const r = spawnSync(
-    "bash",
-    [
-      "-c",
-      `setsid -f node "${serverJs}" --profile "${profileDir}" >>"${logPath}" 2>&1`,
-    ],
-    { cwd: loaded.workspace, stdio: opts.quiet ? "ignore" : "inherit" },
-  );
-  if (r.status !== 0) {
-    throw new Error(`mesh-inbox start failed (exit ${r.status ?? 1})`);
+  const profileArg = loaded.profilePath;
+  const args = useWatch ? ["--profile", profileArg] : ["--profile", profileArg];
+  const child = spawn("node", [entryJs, ...args], {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+  if (child.pid == null) {
+    throw new Error("mesh-inbox start failed (no pid)");
   }
 
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 40; i++) {
     const h = inboxHealth(port);
     if (h?.engine === "seat-mesh-daemon") {
-      if (opts.quiet) {
-        console.log(meshInboxStatusLine(loaded, h));
-      } else {
-        console.log(`OK: mesh-inbox on :${port} session=${loaded.profile.session.name}`);
-        console.log(JSON.stringify(h, null, 2));
+      if (!opts.quiet) {
+        const label = useWatch ? "mesh-inbox (supervised)" : "mesh-inbox";
+        console.log(`OK: ${label} on :${port} session=${loaded.sessionName}`);
       }
       return;
     }
-    spawnSync("sleep", ["0.2"]);
+    spawnSync("sleep", ["0.25"]);
   }
   throw new Error(`mesh-inbox did not become healthy on ${inboxBase(port)} (see ${logPath})`);
 }
 
+function killPortListener(port: number): void {
+  spawnSync("fuser", ["-k", `${port}/tcp`], { stdio: "ignore" });
+  spawnSync("sleep", ["0.3"]);
+}
+
 export function stopMeshInbox(loaded: LoadedProfile): void {
   const port = meshInboxPort(loaded);
-  const { metaPath } = meshDaemonPaths(loaded.workspace);
+  const { metaPath, stopPath } = meshDaemonPaths(loaded);
 
-  if (fs.existsSync(metaPath)) {
-    try {
-      const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { pid?: number };
-      if (meta.pid) {
-        spawnSync("kill", [String(meta.pid)]);
-        spawnSync("sleep", ["0.3"]);
-        spawnSync("kill", ["-9", String(meta.pid)]);
-      }
-    } catch {
-      /* ignore */
-    }
-    if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+  try {
+    fs.writeFileSync(stopPath, `${new Date().toISOString()} stop\n`, { encoding: "utf8" });
+  } catch {
+    /* ignore */
   }
 
+  const meta = readMeshInboxMeta(loaded);
+  if (pidAlive(meta?.supervisorPid)) {
+    spawnSync("kill", ["-TERM", String(meta!.supervisorPid!)], { stdio: "ignore" });
+  }
+  if (pidAlive(meta?.pid)) {
+    spawnSync("kill", ["-TERM", String(meta!.pid!)], { stdio: "ignore" });
+  }
+
+  spawnSync("sleep", ["0.5"]);
   const h = inboxHealth(port);
   if (h?.engine === "seat-mesh-daemon") {
-    console.log("WARN: mesh-inbox still answering /health");
-  } else {
-    console.log("OK: mesh-inbox stopped");
+    console.log(`WARN: mesh-inbox still answering /health — retry stop or kill listener on :${port}`);
+    killPortListener(port);
   }
+
+  try {
+    if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
+  } catch {
+    /* ignore */
+  }
+  console.log("OK: mesh-inbox stopped");
 }
 
 export function restartMeshInbox(loaded: LoadedProfile): void {
   stopMeshInbox(loaded);
   spawnSync("sleep", ["0.5"]);
   startMeshInbox(loaded);
+}
+
+export function printMeshInboxStatus(
+  loaded: LoadedProfile,
+  opts: { json?: boolean } = {},
+): boolean {
+  const port = meshInboxPort(loaded);
+  const h = inboxHealth(port);
+  const ok = Boolean(h && h.engine === "seat-mesh-daemon");
+  if (opts.json) {
+    console.log(
+      JSON.stringify(
+        h ?? {
+          ok: false,
+          engine: null,
+          port,
+          session: loaded.sessionName,
+          workspaceId: loaded.workspaceId,
+        },
+        null,
+        2,
+      ),
+    );
+    return ok;
+  }
+  return printInboxStatus(loaded);
 }

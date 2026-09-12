@@ -3,6 +3,8 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { MeshProfile } from "../schema/profile.js";
 import { resolveFromWorkspace } from "../paths.js";
+import { resolveHarnessPath } from "../paths-manifest.js";
+import type { LoadedProfile } from "../profile.js";
 import { appendJsonlLine, readJsonlAll, readJsonlTail } from "../jsonl/store.js";
 import {
   RoomMessageSchema,
@@ -18,25 +20,41 @@ import { armCheckback, inboxHealthy } from "./inbox-client.js";
 
 export interface ChatRoomConfig {
   root: string;
+  /** When set (via chatRoomConfigForLoaded), used instead of workspace-relative root. */
+  rootAbs?: string;
   globalSlug: string;
   checkbackDuration: string;
   checkbackRenew: string;
+  checkbackCallPendingDuration: string;
+  checkbackCallPendingRenew: string;
   inboxBase: string;
 }
 
 export function chatRoomConfig(profile: MeshProfile): ChatRoomConfig {
   const cr = profile.chatRooms;
   return {
-    root: cr?.root ?? "tasks/chat-rooms",
+    root: cr?.root ?? "chat-rooms",
     globalSlug: cr?.globalSlug ?? "global",
     checkbackDuration: cr?.checkback?.duration ?? "5m",
     checkbackRenew: cr?.checkback?.renew ?? "3m",
-    inboxBase: `http://127.0.0.1:${profile.daemon.port}`,
+    checkbackCallPendingDuration: cr?.checkback?.callPending?.duration ?? "1m",
+    checkbackCallPendingRenew: cr?.checkback?.callPending?.renew ?? "1m",
+    inboxBase: `http://127.0.0.1:${profile.daemon?.port ?? 31670}`,
   };
 }
 
+export function chatRoomConfigForLoaded(loaded: LoadedProfile): ChatRoomConfig {
+  const cfg = chatRoomConfig(loaded.profile);
+  return { ...cfg, rootAbs: resolveHarnessPath(loaded, cfg.root) };
+}
+
 export function roomDir(workspace: string, cfg: ChatRoomConfig, slug: string): string {
-  return resolveFromWorkspace(workspace, path.join(cfg.root, slug));
+  const root = cfg.rootAbs ?? resolveFromWorkspace(workspace, cfg.root);
+  return path.join(root, slug);
+}
+
+export function roomDirForLoaded(loaded: LoadedProfile, slug: string): string {
+  return roomDir(loaded.workspace, chatRoomConfigForLoaded(loaded), slug);
 }
 
 export function roomLogPath(roomPath: string): string {
@@ -77,6 +95,7 @@ export interface CreateRoomInput {
   scope?: string;
   members?: string[];
   lead?: string;
+  leads?: string[];
   supervisor?: string;
 }
 
@@ -98,10 +117,38 @@ export function createRoom(input: CreateRoomInput): RoomProfile {
     scope: input.scope,
     members: input.members ?? [],
     lead: input.lead,
+    leads: input.leads,
     supervisor: input.supervisor,
   };
   saveRoomProfile(dir, profile);
   fs.writeFileSync(roomLogPath(dir), "");
+  return profile;
+}
+
+/** Create or refresh a contract room profile (idempotent for contract on). */
+export function upsertContractRoom(input: CreateRoomInput): RoomProfile {
+  const kind = input.kind ?? "contract";
+  if (input.slug === input.cfg.globalSlug && kind !== "global") {
+    throw new Error(`slug "${input.cfg.globalSlug}" is reserved for the global room`);
+  }
+  const dir = roomDir(input.workspace, input.cfg, input.slug);
+  ensureDir(dir);
+  const existing = loadRoomProfile(dir);
+  const profile: RoomProfile = {
+    slug: input.slug,
+    kind,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    createdBy: existing?.createdBy ?? input.createdBy,
+    scope: input.scope ?? existing?.scope,
+    members: input.members ?? existing?.members ?? [],
+    lead: input.lead ?? existing?.lead,
+    leads: input.leads ?? existing?.leads,
+    supervisor: input.supervisor ?? existing?.supervisor,
+  };
+  saveRoomProfile(dir, profile);
+  if (!fs.existsSync(roomLogPath(dir))) {
+    fs.writeFileSync(roomLogPath(dir), "");
+  }
   return profile;
 }
 
@@ -157,13 +204,14 @@ export async function sayInRoom(
 
   const kind = opts.kind ?? inferKind(body);
   const expectReply = opts.expectReply ?? looksLikeExpectsReply(body);
+  const ts = new Date().toISOString();
 
   const message: RoomMessage = RoomMessageSchema.parse({
     id: randomUUID(),
-    ts: new Date().toISOString(),
+    ts,
     from,
     kind,
-    body: normalizeBody(body, kind),
+    body: stampActionableBody(ts, normalizeBody(body, kind), kind),
     pane: opts.ownerPane,
     expectReply,
   });
@@ -256,6 +304,14 @@ function normalizeBody(body: string, kind: RoomMessageKind): string {
   if (kind === "blocked" && !/^BLOCKED:/i.test(t)) return `BLOCKED: ${t}`;
   if (kind === "broadcast" && !/^BROADCAST:/i.test(t)) return `BROADCAST: ${t}`;
   return t;
+}
+
+/** Actionable ledger lines carry [@ts] for supervise/tail progress checks. */
+export function stampActionableBody(ts: string, body: string, kind: RoomMessageKind): string {
+  if (kind !== "done" && kind !== "blocked" && kind !== "claim") return body;
+  if (/\[@\d{4}-\d{2}-\d{2}T/.test(body)) return body;
+  const compact = ts.replace(/\.\d{3}Z$/, "Z");
+  return `${body} [@${compact}]`;
 }
 
 /** Human-assistant phrasing often implies a reply that never comes from peer agents. */

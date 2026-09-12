@@ -1,8 +1,0 @@
-# Merged into every role index — printed at top of ./sm.sh whoami (patterns.md).
-banner:
-  - "patterns=doc-inputs/patterns.md | one command per job; collapse decisions; no flag forests"
-  - "one_path=seat-mesh/docs/ONE-PATH.md | mesh session only: ./sm.sh + inbox :3100"
-  - "never=dev session / tmux-zsign.sh / inbox :3099 on a mesh pane"
-read_first:
-  - path: seat-mesh/docs/ONE-PATH.md
-    note: read first — which stack + which command (zero decisions)

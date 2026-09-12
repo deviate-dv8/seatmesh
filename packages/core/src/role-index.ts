@@ -45,8 +45,14 @@ function mergeRoleIndex(base: Partial<RoleIndex>, role: RoleIndex): RoleIndex {
   };
 }
 
+/** Deprecated alias: prefer "manager" not "master" for the coordinator pane. */
+function normalizeRoleKind(kind: string): string {
+  return kind === "master" ? "manager" : kind;
+}
+
 export function loadRoleIndex(rolesDir: string, kind: string): RoleIndex {
-  const file = path.join(rolesDir, `${kind}.yaml`);
+  const normalized = normalizeRoleKind(kind);
+  const file = path.join(rolesDir, `${normalized}.yaml`);
   if (!fs.existsSync(file)) {
     throw new Error(`role index missing: ${file}`);
   }
@@ -56,7 +62,7 @@ export function loadRoleIndex(rolesDir: string, kind: string): RoleIndex {
     common = YAML.parse(fs.readFileSync(commonFile, "utf8")) as Partial<RoleIndex>;
   }
   const data = YAML.parse(fs.readFileSync(file, "utf8")) as RoleIndex;
-  if (!data.kind) data.kind = kind;
+  if (!data.kind) data.kind = normalized;
   return mergeRoleIndex(common, data);
 }
 

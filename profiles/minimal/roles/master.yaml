@@ -1,7 +1,0 @@
-kind: master
-read_first:
-  - path: README.md
-    note: master coordination — spawn minis, review done, no long-generate
-policies:
-  - id: throughput
-    text: coordinate; offload implement/verify to minis

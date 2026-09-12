@@ -10,6 +10,7 @@ import type {
 import {
   cmdlines,
   composerFromCapture,
+  defaultComposerReady,
   extractUuid,
   matchAny,
   modelFromCmdlines,
@@ -49,6 +50,10 @@ export const claudeProvider: AgentProvider = {
 
   composerState(pane: PaneSnapshot) {
     return composerFromCapture(pane, "claude");
+  },
+
+  composerReady(pane: PaneSnapshot) {
+    return defaultComposerReady(pane, "claude");
   },
 
   injectPlan(_pane: PaneSnapshot): InjectPlan {

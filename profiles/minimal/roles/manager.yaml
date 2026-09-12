@@ -1,0 +1,6 @@
+kind: manager
+read_first:
+  - path: services/seat-mesh/docs/ONE-PATH.md
+    note: one command per job
+files:
+  - services/seat-mesh/docs/QUICKSTART.md

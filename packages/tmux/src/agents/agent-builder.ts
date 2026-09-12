@@ -45,7 +45,9 @@ export function buildAgentLaunchCmd(
     case "kiro":
       return resumeId ? `kiro --resume ${resumeId}` : "kiro";
     case "opencode":
-      return `cd ${workspace} && ${workspace}/scripts/opencode-cpe.sh`;
+      return resumeId
+        ? `cd ${workspace} && ${workspace}/scripts/opencode-cpe.sh --session ${resumeId}`
+        : `cd ${workspace} && ${workspace}/scripts/opencode-cpe.sh`;
     case "opencode-main":
       return `cd ${workspace} && ${workspace}/scripts/opencode-main.sh`;
     default:

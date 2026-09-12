@@ -11,7 +11,7 @@ import {
   resolveAgentId,
   resolveSlotKeyFromPane,
 } from "@seat-mesh/core";
-import { createBuiltinRegistry } from "@seat-mesh/providers";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { runWhoami, capturePaneSnapshot, listSessionPanes } from "@seat-mesh/tmux";
 
 function tmuxOpt(pane: string, key: string): string {
@@ -23,7 +23,7 @@ function tmuxOpt(pane: string, key: string): string {
 function resolveSlotFromWhere(loaded: LoadedProfile, explicit?: string): string {
   if (explicit) return explicit;
   const w = runWhoami(loaded);
-  const mini = tmuxOpt(w.paneId ?? "", "#{@mesh_mini}") || tmuxOpt(w.paneId ?? "", "#{@zsign_mini}");
+  const mini = tmuxOpt(w.paneId ?? "", "#{@mesh_mini}");
   return resolveAgentId({ role: w.role, slot: w.slot, mini: mini || null });
 }
 
@@ -117,7 +117,7 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
         const loaded = getLoaded();
         const cfg = chatFileConfig(loaded.profile);
         const slot = resolveSlotFromWhere(loaded, opts.slot);
-        const reg = createBuiltinRegistry(loaded.profile.providers);
+        const reg = createRegistryForProfile(loaded.profile);
         let providerId = opts.provider ?? "unknown";
         if (!opts.provider && opts.pane) {
           const snap = capturePaneSnapshot(opts.pane);
@@ -151,10 +151,10 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
     .action(async (opts: { pane?: string; all?: boolean; session?: string }) => {
       const loaded = getLoaded();
       const cfg = chatFileConfig(loaded.profile);
-      const reg = createBuiltinRegistry(loaded.profile.providers);
+      const reg = createRegistryForProfile(loaded.profile);
 
       if (opts.all) {
-        const session = opts.session ?? loaded.profile.session.name;
+        const session = opts.session ?? loaded.sessionName;
         const panes = listSessionPanes(session);
         const snaps = panes
           .map((id) => capturePaneSnapshot(id))

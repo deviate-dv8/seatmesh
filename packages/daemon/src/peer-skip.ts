@@ -1,0 +1,28 @@
+import type { PeerRow } from "./jsonl-store.js";
+
+/** Cold-start already delivered to this pane — do not re-inject duplicate pending rows. */
+export function shouldSkipDeliveredColdStart(row: PeerRow): boolean {
+  if (row.fromSlot !== "mesh-cold-start") return false;
+  return row.sent === true && Boolean(row.sentAt);
+}
+
+/** Global room thin FYI pings must not land on worker seats (coord + @mention only). */
+export function shouldSkipGlobalWorkerRoomPing(row: PeerRow): boolean {
+  if (row.kind !== "room" || row.roomSlug !== "global") return false;
+  if (!/^slot-[1-9]$/.test(row.targetLabel)) return false;
+  return /\|\s*fyi\s+\d+\s+unseen/i.test(row.msg);
+}
+
+export function markPeerRowSkipped(
+  store: { readPeer: () => PeerRow[]; writePeer: (rows: PeerRow[]) => void },
+  row: PeerRow,
+): void {
+  const rows = store.readPeer();
+  const i = rows.findIndex((r) => r.id === row.id);
+  if (i < 0) return;
+  rows[i]!.sent = true;
+  rows[i]!.sentAt = new Date().toISOString();
+  rows[i]!.deliverPane = "skipped";
+  rows[i]!.deliverMode = "idle";
+  store.writePeer(rows);
+}

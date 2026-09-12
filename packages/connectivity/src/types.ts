@@ -14,6 +14,7 @@ export interface ConnectivitySnapshot {
     smartRestart: boolean;
     rotateMaxAttempts: number;
     cooldownMs: number;
+    ipifyFailBeforeRecovery: number;
   };
   pendingTriggers: string[];
 }

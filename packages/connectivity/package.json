@@ -16,5 +16,8 @@
   },
   "dependencies": {
     "@seat-mesh/core": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

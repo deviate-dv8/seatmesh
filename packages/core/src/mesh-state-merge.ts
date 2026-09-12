@@ -29,12 +29,33 @@ export function mergeMeshAgentsIntoProfile(
   profile: MeshProfile,
   mesh: Pick<MeshAgents, "layout"> | null,
 ): MeshProfile {
-  const saved = mesh?.layout?.minis;
+  const saved = mesh?.layout;
   if (!saved || !profile.layout) return profile;
-  const minis = { ...profile.layout.minis, ...saved };
+
+  const minisSaved = saved.minis;
+  const minis = minisSaved
+    ? { ...profile.layout.minis, ...minisSaved }
+    : profile.layout.minis;
+
+  const workers = saved.workers
+    ? { ...profile.layout.workers, ...saved.workers }
+    : profile.layout.workers;
+
+  const nvim = saved.nvim ? { ...profile.layout.nvim, ...saved.nvim } : profile.layout.nvim;
+
+  const base = saved.base
+    ? { ...profile.layout.base, ...saved.base }
+    : profile.layout.base;
+
   return {
     ...profile,
-    layout: { ...profile.layout, minis },
+    layout: {
+      ...profile.layout,
+      base,
+      nvim,
+      workers,
+      minis,
+    },
     session: { ...profile.session, miniMax: minis.max },
   };
 }

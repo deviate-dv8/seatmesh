@@ -2,6 +2,7 @@ import type { AgentProvider, Detection, InjectPlan, PaneSnapshot } from "@seat-m
 import {
   cmdlines,
   composerFromCapture,
+  defaultComposerReady,
   extractUuid,
   matchAny,
   modelFromCmdlines,
@@ -30,6 +31,10 @@ export const cursorAgentProvider: AgentProvider = {
 
   composerState(pane: PaneSnapshot) {
     return composerFromCapture(pane, "cursor-agent");
+  },
+
+  composerReady(pane: PaneSnapshot) {
+    return defaultComposerReady(pane, "cursor-agent");
   },
 
   injectPlan(_pane: PaneSnapshot): InjectPlan {

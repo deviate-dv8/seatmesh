@@ -85,6 +85,8 @@ export interface AgentProvider extends PromptRecording {
   id: string;
   detect(pane: PaneSnapshot): Detection | null;
   composerState(pane: PaneSnapshot): ComposerState;
+  /** True when the CLI composer accepts a paste (splash done, not generating). */
+  composerReady(pane: PaneSnapshot): boolean;
   injectPlan(pane: PaneSnapshot): InjectPlan;
   limits?: LimitDetector[];
 }

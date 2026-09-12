@@ -45,15 +45,11 @@ export function capturePaneSnapshot(paneId: string): PaneSnapshot | null {
 
   for (const key of [
     "mesh_role",
-    "zsign_role",
     "mesh_slot",
-    "zsign_slot",
     "mesh_ports",
-    "zsign_ports",
     "mesh_title",
-    "zsign_title",
     "mesh_status",
-    "zsign_status",
+    "mesh_oc_session",
   ]) {
     const v = tmux(["display-message", "-t", paneId, "-p", `#{@${key}}`]);
     if (v) opts[key] = v;

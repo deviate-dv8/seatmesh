@@ -81,6 +81,23 @@ export function printPaneOpsList(loaded: LoadedProfile): void {
   console.log(`pane-ops: ${open.length} open`);
 }
 
+export function clearPaneOpsQueue(loaded: LoadedProfile): number {
+  ensureMeshInbox(loaded, { quiet: true });
+  const port = meshInboxPort(loaded);
+  const r = spawnSync(
+    "curl",
+    ["-sS", "-m", "8", "-X", "POST", `${inboxBase(port)}/pane-ops/clear`],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) return -1;
+  try {
+    const parsed = JSON.parse(r.stdout || "{}") as { cleared?: number };
+    return parsed.cleared ?? 0;
+  } catch {
+    return -1;
+  }
+}
+
 /**
  * Queue a mutating pane op (launch/restart/relayout/switch). Daemon runs one at a time.
  * Falls back to immediate local run when inbox is down (dev escape hatch).
@@ -104,6 +121,11 @@ export function submitPaneOp(
   const entry = resp.entry as PaneOpRow | undefined;
   const id = entry?.id?.slice(0, 8) ?? "?";
   const status = entry?.status ?? "pending";
+  if (status === "failed") {
+    const err = entry?.error ?? "unknown";
+    console.error(`FAIL: pane-op ${id} ${kind} — ${err}`);
+    process.exit(1);
+  }
   if (status === "running") {
     console.log(`OK: pane-op ${id} ${kind} running now — ${summary}`);
   } else if (status === "done") {

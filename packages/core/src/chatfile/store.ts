@@ -3,24 +3,33 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type { MeshProfile } from "../schema/profile.js";
 import { resolveFromWorkspace } from "../paths.js";
+import { resolveHarnessPath } from "../paths-manifest.js";
+import type { LoadedProfile } from "../profile.js";
 import { appendJsonlLine, readJsonlAll, readJsonlTail } from "../jsonl/store.js";
 import { SlotPromptRecordSchema, type PromptQuery, type SlotPromptRecord } from "./types.js";
 
 export interface ChatFileConfig {
   root: string;
+  rootAbs?: string;
   filename: string;
 }
 
 export function chatFileConfig(profile: MeshProfile): ChatFileConfig {
   const cf = profile.chatFiles;
   return {
-    root: cf?.root ?? "tasks/chat-files",
+    root: cf?.root ?? "chat-files",
     filename: cf?.filename ?? "CHAT.jsonl",
   };
 }
 
+export function chatFileConfigForLoaded(loaded: LoadedProfile): ChatFileConfig {
+  const cfg = chatFileConfig(loaded.profile);
+  return { ...cfg, rootAbs: resolveHarnessPath(loaded, cfg.root) };
+}
+
 export function chatFilePath(workspace: string, cfg: ChatFileConfig, slotKey: string): string {
-  return path.join(resolveFromWorkspace(workspace, cfg.root), slotKey, cfg.filename);
+  const root = cfg.rootAbs ?? resolveFromWorkspace(workspace, cfg.root);
+  return path.join(root, slotKey, cfg.filename);
 }
 
 export function turnHash(input: {

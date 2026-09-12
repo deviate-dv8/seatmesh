@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "session": "mesh",
+  "workdir": "{{workdir}}",
+  "conventions": {
+    "secretaryDefaultCli": "opencode",
+    "miniDefaultCli": "opencode",
+    "launchSkipsEmpty": true,
+    "coordSync": {
+      "reload": false,
+      "attach": true
+    }
+  },
+  "workers": [],
+  "minis": []
+}

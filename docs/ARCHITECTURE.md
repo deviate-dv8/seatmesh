@@ -1,128 +1,97 @@
-# seat-mesh architecture (target)
+# Architecture
 
-Product-agnostic multi-agent tmux workbench. **Inbox daemon is the only writer**
-to panes; everything else enqueues. Providers are pluggable; limits are hooks, not
-if/else chains in the orchestrator.
+Product-agnostic multi-agent tmux workbench. **The inbox daemon is the only writer
+to panes**; CLI commands and agents enqueue. Providers are pluggable; limit handling
+uses hooks, not hardcoded CLI branches in the orchestrator.
 
-## Tmux layout
+## Tmux layout (default profile shape)
 
 | Index | Window | Layout | Purpose |
 |------:|--------|--------|---------|
 | 0 | `nvim` | 1 pane | Editor |
-| 1 | `base` | 2 cols | **Manager** \| **Secretary** (full height) |
-| 2 | `workers` | **3x2** (6 panes) | Worker seats **1-6 only** |
-| 3 | `minis` | **profile grid** (e.g. `2x2` / `4x2`) | Parallel minis; `layout.minis.leads` places lead(s) in column 0 |
+| 1 | `base` | 2 cols (+ optional stack) | Manager column, secretary |
+| 2 | `workers` | 3×2 | Worker seats (count from profile) |
+| 3 | `minis` | profile grid | Parallel minis (e.g. 4×2, eight panes) |
 
-Rationale: 3-6 agents is the effective parallel cap; slot 7-8 had ~zero activity.
-Six paired ports (`3010/3011` .. `3060/3061`) — slot `N` -> `30N0/30N1`.
+Worker count, port formula, window names, and minis grid come from
+`mesh.config.yaml` (`layout`, `session.workerCount`, `ports.worker`).
 
-Minis 4x2 (Dan preference):
-
-```text
-TOP:    [ LEAD mini-1 ] [ mini-3 ] [ mini-4 ] [ mini-5 ]
-BOTTOM: [ LEAD mini-2 ] [ mini-6 ] [ mini-7 ] [ mini-8 ]
-```
-
-`layout 4x2` is tmux-only (select-layout + swap-pane); no kill/respawn.
+Minis lead placement uses `layout.minis.leads` and `layout 4x2` (tmux
+select-layout + swap-pane only — no kill/respawn to retile).
 
 ## No direct send
 
-**Rule:** CLI commands, workers, secretary, and recovery jobs **do not** call
-`tmux send-keys` (or equivalent) directly. They append to a **queue file** (or
-Redis/BullMQ job). The **inbox daemon** is the sole consumer that empties queues
-into panes when policy allows (idle, settle, not typing, etc.).
+CLI commands, workers, secretary, and recovery jobs **do not** call tmux send-keys
+directly. They append to a **queue** (JSONL and optional BullMQ). The inbox daemon
+is the sole consumer that injects when policy allows (idle, settle, not typing).
 
 ```text
-  producer (any)  -->  queue (durable)  -->  inbox daemon (BullMQ workers)
-                                                    |
-                                                    v
-                                              pane inject (one path)
+  producer  -->  queue (durable)  -->  inbox daemon
+                                           |
+                                           v
+                                     pane inject (one path)
 ```
 
-Same orchestrator owns: mail delivery, checkback fires, schedule, limit recovery,
-border/status paint, proxy/OC side effects that need pane paste.
+The same orchestrator owns mail delivery, checkback fires, pane ops, limit recovery,
+border/status paint, and connectivity side effects that need a pane paste.
 
 ## Queue model
 
-| Queue / file | Producer | Consumer action |
-|--------------|----------|-----------------|
-| `inbox.jsonl` (legacy) / `inbox` Bull queue | workers, minis, schedule | inject master/secretary; resolve/ack |
-| `peer.jsonl` / peer queue | worker, mini, secretary | inject target pane |
-| `checkback` | comms, limits, night | timed poll inject |
-| `limits` | provider detectors | run registered limit handler |
-| `connectivity` | proxy probe, OC scan | cpe-up, rotate, resume paste |
+| Store | Producer | Consumer |
+|-------|----------|----------|
+| INBOX | workers, minis, schedule | inject manager/secretary; ack/resolve |
+| PEER | worker, mini, secretary, room fan-out | inject target pane |
+| CHECKBACK | comms, limits | timed poll inject |
+| PANE_OPS | launch, layout, relayout | serial pane operations |
 
-Goal of daemon: **best-effort empty** — fair, rate-limited, never stomp composer.
+Goal: **best-effort empty** — fair, rate-limited, never stomp an active composer.
 
-BullMQ: Redis-backed workers inside daemon process (or sidecar). Jsonl remains
-valid as audit trail / cold replay; jobs reference row ids.
+BullMQ is optional when Redis is up; the poll loop (`daemon.pollMs`) remains the
+reliable drain on a single host.
 
 ## Agent provider interface
 
-One **AgentProvider** per CLI family. Detection returns a provider id; no
-orchestrator if/else on `agent|kiro|claude|opencode`.
+One **AgentProvider** per CLI family. Detection returns a provider id.
 
 ```ts
 interface AgentProvider {
-  id: string;                    // "cursor-agent" | "kiro" | "claude" | "opencode"
+  id: string;
   detect(pane: PaneSnapshot): Detection | null;
   composerState(pane: PaneSnapshot): ComposerState;
   injectTarget(pane: PaneSnapshot): InjectPlan;
-  limits?: LimitDetector[];      // optional rising-edge detectors
+  limits?: LimitDetector[];
 }
 ```
 
-| Capability | Provider implements |
-|------------|---------------------|
-| Live vs empty pane | `detect()` |
-| Busy / typing / AFK / limit text | `composerState()` |
-| How to paste (buffer, Enter timing, prefix rules) | `injectTarget()` |
-| Rate limit / connect error patterns | `limits[]` |
+The orchestrator calls `registry.getProvider(pane)` — no central if/else on CLI names.
 
-Orchestrator calls `registry.getProvider(pane)` only.
-
-## Limits (hooks, not branches)
+## Limits (hooks)
 
 ```ts
 interface LimitDetector {
-  id: string;                   // "cc-session-limit" | "oc-connect" | "oc-rate"
+  id: string;
   match(state: ComposerState, pane: PaneSnapshot): boolean;
   onRisingEdge(ctx: LimitContext): Promise<void>;  // enqueue jobs, not inject
 }
 ```
 
-Examples:
-
-- **CC limit** -> enqueue schedule + checkback; optional `continue` paste when cleared
-- **OC rate limit** -> enqueue proxy rotate + `resume` wave to all OC panes
-- **OC connect / PROXY-DOWN** -> enqueue `cpe-proxy-up`; hold checkbacks until ipify
-
-Handlers enqueue work; daemon workers execute. No handler calls tmux directly.
+Handlers enqueue work; daemon workers execute. Handlers never call tmux directly.
 
 ## Connectivity
 
-`@seat-mesh/connectivity` stays a library. Recovery policies enqueue jobs
-(`connectivity.rotate`, `connectivity.reboot`). Default policy: reboot API only,
-no WiFi bounce, no smart-restart unless profile enables.
+`@seat-mesh/connectivity` is a library. Recovery policies enqueue jobs; the profile
+names the driver and hooks (`connectivity.driver`, `hooks.*`, `policy.*`).
 
-## Profile-driven layout
+## Profile-driven everything
 
-`mesh.config.yaml` declares window names, slot count (6), port formula, provider
-registry ids, Redis URL, queue names. zsign profile is one consumer.
+`mesh.config.yaml` declares session name, slot count, port formula, provider ids,
+daemon port, seats paths, chat roots, stack passthrough, and connectivity. Shipped
+profiles under `profiles/` are examples; consumers use `.sm/` or their own tree.
 
-## Migration from tmux-zsign.sh (harness is not sm)
-
-seat-mesh does **not** wrap the harness. Migration = run **mesh** session beside
-**dev**, then move commands one at a time.
-
-1. **Done (0.1):** `./sm.sh` creates `mesh` layout (6 workers 3x2, base, minis)
-2. Layout: harness stays 8 workers on `dev` until cutover
-3. Extract providers from bash scrape/inject
-4. Inbox-server.mjs -> daemon package + BullMQ
-5. Producers enqueue only; daemon sole injector
-6. Retire harness paths per command — never `exec tmux-zsign.sh` from sm
+See [CONFIG.md](CONFIG.md).
 
 ## Out of scope for core
 
-- Board triage / GitLab (profile plugin)
-- Product ports in docs (profile only)
+- Issue trackers / GitLab (consumer workflow)
+- Product application ports in engine docs (profile `ports` only)
+- Board triage plugins

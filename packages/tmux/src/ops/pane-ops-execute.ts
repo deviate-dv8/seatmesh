@@ -1,5 +1,5 @@
 import type { LoadedProfile, PaneOpRow } from "@seat-mesh/core";
-import { createBuiltinRegistry } from "@seat-mesh/providers";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { launchSession, printLaunchResults } from "../agents/launch.js";
 import { assertRelayoutSafe, printRelayoutPlan } from "../session/layout-guard.js";
 import {
@@ -18,7 +18,7 @@ export interface PaneOpExecuteResult {
 
 /** Run one pane-op (daemon-only — no re-queue). */
 export function executePaneOp(loaded: LoadedProfile, row: PaneOpRow): PaneOpExecuteResult {
-  const registry = createBuiltinRegistry(loaded.profile.providers);
+  const registry = createRegistryForProfile(loaded.profile);
   try {
     switch (row.kind) {
       case "launch": {
@@ -74,7 +74,7 @@ export function executePaneOp(loaded: LoadedProfile, row: PaneOpRow): PaneOpExec
       }
       case "mini-spawn-all": {
         const manifest = row.payload.useManifest
-          ? loadMiniManifest(loaded.workspace)
+          ? loadMiniManifest(loaded)
           : undefined;
         miniSpawnAll(loaded, registry, manifest);
         break;

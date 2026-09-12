@@ -2,8 +2,17 @@
   "name": "@seat-mesh/cli",
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist",
+    "templates"
+  ],
   "bin": {
-    "seat-mesh": "./dist/main.js"
+    "seat-mesh": "./dist/main.js",
+    "seatmesh": "./dist/main.js",
+    "sm": "./dist/main.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "main": "./dist/main.js",
   "scripts": {

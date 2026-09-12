@@ -8,11 +8,11 @@ const baseProfile = {
   session: { name: "mesh", workerCount: 6, miniMax: 8 },
   layout: {
     nvim: { window: "nvim" },
-    base: { window: "base", columns: ["manager", "secretary"] as ["manager", "secretary"] },
+    base: { window: "base", columns: ["manager", "secretary"] },
     workers: { window: "workers", grid: "3x2" as const, slots: 6 },
     minis: { window: "minis", grid: "4x2", max: 8, leads: [1, 2] },
   },
-} as MeshProfile;
+} as unknown as MeshProfile;
 
 describe("mergeMeshAgentsIntoProfile", () => {
   it("overrides yaml minis layout when mesh-agents.json has layout.minis", () => {
@@ -29,5 +29,12 @@ describe("mergeMeshAgentsIntoProfile", () => {
     const merged = mergeMeshAgentsIntoProfile(baseProfile, null);
     expect(merged.layout?.minis.grid).toBe("4x2");
     expect(merged.session.miniMax).toBe(8);
+  });
+
+  it("merges layout.base.coordSync from saved layout", () => {
+    const merged = mergeMeshAgentsIntoProfile(baseProfile, {
+      layout: { base: { coordSync: { reload: true, attach: false } } },
+    });
+    expect(merged.layout?.base.coordSync).toEqual({ reload: true, attach: false });
   });
 });

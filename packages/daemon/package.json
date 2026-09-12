@@ -2,8 +2,7 @@
   "name": "@seat-mesh/daemon",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
-  "description": "Inbox orchestrator — sole pane writer; BullMQ workers drain queues.",
+  "description": "Inbox orchestrator \u2014 sole pane writer; BullMQ workers drain queues.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
@@ -14,7 +13,12 @@
     "@seat-mesh/core": "0.1.0",
     "@seat-mesh/providers": "0.1.0",
     "@seat-mesh/tmux": "0.1.0",
-    "bullmq": "^5.0.0",
-    "ioredis": "^5.0.0"
+    "better-sqlite3": "^11.8.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

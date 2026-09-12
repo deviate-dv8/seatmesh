@@ -6,23 +6,31 @@ import {
   type LoadedProfile,
   type MeshAgents,
   type MiniSlot,
+  type SavedLayout,
   type WorkerSlot,
+  buildResolvedPaths,
   mergeMeshAgentsIntoProfile,
   normalizeMinisLeads,
   portsForSlot,
 } from "@seat-mesh/core";
 import type { ProviderRegistry } from "@seat-mesh/core";
+import {
+  extractOpenCodeSession,
+  guessSecretaryOpenCodeSession,
+  normalizeOpenCodeSessionId,
+} from "@seat-mesh/providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
 import { loadMeshAgents } from "../agents/agents-state.js";
 import { loadMinisState } from "../roles/minis.js";
 import {
+  coordPaneForRole,
   listMeshMinis,
   listMeshWorkers,
   meshManagerPane,
   meshSecretaryPane,
 } from "../lib/pane-meta.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
-import { tmuxHasSession } from "../lib/tmux-run.js";
+import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
 import { listWindowPaneIds } from "./window-panes.js";
 
 function cliTypeFromProvider(providerId: string | undefined): CliType {
@@ -39,26 +47,74 @@ function cliTypeFromProvider(providerId: string | undefined): CliType {
   return "empty";
 }
 
-function detectPane(
-  paneId: string,
-  registry: ProviderRegistry,
+interface PreservedSlot {
+  type?: CliType;
+  resumeId?: string | null;
+  resumeCmd?: string | null;
+}
+
+function finalizePaneState(
   workspace: string,
+  live: { type: CliType; resumeId: string | null },
+  preserved?: PreservedSlot,
 ): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
-  const snap = capturePaneSnapshot(paneId);
-  if (!snap) {
-    return { type: "empty", resumeId: null, resumeCmd: null };
+  let type = live.type;
+  let resumeId = live.resumeId;
+
+  let preservedId =
+    preserved?.resumeId ??
+    (preserved?.resumeCmd ? extractOpenCodeSession(preserved.resumeCmd) : undefined);
+  if (type === "opencode" || preserved?.type === "opencode") {
+    preservedId = normalizeOpenCodeSessionId(preservedId);
+    if (resumeId) resumeId = normalizeOpenCodeSessionId(resumeId) ?? null;
   }
-  const prov = registry.detect(snap);
-  if (!prov) {
-    return { type: "empty", resumeId: null, resumeCmd: null };
+
+  if (preservedId) {
+    if (type === "empty" && preserved?.type && preserved.type !== "empty") {
+      type = preserved.type;
+    }
+    if (!resumeId) resumeId = preservedId;
   }
-  const det = prov.detect(snap);
-  const type = cliTypeFromProvider(prov.id);
-  const resumeId = det?.resumeId ?? null;
+
   const harnessType = type === "agent" ? "agent" : type;
   const resumeCmd =
     type === "empty" ? null : buildAgentLaunchCmd(harnessType, workspace, resumeId);
   return { type, resumeId, resumeCmd };
+}
+
+function stampOpenCodeSessionOnPane(paneId: string, resumeId: string | null): void {
+  const sid = normalizeOpenCodeSessionId(resumeId);
+  if (!sid) {
+    tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", ""]);
+    return;
+  }
+  tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", sid]);
+}
+
+function detectPane(
+  paneId: string,
+  registry: ProviderRegistry,
+  workspace: string,
+  preserved?: PreservedSlot,
+): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
+  const snap = capturePaneSnapshot(paneId);
+  if (!snap) {
+    const out = finalizePaneState(workspace, { type: "empty", resumeId: null }, preserved);
+    if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
+    return out;
+  }
+  const prov = registry.detect(snap);
+  if (!prov) {
+    const out = finalizePaneState(workspace, { type: "empty", resumeId: null }, preserved);
+    if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
+    return out;
+  }
+  const det = prov.detect(snap);
+  const type = cliTypeFromProvider(prov.id);
+  const resumeId = det?.resumeId ?? null;
+  const out = finalizePaneState(workspace, { type, resumeId }, preserved);
+  if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
+  return out;
 }
 
 /** Apply mesh-agents.json layout overrides onto a loaded profile. */
@@ -71,11 +127,43 @@ export function applyMeshState(loaded: LoadedProfile): LoadedProfile {
   };
 }
 
+/** Patch mesh-agents.json `layout` (extendable — e.g. base.managerStack). */
+export function persistSavedLayout(
+  loaded: LoadedProfile,
+  layoutPatch: SavedLayout,
+): LoadedProfile {
+  const rel = loaded.profile.state.meshAgentsJson;
+  const existing = loadMeshAgents(loaded.workspace, rel);
+  const base = existing ?? {
+    schemaVersion: 1 as const,
+    session: loaded.sessionName,
+    workdir: loaded.workspace,
+    workers: [],
+    minis: [],
+    conventions: {
+      secretaryDefaultCli: "opencode" as const,
+      miniDefaultCli: "opencode" as const,
+      launchSkipsEmpty: true,
+    },
+  };
+  const next = MeshAgentsSchema.parse({
+    ...base,
+    layout: {
+      ...base.layout,
+      ...layoutPatch,
+      base: { ...base.layout?.base, ...layoutPatch.base },
+    },
+    updatedAt: new Date().toISOString(),
+  });
+  saveMeshAgentsFile(loaded.workspace, rel, next);
+  return applyMeshState(loaded);
+}
+
 export function scrapeMeshAgents(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
 ): MeshAgents {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
@@ -89,15 +177,17 @@ export function scrapeMeshAgents(
     leads: normalizeMinisLeads(minisCfg.leads),
   };
 
-  const workerPanes = listWindowPaneIds(session, layout.workers.window);
-  const miniPanes = listWindowPaneIds(session, layout.minis.window);
-  const miniState = loadMinisState(loaded.workspace);
+  const miniState = loadMinisState(loaded);
+  const existing = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
+  const workerMeta = listMeshWorkers(session, layout.workers.window);
+  const miniMeta = listMeshMinis(session, layout.minis.window);
 
   const workers: WorkerSlot[] = [];
   for (let slot = 1; slot <= loaded.profile.session.workerCount; slot++) {
-    const paneId = workerPanes[slot - 1];
+    const paneId = workerMeta.find((w) => Number(w.slot) === slot)?.paneId;
     if (!paneId) continue;
-    const det = detectPane(paneId, registry, loaded.workspace);
+    const prev = existing?.workers.find((w) => w.slot === slot);
+    const det = detectPane(paneId, registry, loaded.workspace, prev);
     workers.push({
       type: det.type,
       slot,
@@ -111,9 +201,10 @@ export function scrapeMeshAgents(
 
   const minis: MiniSlot[] = [];
   for (let n = 1; n <= minisLayout.max; n++) {
-    const paneId = miniPanes[n - 1];
+    const paneId = miniMeta.find((m) => Number(m.mini) === n)?.paneId;
     if (!paneId) continue;
-    const det = detectPane(paneId, registry, loaded.workspace);
+    const prev = existing?.minis.find((m) => m.mini === n);
+    const det = detectPane(paneId, registry, loaded.workspace, prev);
     const row = miniState.minis[String(n)];
     minis.push({
       type: det.type,
@@ -128,10 +219,11 @@ export function scrapeMeshAgents(
   }
 
   const mgrPane = meshManagerPane(session, layout.base.window);
+  const mgr2Pane = coordPaneForRole(session, layout.base.window, "manager-2");
   const secPane = meshSecretaryPane(session, layout.base.window);
   const manager = mgrPane
     ? (() => {
-        const det = detectPane(mgrPane, registry, loaded.workspace);
+        const det = detectPane(mgrPane, registry, loaded.workspace, existing?.manager);
         return {
           type: det.type,
           name: "manager",
@@ -141,9 +233,33 @@ export function scrapeMeshAgents(
       })()
     : undefined;
 
+  const manager2 = mgr2Pane
+    ? (() => {
+        const det = detectPane(mgr2Pane, registry, loaded.workspace, existing?.manager2);
+        return {
+          type: det.type,
+          name: "manager-2",
+          resumeId: det.resumeId,
+          resumeCmd: det.resumeCmd,
+        };
+      })()
+    : undefined;
+
   const secretary = secPane
     ? (() => {
-        const det = detectPane(secPane, registry, loaded.workspace);
+        let preserved: PreservedSlot | undefined = existing?.secretary;
+        const preservedSid = normalizeOpenCodeSessionId(preserved?.resumeId);
+        if (!preservedSid) {
+          const guess = guessSecretaryOpenCodeSession(loaded.workspace);
+          preserved = {
+            ...preserved,
+            type: "opencode",
+            resumeId: guess ?? null,
+          };
+        } else {
+          preserved = { ...preserved, type: "opencode", resumeId: preservedSid };
+        }
+        const det = detectPane(secPane, registry, loaded.workspace, preserved);
         return {
           type: det.type === "empty" ? "opencode" : det.type,
           wanted: true,
@@ -155,18 +271,26 @@ export function scrapeMeshAgents(
       })()
     : undefined;
 
-  const existing = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
-
   return MeshAgentsSchema.parse({
     schemaVersion: 1,
     session,
     workdir: loaded.workspace,
     manager,
+    manager2,
     secretary,
     workers,
     minis,
     layout: {
+      nvim: {
+        enabled: listWindowPaneIds(session, layout.nvim.window).length > 0,
+      },
+      workers: {
+        enabled: workerMeta.length > 0,
+        grid: "3x2",
+        slots: loaded.profile.session.workerCount,
+      },
       minis: {
+        enabled: miniMeta.length > 0,
         grid: minisLayout.grid,
         max: minisLayout.max,
         leads: minisLayout.leads,
@@ -190,7 +314,9 @@ export function saveMeshAgentsFile(workspace: string, relPath: string, data: Mes
 
 /** Scrape live mesh session -> mesh-agents.json (layout + slot CLI state). */
 export function saveMeshSession(loaded: LoadedProfile, registry: ProviderRegistry): string {
-  const rel = loaded.profile.state.meshAgentsJson;
+  const file = buildResolvedPaths(loaded).meshAgentsJson;
   const data = scrapeMeshAgents(loaded, registry);
-  return saveMeshAgentsFile(loaded.workspace, rel, data);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+  return file;
 }

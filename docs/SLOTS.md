@@ -1,121 +1,78 @@
-# Slots (unified model)
+# Slots
 
-**Manager, secretary, workers, and minis are all slots.** Same features; **guards**
-restrict what each role may do — not separate code paths.
+Manager, secretary, workers, and minis are **slots** with the same underlying
+features. **Guards** (profile + role YAML) restrict what each role may do — not
+separate inject code paths.
 
-## Slot registry (6-worker layout)
+## Registry (typical six-worker profile)
 
-| Slot id | Pane | Ports | Role guard |
-|---------|------|-------|------------|
-| `manager` | `base` col 0 | `manager` | coord, spawn minis, PROPOSAL gate |
-| `secretary` | `base` col 1 | `secretary` | inbox transform, digest, spawn tester minis |
-| `worker-1` .. `worker-6` | `workers` 3x2 | `30N0/30N1` | product delivery, prove, to-master |
-| `mini-1` .. `mini-8` | `minis` 4x2 | `mini-N` | parallel jobs, mini done, peer |
+| Slot id | Pane | Ports | Role |
+|---------|------|-------|------|
+| `manager` | base col 0 | `manager` | coordination, spawn minis |
+| `secretary` | base col 1 | `secretary` | inbox transform, digest |
+| `worker-1` .. `worker-6` | workers 3×2 | profile formula | delivery / product seat |
+| `mini-1` .. `mini-8` | minis grid | `mini-N` | parallel jobs for manager |
 
-Legacy `slot-7` / `slot-8` fold into cold snapshots only; new sessions are 6 workers.
+Slot count and port pattern come from `session.workerCount` and `ports.worker`
+in the profile.
 
-## Same features (every slot)
+## Shared capabilities
 
-| Feature | API | Guard examples |
-|---------|-----|----------------|
-| Seat files | `FOCUS.md`, `TASKS.md`, `REMINDER.md` | all slots |
-| Inbox / send | `send to-*` (queued) | mini cannot `to-master` substance without mini done |
-| Status border | `@mesh_status` from Mark + composer | daemon paints all |
-| Title / name | `@mesh_title`, hub line in FOCUS | all |
-| Provider | detect + inject plan | empty pane = no inject |
-| Checkback | arm on expect-reply sends | all |
-| NAV log | `nav log` telemetry | workers + minis typical |
-| **Snapshot** | `snapshot here <slug>` | all (see below) |
-| Limits hooks | provider `limits[]` | OC/CC on any slot with that CLI |
+| Feature | API | Notes |
+|---------|-----|-------|
+| Seat files | FOCUS, TASKS, REMINDER | under `seats.root` |
+| Comms | `to-master`, `to-slot`, `to-mini` | enqueue only |
+| Border | `@mesh_status` | daemon-painted |
+| Title | `@mesh_title` | CLI or manager set |
+| Provider | detect + inject plan | empty = no inject |
+| Checkback | arm on expect-reply | all roles |
+| Snapshot | `snapshot here <slug>` | cold archive |
 
-Guards live in `SlotGuard` table (profile + role), not `if (role === manager)` in orchestrator.
+Guards belong in role policy and the send router, not `if (role === manager)` in
+the orchestrator.
 
-```ts
-interface SlotGuard {
-  role: SlotRole;
-  allow: CommsAction[];   // send.toMaster, send.peer, spawn.mini, merge, ...
-  deny?: CommsAction[];
-}
-```
+## Seat file snapshot (cold archive)
 
-## Two layers of “snapshot”
+On `snapshot here <slug>`:
 
-### 1. Seat file snapshot (cold archive)
+- Copy FOCUS + TASKS + REMINDER (+ optional NAV) to
+  `{seats.root}/_snapshots/<date>_<seatId>_<slug>/`
+- Reset live trio to templates; Mark OPEN with pointer to cold path
+- Snapshots are grep-ignored by default; `contexts --snapshots` lists them
 
-What `tmux-zsign.sh snapshot` does today:
+Unified seat ids: `manager`, `secretary`, `worker-3`, `mini-2`.
 
-- Copy `FOCUS.md` + `TASKS.md` + `REMINDER.md` (+ optional `NAV.jsonl`) to
-  `tasks/agent-seats/_snapshots/<date>_<seatId>_<slug>/`
-- Reset live trio to templates; FOCUS Mark -> OPEN with pointer to cold path
-- Grep-ignored; `contexts --snapshots` lists
+## Runtime snapshot (live pane)
 
-**Unified seat ids:** `manager`, `secretary`, `worker-3`, `mini-2` (not only `slot-N`).
+For orchestrator / triage / `providers scan`:
 
-### 2. Runtime snapshot (live pane state)
+- Tmux pane id, window, cwd, capture tail
+- Provider id, resume id, composer state
+- Border segments
 
-Point-in-time for orchestrator / triage / `providers scan`:
-
-- tmux pane id, window, cwd, capture tail
-- provider id + resume id + `composerState`
-- border segments (ports, title, status)
-- optional: last NAV tail, open TASKS count
-
-Used by daemon drain decisions (hold inject if typing). **Not** a substitute for cold
-archive — complementary.
-
-### Combined `SlotSnapshot` (export)
-
-```ts
-interface SlotSnapshot {
-  id: string;              // worker-3 | manager | secretary | mini-1
-  role: SlotRole;
-  takenAt: string;
-  files?: SeatFileBundle;  // present on cold archive
-  runtime?: PaneRuntime;   // present on live capture
-  meta: { slug?: string; hub?: string; mark?: string };
-}
-```
-
-CLI:
-
-```bash
-seat-mesh snapshot here my-slug     # cold archive (files + runtime meta.json)
-seat-mesh snapshot capture          # runtime only (all slots in session)
-seat-mesh contexts                  # live FOCUS one-liners + marks
-seat-mesh contexts --snapshots      # list cold dirs
-```
+Used for drain holds (do not inject while typing). Complements cold archive, does
+not replace it.
 
 ## Paths on disk (profile-driven)
 
 ```text
-tasks/agent-seats/
-  manager/          # slot id: manager
-  secretary/        # slot id: secretary  (NEW folder; was role-only)
-  slot-1/ .. slot-6/
-  minis.json        # mini-1..8 task state (pane map)
+{seats.root}/
+  manager/
+  manager-b/
+  secretary/
+  slot-1/ .. slot-N/     # worker dirs from seats.dirs.worker
+  mini-1/ ..             # optional per-mini dirs
+  minis.json             # campaign state (profile-specific)
   _snapshots/
-    2026-09-11_worker-3_privacy-done/
-    2026-09-11_manager_eod/
 ```
 
-Secretary gets a real seat folder (same trio as workers). Manager already has `manager/`.
+Exact dir names use `seats.dirs` templates (`slot-{n}`, `mini-{n}`, …).
 
-## Migration from legacy
+## CLI
 
-| Legacy | Unified |
-|--------|---------|
-| `@zsign_role=manager` | slot `manager` |
-| `@zsign_role=secretary` | slot `secretary` |
-| `@zsign_slot=3` | slot `worker-3` |
-| `@zsign_mini=2` | slot `mini-2` |
-| `seat-mesh/tmux/snapshot.ts` | rename -> `pane-capture.ts` (runtime only) |
-| bash `run_snapshot` | `seat-mesh seats snapshot` + shim |
-
-Old `_snapshots` names `slot-3_*` remain valid; new ones use `worker-3_*`.
-
-## Not built yet
-
-- [ ] `secretary/` seat folder + templates in zsign
-- [ ] `SlotGuard` enforcement in `send` router
-- [ ] `seat-mesh snapshot` command
-- [ ] Combined meta.json with runtime block on cold snapshot
+```bash
+seat-mesh snapshot here my-slug
+seat-mesh snapshot capture
+seat-mesh contexts
+seat-mesh contexts --snapshots
+```

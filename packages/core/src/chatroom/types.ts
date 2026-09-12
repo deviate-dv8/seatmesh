@@ -36,7 +36,12 @@ export const RoomProfileSchema = z.object({
   scope: z.string().optional(),
   /** Empty = all tmux agents (global default). Contract rooms may list explicit members. */
   members: z.array(z.string()).default([]),
+  /** Single lead (legacy); prefer `leads` for multi-lead rooms. */
   lead: z.string().optional(),
+  /** Multi-lead minis (e.g. mini-1 top row + mini-2 bottom row). */
+  leads: z.array(z.string()).optional(),
+  /** Worker seats with lead/supervisor duty (e.g. worker-5 parallel lead). */
+  leadWorkers: z.array(z.string()).optional(),
   supervisor: z.string().optional(),
 });
 

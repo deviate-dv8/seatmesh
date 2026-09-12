@@ -6,8 +6,8 @@ scrollback when coordinating parallel agents.
 
 ## Storage
 
-```
-tasks/chat-files/
+```text
+{chatFiles.root}/
   worker-1/CHAT.jsonl
   mini-3/CHAT.jsonl
   manager/CHAT.jsonl
@@ -23,7 +23,7 @@ Profile: `chatFiles.root`, `chatFiles.filename` in `mesh.config.yaml`.
 | `providerId` | `cursor-agent`, `claude`, `kiro`, `opencode` |
 | `sessionId` | CLI resume / session UUID when known |
 | `model` | `--model` flag or provider default |
-| `humanPrompt` | Dan or manager-injected text |
+| `humanPrompt` | Human or manager-injected text |
 | `agentResponse` | Last agent reply (when known) |
 
 ## AgentProvider contract

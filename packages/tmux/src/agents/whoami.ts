@@ -7,6 +7,8 @@ import {
   type LoadedProfile,
 } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
+import { buildWhoamiContextLines } from "./whoami-context.js";
+import { printColdStart } from "../seats/cold-start.js";
 
 export interface WhoamiResult {
   inTmux: boolean;
@@ -33,17 +35,12 @@ function tmuxDisplay(pane: string, format: string): string | null {
 }
 
 function detectRole(pane: string): string {
-  const role =
-    tmuxDisplay(pane, "#{@mesh_role}") ??
-    tmuxDisplay(pane, "#{@zsign_role}") ??
-    "worker";
+  const role = tmuxDisplay(pane, "#{@mesh_role}") ?? "worker";
   return role || "worker";
 }
 
 function detectSlot(pane: string): number | null {
-  const raw =
-    tmuxDisplay(pane, "#{@mesh_slot}") ??
-    tmuxDisplay(pane, "#{@zsign_slot}");
+  const raw = tmuxDisplay(pane, "#{@mesh_slot}");
   if (!raw) return null;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) ? n : null;
@@ -55,7 +52,7 @@ function slotFromLabel(label: string): number | null {
 }
 
 export function runWhoami(loaded: LoadedProfile, target?: string): WhoamiResult {
-  const resolved = resolvePaneTarget(target, loaded.profile.session.name);
+  const resolved = resolvePaneTarget(target, loaded);
   if ("error" in resolved) {
     throw new Error(resolved.error);
   }
@@ -76,10 +73,7 @@ export function runWhoami(loaded: LoadedProfile, target?: string): WhoamiResult 
     if (slot != null) {
       ports = portsForSlot(loaded.profile.ports.worker, slot);
     } else {
-      ports =
-        row.ports ||
-        tmuxDisplay(pane, "#{@mesh_ports}") ||
-        tmuxDisplay(pane, "#{@zsign_ports}");
+      ports = row.ports || tmuxDisplay(pane, "#{@mesh_ports}");
     }
     if (!session) session = tmuxDisplay(pane, "#{session_name}");
     if (!window) window = tmuxDisplay(pane, "#{window_name}");
@@ -111,9 +105,11 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
       ? "mini"
       : w.role === "secretary"
         ? "secretary"
-        : w.role === "manager"
-          ? "master"
-          : "worker";
+        : w.role === "manager-2"
+          ? "manager-2"
+          : w.role === "manager"
+            ? "manager"
+            : "worker";
 
   try {
     const index = loadRoleIndex(paths.rolesDir, kind);
@@ -121,13 +117,17 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
       console.log(line);
     }
   } catch {
-    console.log("one_path=seat-mesh/docs/ONE-PATH.md | mesh only; ./sm.sh; no harness/:3099");
+    console.log("docs=docs/ONE-PATH.md | enqueue-only comms; daemon injects");
   }
 
   console.log(`profile=${w.profile}`);
   console.log(`workspace=${w.workspace}`);
+  console.log(`workspace_id=${loaded.workspaceId}`);
+  console.log(`mesh_session=${loaded.sessionName}`);
   console.log(`in_tmux=${w.inTmux}`);
   if (w.session) console.log(`session=${w.session}`);
+  console.log(`daemon_port=${paths.daemonPort}`);
+  console.log(`data_root=${paths.dataRoot}`);
   if (w.window) console.log(`window=${w.window}`);
   if (w.paneId) console.log(`pane=${w.paneId}`);
   console.log(`you_are=${w.role.toUpperCase()}`);
@@ -139,10 +139,7 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
 
   try {
     const index = loadRoleIndex(paths.rolesDir, kind);
-    const jobRole =
-      tmuxDisplay(w.paneId ?? "", "#{@mesh_job_role}") ??
-      tmuxDisplay(w.paneId ?? "", "#{@zsign_job_role}") ??
-      "";
+    const jobRole = tmuxDisplay(w.paneId ?? "", "#{@mesh_job_role}") ?? "";
     console.log(
       renderRoleIndex(
         index,
@@ -156,6 +153,15 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
   } catch (e) {
     console.log(`(no role index for ${kind}: ${(e as Error).message})`);
   }
+
+  const mini = tmuxDisplay(w.paneId ?? "", "#{@mesh_mini}") ?? "";
+  const jobRole = tmuxDisplay(w.paneId ?? "", "#{@mesh_job_role}") ?? "";
+
+  for (const line of buildWhoamiContextLines(loaded, w, { mini, jobRole })) {
+    console.log(line);
+  }
+
+  printColdStart(loaded, w, { mini: mini || null });
 }
 
 /** @deprecated use printWhoami */

@@ -1,9 +1,14 @@
 import type { LoadedProfile } from "@seat-mesh/core";
-import { portsForSlot } from "@seat-mesh/core";
+import { formatToSlotReplyCmd, portsForSlot } from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { enqueuePeer } from "./inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { runWhoami } from "../agents/whoami.js";
-import { capturePaneSnapshot } from "../lib/snapshot.js";
+import {
+  harnessToSlotMessage,
+  tryDirectPeerInject,
+} from "../inject/direct-peer.js";
+import { armAfterToSlot, armRecipientRoomPing, armRecipientToSlot } from "./chat-checkback.js";
 
 function requireWorkerSender(loaded: LoadedProfile): {
   slot: string;
@@ -27,30 +32,45 @@ function requireWorkerSender(loaded: LoadedProfile): {
   return { slot, ports };
 }
 
-function formatToSlotMsg(fromSlot: string, fromPorts: string, destSlot: string, report: string): string {
-  return `[agent-worker-slot-${fromSlot}] TO-SLOT-${destSlot} (${fromPorts}): ${report} (peer only - no merge/QA/Delivery authority)`;
+function formatToMiniMsg(fromSlot: string, fromPorts: string, miniId: string, report: string): string {
+  const text = report.trim();
+  return `[agent-worker-slot-${fromSlot}] TO-MINI-${miniId} (${fromPorts}): ${text} — reply ${formatToSlotReplyCmd(fromSlot)}`;
 }
 
-function targetIsOpenCode(paneId: string): boolean {
-  const snap = capturePaneSnapshot(paneId);
-  if (!snap) return false;
-  return /opencode/i.test(snap.currentCommand);
-}
-
-function formatToMiniMsg(
-  fromSlot: string,
-  fromPorts: string,
-  miniId: string,
-  report: string,
+function deliverPeer(
+  loaded: LoadedProfile,
+  resolveTarget: string,
+  targetLabel: string,
   targetPane: string,
-): string {
-  if (targetIsOpenCode(targetPane)) {
-    return `Worker slot-${fromSlot} (${fromPorts}) -> mini-${miniId}: ${report}`;
+  msg: string,
+  enqueue: {
+    kind: "to-slot" | "to-mini";
+    fromSlot: string;
+    fromPorts: string;
+  },
+): void {
+  const registry = createRegistryForProfile(loaded.profile);
+  const direct = tryDirectPeerInject(registry, loaded, resolveTarget, msg);
+  if (direct.ok) {
+    console.log(`sent -> ${targetLabel} from slot-${enqueue.fromSlot}`);
+    armRecipientToSlot(loaded, targetPane, enqueue.fromSlot);
+    return;
   }
-  return `[agent-worker-slot-${fromSlot}] TO-MINI-${miniId} (${fromPorts}): ${report}`;
+  const resp = enqueuePeer(loaded, {
+    kind: enqueue.kind,
+    fromSlot: enqueue.fromSlot,
+    fromPorts: enqueue.fromPorts,
+    targetPane,
+    targetLabel,
+    msg,
+  });
+  if (!resp?.ok) {
+    throw new Error("FAIL: peer enqueue (inbox down?) — run: ./sm.sh inbox restart");
+  }
+  console.log(`queued -> ${targetLabel} from slot-${enqueue.fromSlot} (${direct.reason})`);
 }
 
-/** Enqueue peer delivery (daemon injects when target pane idle). */
+/** Direct PM when idle (harness to-slot); queue when busy. */
 export function runToSlot(loaded: LoadedProfile, destSlot: string, report: string): void {
   const { slot, ports } = requireWorkerSender(loaded);
   const dest = destSlot.replace(/^slot-/, "");
@@ -64,23 +84,16 @@ export function runToSlot(loaded: LoadedProfile, destSlot: string, report: strin
     throw new Error("usage: to-slot <1-8> <msg...>");
   }
 
-  const session = loaded.profile.session.name;
-  const resolved = resolvePaneTarget(dest, session);
+  const resolved = resolvePaneTarget(dest, loaded);
   if ("error" in resolved) throw new Error(resolved.error);
 
-  const msg = formatToSlotMsg(slot, ports, dest, report.trim());
-  const resp = enqueuePeer(loaded, {
+  const msg = harnessToSlotMessage(slot, ports, dest, report);
+  deliverPeer(loaded, dest, `slot-${dest}`, resolved.paneId, msg, {
     kind: "to-slot",
     fromSlot: slot,
     fromPorts: ports,
-    targetPane: resolved.paneId,
-    targetLabel: `slot-${dest}`,
-    msg,
   });
-  if (!resp?.ok) {
-    throw new Error("FAIL: to-slot enqueue (inbox down?) — run: ./sm.sh inbox");
-  }
-  console.log(`OK: queued -> slot-${dest} from slot-${slot} (daemon inject when idle)`);
+  armAfterToSlot(loaded, slot, { pane: process.env.TMUX_PANE, slot });
 }
 
 export function runToMini(loaded: LoadedProfile, miniId: string, report: string): void {
@@ -94,22 +107,66 @@ export function runToMini(loaded: LoadedProfile, miniId: string, report: string)
     throw new Error(`usage: to-mini <1-${max}> <msg...>`);
   }
 
-  const session = loaded.profile.session.name;
-  const resolved = resolvePaneTarget(`mini-${mid}`, session);
+  const resolved = resolvePaneTarget(`mini-${mid}`, loaded);
   if ("error" in resolved) throw new Error(resolved.error);
 
-  const msg = formatToMiniMsg(slot, ports, mid, report.trim(), resolved.paneId);
-
-  const resp = enqueuePeer(loaded, {
+  const msg = formatToMiniMsg(slot, ports, mid, report);
+  deliverPeer(loaded, `mini-${mid}`, `mini-${mid}`, resolved.paneId, msg, {
     kind: "to-mini",
     fromSlot: slot,
     fromPorts: ports,
-    targetPane: resolved.paneId,
-    targetLabel: `mini-${mid}`,
-    msg,
   });
-  if (!resp?.ok) {
-    throw new Error("FAIL: to-mini enqueue (inbox down?) — run: ./sm.sh inbox");
+  armAfterToSlot(loaded, slot, { pane: process.env.TMUX_PANE, slot });
+}
+
+/** Exported for room fan-out (@mentions, 2-member direct PM). */
+export interface DeliverPeerOpts {
+  fromAgent?: string;
+  roomSlug?: string;
+  /** Room fan-out: always enqueue (daemon injects with roomPing bypass). Avoids sync inject hang. */
+  queueOnly?: boolean;
+  /** Fan-out batch: caller already ran ensureMeshInbox once. */
+  skipEnsure?: boolean;
+}
+
+export function deliverPeerMessage(
+  loaded: LoadedProfile,
+  resolveTarget: string,
+  targetPane: string,
+  targetLabel: string,
+  msg: string,
+  fromSlot: string,
+  fromPorts: string | null,
+  opts: DeliverPeerOpts = {},
+): "sent" | "queued" | "failed" {
+  if (!opts.queueOnly) {
+    const registry = createRegistryForProfile(loaded.profile);
+    const direct = tryDirectPeerInject(registry, loaded, resolveTarget, msg);
+    if (direct.ok) {
+      if (opts.roomSlug) {
+        armRecipientRoomPing(
+          loaded,
+          targetPane,
+          opts.roomSlug,
+          opts.fromAgent ?? `worker-${fromSlot}`,
+        );
+      } else {
+        armRecipientToSlot(loaded, targetPane, fromSlot);
+      }
+      return "sent";
+    }
   }
-  console.log(`OK: queued -> mini-${mid} from slot-${slot} (daemon inject when idle)`);
+
+  const resp = enqueuePeer(loaded, {
+    kind: opts.roomSlug ? "room" : "to-slot",
+    fromSlot,
+    fromPorts,
+    roomSlug: opts.roomSlug ?? null,
+    fromAgent: opts.fromAgent ?? null,
+    targetPane,
+    targetLabel,
+    msg,
+    skipEnsure: opts.skipEnsure,
+  });
+  return resp?.ok ? "queued" : "failed";
 }

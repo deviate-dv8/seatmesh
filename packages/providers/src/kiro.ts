@@ -2,6 +2,7 @@ import type { AgentProvider, Detection, InjectPlan, PaneSnapshot } from "@seat-m
 import {
   cmdlines,
   composerFromCapture,
+  defaultComposerReady,
   extractUuid,
   matchAny,
   modelFromCmdlines,
@@ -27,6 +28,10 @@ export const kiroProvider: AgentProvider = {
 
   composerState(pane: PaneSnapshot) {
     return composerFromCapture(pane, "kiro");
+  },
+
+  composerReady(pane: PaneSnapshot) {
+    return defaultComposerReady(pane, "kiro");
   },
 
   injectPlan(_pane: PaneSnapshot): InjectPlan {

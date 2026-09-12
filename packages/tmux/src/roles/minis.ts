@@ -1,14 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
-import { loadAgentsState } from "../agents/agents-state.js";
+import { meshRuntimePaths, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
+import {
+  loadAgentsState,
+  loadMeshAgents,
+  miniStateForN,
+  resolveLaunchCmd,
+} from "../agents/agents-state.js";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
-import { launchSession, sendLaunch } from "../agents/launch.js";
-import { listWindowPaneIds } from "../session/window-panes.js";
+import { launchSession, tryLaunchPane } from "../agents/launch.js";
+import { resolveMiniPaneId } from "../session/window-panes.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { injectPromptDirect } from "../inject/prompt.js";
+import { enqueueColdStart } from "../seats/cold-start-inject.js";
 import { tmux } from "../lib/tmux-run.js";
 
 const SECRETARY_PREFIX = "[mesh-secretary] ";
@@ -46,35 +52,35 @@ export interface MinisStateFile {
   minis: Record<string, MiniRow>;
 }
 
-function minisStatePath(workspace: string): string {
-  return path.join(workspace, "tasks/seat-mesh/minis.json");
+function minisStatePath(loaded: LoadedProfile): string {
+  return meshRuntimePaths(loaded).minisJson;
 }
 
-function miniDonePath(workspace: string): string {
-  return path.join(workspace, "tasks/seat-mesh/MINI-DONE.md");
+function miniDonePath(loaded: LoadedProfile): string {
+  return meshRuntimePaths(loaded).miniDone;
 }
 
-function manifestPath(workspace: string): string {
-  return path.join(workspace, "tasks/seat-mesh/mini-manifest.json");
+function manifestPath(loaded: LoadedProfile): string {
+  return meshRuntimePaths(loaded).miniManifest;
 }
 
-export function loadMinisState(workspace: string): MinisStateFile {
-  const p = minisStatePath(workspace);
+export function loadMinisState(loaded: LoadedProfile): MinisStateFile {
+  const p = minisStatePath(loaded);
   if (!fs.existsSync(p)) {
     return { minis: {} };
   }
   return JSON.parse(fs.readFileSync(p, "utf8")) as MinisStateFile;
 }
 
-export function saveMinisState(workspace: string, state: MinisStateFile): void {
-  const p = minisStatePath(workspace);
+export function saveMinisState(loaded: LoadedProfile, state: MinisStateFile): void {
+  const p = minisStatePath(loaded);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   state.updatedAt = new Date().toISOString();
   fs.writeFileSync(p, JSON.stringify(state, null, 2) + "\n");
 }
 
-export function loadMiniManifest(workspace: string): MiniManifest {
-  const p = manifestPath(workspace);
+export function loadMiniManifest(loaded: LoadedProfile): MiniManifest {
+  const p = manifestPath(loaded);
   if (!fs.existsSync(p)) {
     throw new Error(`missing ${p} — supervisor must write mini-manifest.json first`);
   }
@@ -84,8 +90,16 @@ export function loadMiniManifest(workspace: string): MiniManifest {
 function miniPaneId(loaded: LoadedProfile, n: number): string | null {
   const layout = loaded.profile.layout;
   if (!layout) return null;
-  const panes = listWindowPaneIds(loaded.profile.session.name, layout.minis.window);
-  return panes[n - 1] ?? null;
+  return resolveMiniPaneId(
+    loaded.sessionName,
+    layout.minis.window,
+    n,
+  );
+}
+
+function resolveMiniHarnessType(savedType: string | undefined, miniCli: string): string {
+  if (!savedType || savedType === "empty") return miniCli;
+  return savedType === "cursor-agent" ? "agent" : savedType;
 }
 
 function sleepMs(ms: number): void {
@@ -105,35 +119,35 @@ function ensureMiniCli(
 
   if (!live) {
     const agents = loadAgentsState(loaded.workspace, loaded.profile.state.agentsJson);
-    const harnessType =
+    const mesh = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
+    const saved = mesh ? miniStateForN(mesh, n) : undefined;
+    const miniCli =
       agents.conventions?.mini_default_cli ??
       agents.conventions?.secretary_default_cli ??
       "opencode";
-    const type = harnessType === "cursor-agent" ? "agent" : harnessType;
-    const cmd = buildAgentLaunchCmd(type, loaded.workspace, null);
+    const type = resolveMiniHarnessType(saved?.type, miniCli);
+    const entry = {
+      type,
+      resume_id: saved?.resumeId ?? null,
+      resume_cmd: saved?.resumeCmd ?? null,
+    };
+    const cmd =
+      resolveLaunchCmd(entry, loaded.workspace) ??
+      buildAgentLaunchCmd(type, loaded.workspace, entry.resume_id);
     if (!cmd) throw new Error(`no launch cmd for mini type ${type}`);
-    sendLaunch(paneId, cmd);
-    sleepMs(type === "opencode" ? 4000 : 2500);
-
-    const reSnap = capturePaneSnapshot(paneId);
-    const reLive = reSnap ? registry.detect(reSnap) : null;
-    if (!reLive) {
-      sendLaunch(paneId, cmd);
-      sleepMs(6000);
-      const finalSnap = capturePaneSnapshot(paneId);
-      const finalLive = finalSnap ? registry.detect(finalSnap) : null;
-      if (!finalLive) {
-        throw new Error(
-          `mini-${n} pane ${paneId} failed to start CLI after 2 launch attempts — still plain_shell`,
-        );
-      }
+    const launched = tryLaunchPane(loaded, paneId, `mini-${n}`, cmd, false, type);
+    if (launched.status !== "launched") {
+      throw new Error(
+        launched.reason ??
+          `mini-${n} pane ${paneId} failed to start CLI — still plain_shell`,
+      );
     }
   }
   return paneId;
 }
 
 export function listMinis(loaded: LoadedProfile): MiniRow[] {
-  const state = loadMinisState(loaded.workspace);
+  const state = loadMinisState(loaded);
   const max = loaded.profile.session.miniMax;
   const rows: MiniRow[] = [];
   for (let n = 1; n <= max; n++) {
@@ -170,7 +184,7 @@ export interface MiniCampaignDigest {
 
 /** Mechanical campaign status — secretary must not invent "all done" without this. */
 export function buildMiniCampaignDigest(loaded: LoadedProfile): MiniCampaignDigest {
-  const state = loadMinisState(loaded.workspace);
+  const state = loadMinisState(loaded);
   const total = loaded.profile.session.miniMax;
   const rows = listMinis(loaded);
   let done = 0;
@@ -187,7 +201,7 @@ export function buildMiniCampaignDigest(loaded: LoadedProfile): MiniCampaignDige
   }
   const allDone = open === 0 && failed === 0 && done >= total;
 
-  const donePath = miniDonePath(loaded.workspace);
+  const donePath = miniDonePath(loaded);
   let recentDone: string[] = [];
   if (fs.existsSync(donePath)) {
     recentDone = fs
@@ -257,12 +271,17 @@ export function miniSpawn(
   const prefix = opts.viaSecretary === false ? SUPERVISOR_PREFIX : SECRETARY_PREFIX;
   const brief = `${prefix}MINI-TASK id=${n} role=${role}: ${task}
 
-You are mini-${n} in session mesh (NOT a worker seat, NOT dev harness). Code only under seat-mesh/ and tasks/seat-mesh/. When done: ./sm.sh mini done ${n} PASS|FAIL: <evidence>. Then stop.`;
+You are mini-${n} (NOT a worker seat). Parallel job for manager only. When done: report via mini done ${n} PASS|FAIL: <evidence>. Then stop.`;
 
   injectPromptDirect(loaded, registry, `mini-${n}`, brief, { prefix: "" });
+  try {
+    enqueueColdStart(loaded, `mini-${n}`, { mini: String(n) });
+  } catch {
+    /* whoami embeds cold-start if enqueue fails */
+  }
 
   if (!opts.skipState) {
-    const state = loadMinisState(loaded.workspace);
+    const state = loadMinisState(loaded);
     state.campaign = state.campaign ?? "sm-parity";
     state.minis[String(n)] = {
       id: n,
@@ -273,7 +292,7 @@ You are mini-${n} in session mesh (NOT a worker seat, NOT dev harness). Code onl
       task,
       spawnedAt: new Date().toISOString(),
     };
-    saveMinisState(loaded.workspace, state);
+    saveMinisState(loaded, state);
   }
 
   console.log(`OK: spawned mini-${n} role=${role} pane=${paneId}`);
@@ -294,13 +313,13 @@ export function miniDone(
   n: number,
   report: string,
 ): void {
-  const state = loadMinisState(loaded.workspace);
+  const state = loadMinisState(loaded);
   const key = String(n);
   const row = state.minis[key];
   const paneId = miniPaneId(loaded, n) ?? row?.paneId ?? "?";
   const line = `${new Date().toISOString()} mini-${n} ${report}`;
-  fs.mkdirSync(path.dirname(miniDonePath(loaded.workspace)), { recursive: true });
-  fs.appendFileSync(miniDonePath(loaded.workspace), line + "\n");
+  fs.mkdirSync(path.dirname(miniDonePath(loaded)), { recursive: true });
+  fs.appendFileSync(miniDonePath(loaded), line + "\n");
 
   state.minis[key] = {
     id: n,
@@ -313,9 +332,9 @@ export function miniDone(
     doneAt: new Date().toISOString(),
     report,
   };
-  saveMinisState(loaded.workspace, state);
+  saveMinisState(loaded, state);
 
-  const mgr = resolvePaneTarget("manager", loaded.profile.session.name);
+  const mgr = resolvePaneTarget("manager", loaded);
   if (!("error" in mgr)) {
     tmux([
       "display-message",
@@ -333,11 +352,11 @@ export function miniSpawnAll(
   registry: ProviderRegistry,
   manifest?: MiniManifest,
 ): void {
-  const m = manifest ?? loadMiniManifest(loaded.workspace);
-  const state = loadMinisState(loaded.workspace);
+  const m = manifest ?? loadMiniManifest(loaded);
+  const state = loadMinisState(loaded);
   state.campaign = m.campaign;
   state.supervisor = m.supervisor;
-  saveMinisState(loaded.workspace, state);
+  saveMinisState(loaded, state);
 
   launchSession(loaded, { targets: ["minis"] });
   sleepMs(5000);

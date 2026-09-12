@@ -15,7 +15,7 @@ export function runFlush(
   registry: ProviderRegistry,
   target: string,
 ): FlushResult[] {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const results: FlushResult[] = [];
 
   const targets: string[] =
@@ -24,7 +24,7 @@ export function runFlush(
       : [target];
 
   for (const t of targets) {
-    const resolved = resolvePaneTarget(t, session);
+    const resolved = resolvePaneTarget(t, loaded);
     if ("error" in resolved) {
       results.push({ target: t, paneId: "-", status: "skipped", reason: resolved.error });
       continue;

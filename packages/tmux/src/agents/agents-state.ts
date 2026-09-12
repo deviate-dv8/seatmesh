@@ -24,6 +24,10 @@ export interface AgentsStateFile {
     secretary_default_cli?: string;
     mini_default_cli?: string;
     launch_skips_empty?: boolean;
+    coord_sync?: {
+      reload?: boolean;
+      attach?: boolean;
+    };
   };
   secretary?: {
     type?: string;
@@ -48,6 +52,10 @@ export function workerStateForSlot(
   return state.panes.find((p) => p.slot === slot);
 }
 
+export function miniStateForN(mesh: MeshAgents, n: number) {
+  return mesh.minis.find((m) => m.mini === n);
+}
+
 /** @deprecated use buildAgentLaunchCmd from agent-builder.ts */
 export function buildLaunchCmd(
   type: string,
@@ -61,8 +69,11 @@ export function resolveLaunchCmd(
   entry: PaneAgentState,
   workspace: string,
 ): string | null {
+  if (entry.resume_id) {
+    return buildLaunchCmd(entry.type, workspace, entry.resume_id);
+  }
   if (entry.resume_cmd) return entry.resume_cmd;
-  return buildLaunchCmd(entry.type, workspace, entry.resume_id);
+  return buildLaunchCmd(entry.type, workspace, null);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +135,12 @@ export function meshToLegacyAgentsState(mesh: MeshAgents): AgentsStateFile {
       secretary_default_cli: mesh.conventions.secretaryDefaultCli,
       mini_default_cli: mesh.conventions.miniDefaultCli,
       launch_skips_empty: mesh.conventions.launchSkipsEmpty,
+      coord_sync: mesh.conventions.coordSync
+        ? {
+            reload: mesh.conventions.coordSync.reload,
+            attach: mesh.conventions.coordSync.attach,
+          }
+        : undefined,
     },
     secretary,
   };

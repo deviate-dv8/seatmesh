@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { portsForSlot, type LoadedProfile } from "@seat-mesh/core";
+import { buildResolvedPaths, portsForSlot, type LoadedProfile } from "@seat-mesh/core";
 
 export interface SeatContextRow {
   seat: string;
@@ -33,7 +33,7 @@ function focusPreview(text: string, n = 2): string {
 }
 
 export function seatContextRows(loaded: LoadedProfile): SeatContextRow[] {
-  const root = path.join(loaded.workspace, loaded.profile.seats.root);
+  const root = buildResolvedPaths(loaded).seatsRoot;
   const formula = loaded.profile.ports?.worker ?? "30{n}0/30{n}1";
   const rows: SeatContextRow[] = [];
 
@@ -50,23 +50,47 @@ export function seatContextRows(loaded: LoadedProfile): SeatContextRow[] {
     });
   }
 
-  const mgrDir = loaded.profile.seats.dirs?.manager ?? "manager";
-  const d = path.join(root, mgrDir);
-  rows.push({
-    seat: mgrDir,
-    ports: "-",
-    tasks: openChecks(path.join(d, "TASKS.md")),
-    rem: openChecks(path.join(d, "REMINDER.md")),
-    preview: fs.existsSync(path.join(d, "FOCUS.md"))
-      ? focusPreview(fs.readFileSync(path.join(d, "FOCUS.md"), "utf8"))
-      : "(no FOCUS.md)",
-  });
+  for (const col of loaded.profile.layout?.base.columns ?? ["manager", "secretary"]) {
+    if (col !== "manager" && col !== "manager-2" && col !== "secretary") continue;
+    const seatDir =
+      col === "manager"
+        ? (loaded.profile.seats.dirs?.manager ?? "manager")
+        : col === "manager-2"
+          ? (loaded.profile.seats.dirs?.["manager-2"] ?? "manager-2")
+          : (loaded.profile.seats.dirs?.secretary ?? "secretary");
+    const d = path.join(root, seatDir);
+    rows.push({
+      seat: seatDir,
+      ports: "-",
+      tasks: openChecks(path.join(d, "TASKS.md")),
+      rem: openChecks(path.join(d, "REMINDER.md")),
+      preview: fs.existsSync(path.join(d, "FOCUS.md"))
+        ? focusPreview(fs.readFileSync(path.join(d, "FOCUS.md"), "utf8"))
+        : "(no FOCUS.md)",
+    });
+  }
+
+  const miniPat = loaded.profile.seats.dirs?.mini ?? "mini-{n}";
+  if (!miniPat.endsWith(".json")) {
+    for (let n = 1; n <= loaded.profile.session.miniMax; n++) {
+      const miniDir = path.join(root, miniPat.replace("{n}", String(n)));
+      rows.push({
+        seat: `mini-${n}`,
+        ports: "-",
+        tasks: openChecks(path.join(miniDir, "TASKS.md")),
+        rem: openChecks(path.join(miniDir, "REMINDER.md")),
+        preview: fs.existsSync(path.join(miniDir, "FOCUS.md"))
+          ? focusPreview(fs.readFileSync(path.join(miniDir, "FOCUS.md"), "utf8"))
+          : "(no FOCUS.md)",
+      });
+    }
+  }
 
   return rows;
 }
 
 export function printSeatContexts(loaded: LoadedProfile, json = false): void {
-  const root = path.join(loaded.workspace, loaded.profile.seats.root);
+  const root = buildResolvedPaths(loaded).seatsRoot;
   const rows = seatContextRows(loaded);
 
   if (json) {

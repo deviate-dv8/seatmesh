@@ -1,44 +1,36 @@
-# Mesh state file (`mesh-agents.json`)
+# Mesh state (`mesh-agents.json`)
 
-Mesh-owned provenance of which agent CLI type and resume id each slot runs.
-Status: **partial** (`TODO 4.1`). `./sm.sh save` writes layout + live slot
-state; `set`/`tag`/`switch` persist still open.
+Mesh-owned map of which agent CLI type and resume id each slot runs. The engine
+reads and writes this file; it does not mutate unrelated harness state files.
 
-| | Path |
-|---|------|
-| **File** | `mesh-agents.json` (workspace root, next to legacy `tmux-main-agents.json`) |
+| | |
+|---|---|
+| **Default path** | `state.meshAgentsJson` in profile (default `mesh-agents.json` under workspace) |
 | **Schema** | `packages/core/src/schema/agents.ts` (`MeshAgentsSchema`) |
-| **Reader** | `packages/tmux/src/agents-state.ts` (`loadMeshAgents`) |
-| **Config** | `mesh.config.yaml` → `state.meshAgentsJson` (default `mesh-agents.json`) |
+| **Load** | `packages/tmux/src/agents/agents-state.ts` |
+| **Save** | `./sm.sh save` / `auto` scrapes live session |
 
-## Why
+## Slot mapping
 
-`tmux-main-agents.json` is harness-owned and mutated by `tmux-zsign.sh`.
-seat-mesh must never write it (`TODO.md` rule). `mesh-agents.json` is the
-mesh replica: same purpose (which CLI / resume per slot), mesh-owned format,
-Zod-validated on read.
+| Slot | Key in JSON | Window |
+|------|-------------|--------|
+| manager | `manager` | base |
+| secretary | `secretary` | base |
+| worker N | `workers[]` (`slot: N`) | workers |
+| mini N | `minis[]` (`mini: N`) | minis |
 
-## Slot mapping (same as `docs/SLOTS.md`)
-
-| Slot | Key in `mesh-agents.json` | Window |
-|------|---------------------------|--------|
-| manager | `manager` | `base` col 0 |
-| secretary | `secretary` | `base` col 1 |
-| worker-1..6 | `workers[]` (has `slot: N`) | `workers` 3x2 |
-| mini-1..8 | `minis[]` (has `mini: N`) | `minis` 4x2 |
-
-## Format
+## Example shape
 
 ```jsonc
 {
   "schemaVersion": 1,
   "session": "mesh",
-  "workdir": "/home/dan/Desktop/Work/zsign",
+  "workdir": "/path/to/workspace",
   "manager": {
     "type": "agent",
     "name": "manager",
-    "resumeId": "4e911d2e-…",
-    "resumeCmd": "env -u NO_COLOR … agent --resume …"
+    "resumeId": "…",
+    "resumeCmd": "agent --resume …"
   },
   "secretary": {
     "type": "opencode",
@@ -51,7 +43,7 @@ Zod-validated on read.
       "slot": 3,
       "name": "worker-3",
       "ports": "3030/3031",
-      "resumeId": "5027fc00-…",
+      "resumeId": "…",
       "paneIndex": 2
     }
   ],
@@ -60,56 +52,52 @@ Zod-validated on read.
       "type": "opencode",
       "mini": 1,
       "role": "helper",
-      "task": "Draft mesh-agents.json schema…",
+      "task": "…",
       "paneIndex": 0
     }
   ],
   "conventions": {
     "secretaryDefaultCli": "opencode",
     "miniDefaultCli": "opencode",
-    "launchSkipsEmpty": true
+    "launchSkipsEmpty": true,
+    "coordSync": {
+      "reload": false,
+      "attach": true
+    }
   },
   "updatedAt": "2026-09-11T13:01:19Z"
 }
 ```
 
-## Conventions
+Port strings follow the profile `ports.worker` formula.
 
-- **camelCase** keys (legacy harness uses `resume_id` / `resume_cmd` --
-  `meshToLegacyAgentsState()` maps for compat callers).
-- `type` is a `CliType` enum: `agent | claude | kiro | opencode | empty`.
-- Absent `mesh-agents.json` → `loadMeshAgents` returns `null`; layout falls
-  back to `mesh.config.yaml` (`applyMeshState` / `meshLoaded`).
-- `layout.minis` in this file overrides profile yaml (`grid`, `max`, `leads`).
-- `./sm.sh save` refreshes from live session; edit by hand only for recovery.
+## Conventions block
+
+| Key | Meaning |
+|-----|---------|
+| `coordSync.reload: false` | On reload, start **empty** coord panes but **never replace a live CLI** |
+| `coordSync.attach: true` | Sync coord CLIs on attach when policy allows |
+| `launchSkipsEmpty: true` | `launch` skips worker slots marked `empty` |
+
+YAML defaults live in `layout.base.coordSync`; JSON conventions override.
+
+## Types
+
+- Keys use **camelCase** (`resumeId`, not `resume_id`).
+- `type`: `agent | claude | kiro | opencode | empty`.
+- `layout.minis` in this file can override profile yaml (`grid`, `max`, `leads`).
 
 ## Read path
 
 ```ts
-// packages/tmux/src/agents-state.ts
-loadMeshAgents(workspace, "mesh-agents.json")       // MeshAgents | null
-meshToLegacyAgentsState(mesh)                        // AgentsStateFile adapter
-loadAgentsStateCompat(workspace, mesh, legacy)       // tagged union
+loadMeshAgents(workspace, meshAgentsJsonPath)
+meshToLegacyAgentsState(mesh)           // adapter for legacy-shaped callers
+loadAgentsStateCompat(workspace, mesh, legacySeed)
 ```
 
-Launch (`launch.ts`) and scan callers can consume either source. `set` /
-`tag` / `switch` persist to this file once the write path lands (TODO 4.1).
-
-## Migration from legacy
-
-1. Seed `mesh-agents.json` from `tmux-main-agents.json` (copy + rename keys,
-   split `panes[]` into `workers[]` / `minis[]` by `role`).
-2. Flip `launch` / `switch` / `whoami` to read via `loadAgentsStateCompat`,
-   prefer `source === "mesh"`.
-3. Enable write path (currently OFF) — `set` / `tag` persist here.
-4. Harness keeps its own file untouched; nothing in seat-mesh writes legacy.
+Absent file → `null`; layout falls back to profile yaml until `save` populates JSON.
 
 ## Status
 
-- [x] `MeshAgentsSchema` (zod) in core
-- [x] `loadMeshAgents` read + `meshToLegacyAgentsState` adapter
-- [x] `profilePaths().meshAgentsJson`
-- [x] `save` / `auto` write path (`saveMeshSession`)
-- [x] `layout.minis` read override (`applyMeshState`)
-- [ ] Write path (`set` / `tag` / `switch`) — TODO 4.1 remainder
-- [ ] Seed script / migration step
+- [x] Schema, load, save, layout.minis override
+- [ ] Full write path on every `switch` / `tag` (tracked in TODO.md)

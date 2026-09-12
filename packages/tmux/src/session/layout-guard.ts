@@ -82,7 +82,7 @@ function activityReasons(loaded: LoadedProfile, meta: MeshPaneMeta): string[] {
   }
 
   if (meta.mini) {
-    const state = loadMinisState(loaded.workspace);
+    const state = loadMinisState(loaded);
     const row = state.minis[meta.mini];
     if (row?.status === "spawned") {
       const hub = row.hub && row.hub !== "-" ? row.hub : "open task";
@@ -131,7 +131,7 @@ function doomedMetaForWindow(
 
 /** Panes that would be killed when shrinking a window to targetCount. */
 export function assessRelayoutShrinkRisk(loaded: LoadedProfile): LayoutRelayoutRisk {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const layout = loaded.profile.layout;
   if (!layout) return { workers: [], minis: [] };
 
@@ -202,7 +202,7 @@ export function assertRelayoutSafe(loaded: LoadedProfile, force = false): void {
 
 /** Summary for layout --dry-run */
 export function printRelayoutPlan(loaded: LoadedProfile): void {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
 

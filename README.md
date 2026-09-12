@@ -1,83 +1,70 @@
 # seat-mesh
 
-## TODO / tracking (read before coding)
+Profile-driven tmux workbench for multi-agent coordination. One session layout,
+one inbox daemon, pluggable agent CLIs (Cursor, Claude, Kiro, OpenCode), and
+enqueue-only comms so nothing stomps a live composer.
 
-| File | What |
-|------|------|
-| **[TODO.md](TODO.md)** | **Full incremental checklist vs harness** |
-| **[NOW.md](NOW.md)** | Current slice only |
-| `tasks/seat-mesh/FOCUS.md` | Workspace NOW mirror |
-| `tasks/seat-mesh/TASKS.md` | Session checkboxes |
+## Install and cold start
 
----
-
-**seat-mesh** is a standalone, profile-driven tmux workbench for multi-agent
-coordination. It is its **own product** — not a plugin, wrapper, shim around
-`tmux-zsign.sh`, and not "dev with a different name."
-
-zsign installs it as `./sm.sh` → `seat-mesh/bin/seat-mesh` + `profiles/zsign/`.
-That one-line launcher loads the **zsign profile**. It never calls `tmux-zsign.sh`.
-The only external exec is profile `stack.command` → `./dc.sh` (docker/worktrees).
-
-## Two tmux stacks (parallel — do not confuse)
-
-| | **seat-mesh (`./sm.sh`)** | **Legacy harness (`./tmux-zsign.sh`)** |
-|---|---------------------------|----------------------------------------|
-| **Session** | `mesh` (from profile `session.name`) | `dev` |
-| **Layout** | ARCHITECTURE.md: nvim, base (manager\|secretary), workers 3×2, minis 4×2 | 8 workers + manager + minis window |
-| **Pane vars** | `@mesh_role`, `@mesh_slot`, `@mesh_ports` | `@zsign_role`, `@zsign_slot`, `@zsign_ports` |
-| **Entry (outside tmux)** | `./sm.sh` → attach/create **mesh** | `./tmux-zsign.sh` → attach/create **dev** |
-| **Prompt** | `[mesh]` | `[dev]` |
-
-Same workspace folder; **different sessions, different tools.** Using one does not
-configure the other.
-
-## Handout (read this first)
-
-| Doc | What |
-|-----|------|
-| **[docs/ONE-PATH.md](docs/ONE-PATH.md)** | **Which command / which stack — zero decisions** |
-| **[NOW.md](NOW.md)** | Current slice (short) |
-| **[TODO.md](TODO.md)** | Parity checklist vs harness |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Target layout, daemon, providers |
-| [docs/PARALLEL.md](docs/PARALLEL.md) | Why `mesh` and `dev` coexist |
-| [docs/COMMS.md](docs/COMMS.md) | Room / checkback detail (not the command picker) |
-| [docs/SLOTS.md](docs/SLOTS.md) | Slot / port model (6 workers) |
-
-## Status (0.1)
-
-- [x] Profile loader (`mesh.config.yaml` + zod)
-- [x] Role index YAML (`whoami`, `index show|validate`)
-- [x] **Session** `attach` / `up` / `status` — layout + **launch CLIs** from agents JSON (read-only)
-- [x] **Launch** / **prompt** — start agent/kiro/claude/opencode in panes; inject text
-- [x] ChatRoom + ChatFile (CLI)
-- [x] Stack passthrough (`stack` / `dc` → profile `stack.command` only)
-- [x] Connectivity probe (`proxy status|check`)
-- [x] Providers registry (`providers list|scan`)
-- [~] Daemon (inbox / checkback / inject on `:3100`) — poll drain live; BullMQ when Redis up
-- [ ] Port prompt / mini / inbox from harness — **later** (enqueue-only; no bash send-keys in core)
-
-## Quick start (zsign workspace)
+The CLI entry (`bin/seat-mesh` or `sm`) **auto-builds on first run**: if `dist/` is
+missing or stale, it runs `npm install` and `npm run build` in the package root,
+then execs the CLI. No manual build step required for normal use.
 
 ```bash
-cd /path/to/zsign
-./sm.sh                  # outside tmux: attach or create session mesh
-./sm.sh session status   # panes + @mesh_* labels
-./sm.sh launch all       # (re)launch CLIs from tmux-main-agents.json slots 1-6 + manager
-./sm.sh providers scan   # live CLI per pane
-./sm.sh prompt --manager 1 "status check"
-./sm.sh whoami 1         # slot 1 in mesh (not dev)
-./sm.sh stack up         # only external passthrough: ./dc.sh
+# From the package (development or vendored copy)
+./bin/seat-mesh --help
+
+# Greenfield project
+npx seatmesh init
+npx seatmesh update
+npx seatmesh session up
+
+# With a consumer wrapper (example: workspace-root sm.sh)
+./sm.sh session up
 ```
 
-Inside a **mesh** pane: `./sm.sh` or `./sm.sh whoami` = this pane.
+Point the CLI at your project config with `--profile <dir>` (directory containing
+`.sm/mesh.config.yaml` or `mesh.config.yaml`) or rely on discovery walking up from
+cwd for `.sm/`.
 
-Legacy **dev** agents: keep using `./tmux-zsign.sh` until cutover — see
-[docs/PARALLEL.md](docs/PARALLEL.md).
+## Documentation
 
-## What `./sm.sh` is NOT
+| Doc | Contents |
+|-----|----------|
+| [docs/README.md](docs/README.md) | Full index |
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Init, session, reload, inbox |
+| [docs/ONE-PATH.md](docs/ONE-PATH.md) | Command reference (one table) |
+| [docs/FEATURES.md](docs/FEATURES.md) | Feature overview |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layout, daemon, providers |
+| [docs/CONFIG.md](docs/CONFIG.md) | `mesh.config.yaml` reference |
+| [docs/SLOTS.md](docs/SLOTS.md) | Slots, roles, seat files |
+| [docs/STATE.md](docs/STATE.md) | `mesh-agents.json` |
+| [docs/COMMS.md](docs/COMMS.md) | Inbox, peer, checkback flow |
+| [docs/CHATROOM.md](docs/CHATROOM.md) | Room ledger and broadcast |
+| [docs/CHATFILE.md](docs/CHATFILE.md) | Shared chat files |
+| [docs/PORTABILITY.md](docs/PORTABILITY.md) | Connectivity hooks, data layout |
+| [docs/PORTS.md](docs/PORTS.md) | Inbox ports (`:31670` mesh, `:31699` harness) |
 
-- Not `exec tmux-zsign.sh`
-- Not a subcommand or plugin of the harness
-- Not the same as attaching `[dev]`
-- Not allowed to mutate `dev`, `tmux-main-agents.json`, or harness labels
+Bundled profiles live under `profiles/` (`minimal`, …). Consumer-specific notes
+belong in each project's `.sm/` dotdir, not in the engine docs above.
+
+## Package layout
+
+```text
+services/seat-mesh/
+  bin/seat-mesh          CLI entry (cold start + node dist)
+  packages/
+    core/                Schemas, profile loader, chatroom, paths
+    cli/                 Command router
+    tmux/                Session, launch, inject, seats
+    daemon/              Inbox server (sole pane writer)
+    providers/           Agent CLI detection and inject plans
+    connectivity/        Proxy probe and recovery hooks
+  profiles/              Shipped example configs
+```
+
+## Status
+
+Version **0.1** — session layout, workspace-scoped tmux sessions (`mesh-{hash}`),
+profile-driven runtime paths (`data.root`), enqueue comms, room/chat, connectivity
+hooks, and supervised inbox daemon. Internal parity tracking: [TODO.md](TODO.md).

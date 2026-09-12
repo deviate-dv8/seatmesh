@@ -3,8 +3,9 @@ import { Command } from "commander";
 import {
   type LoadedProfile,
   type RoomMessageKind,
-  chatRoomConfig,
+  chatRoomConfigForLoaded,
   createRoom,
+  markRoomRead,
   sayInRoom,
   tailRoom,
   listRooms,
@@ -13,8 +14,17 @@ import {
   ensureGlobalRoom,
   canBroadcastToGlobal,
   isGlobalSlug,
+  formatRoomCommsCheckback,
+  unseenSummaryForAgent,
 } from "@seat-mesh/core";
-import { runWhoami } from "@seat-mesh/tmux";
+import {
+  fanOutRoomMessage,
+  runRoomAccept,
+  runRoomCall,
+  runRoomCallsList,
+  runRoomDecline,
+  runWhoami,
+} from "@seat-mesh/tmux";
 
 function tmuxOpt(pane: string, key: string): string {
   const r = spawnSync("tmux", ["display-message", "-t", pane, "-p", key], { encoding: "utf8" });
@@ -25,7 +35,7 @@ function tmuxOpt(pane: string, key: string): string {
 function resolveFrom(loaded: LoadedProfile, explicit?: string): string {
   if (explicit) return explicit;
   const w = runWhoami(loaded);
-  const mini = tmuxOpt(w.paneId ?? "", "#{@mesh_mini}") || tmuxOpt(w.paneId ?? "", "#{@zsign_mini}");
+  const mini = tmuxOpt(w.paneId ?? "", "#{@mesh_mini}");
   return resolveAgentId({ role: w.role, slot: w.slot, mini: mini || null });
 }
 
@@ -35,7 +45,7 @@ function resolvePane(explicit?: string): string | undefined {
 
 function paneContext(loaded: LoadedProfile) {
   const w = runWhoami(loaded);
-  const mini = tmuxOpt(w.paneId ?? "", "#{@mesh_mini}") || tmuxOpt(w.paneId ?? "", "#{@zsign_mini}");
+  const mini = tmuxOpt(w.paneId ?? "", "#{@mesh_mini}");
   return { w, mini };
 }
 
@@ -46,11 +56,12 @@ async function runSay(
   opts: {
     kind?: RoomMessageKind;
     checkback?: boolean;
+    fanout?: boolean;
     from?: string;
     pane?: string;
   },
 ): Promise<void> {
-  const cfg = chatRoomConfig(loaded.profile);
+  const cfg = chatRoomConfigForLoaded(loaded);
   const slug = resolveRoomSlug(cfg, roomSlug);
   const { w, mini } = paneContext(loaded);
   const ownerPane = resolvePane(opts.pane);
@@ -63,12 +74,37 @@ async function runSay(
     ownerSlot: w.slot,
   });
   console.log(`ok room=${slug} id=${result.message.id} kind=${result.message.kind}`);
+  const shouldFanOut = opts.fanout !== false;
+  if (shouldFanOut) {
+    const fan = fanOutRoomMessage(loaded, {
+      slug,
+      from: result.message.from,
+      kind: result.message.kind,
+      body: result.message.body,
+      senderPane: ownerPane,
+    });
+    console.log(
+      `fan-out: sent=${fan.sent} enqueued=${fan.enqueued} skipped=${fan.skipped}${fan.failed ? ` failed=${fan.failed}` : ""}`,
+    );
+  }
   if (result.checkback?.skipped) {
     console.log(`checkback: skipped (${result.checkback.reason ?? "?"})`);
   } else if (result.checkback && !result.checkback.ok) {
     console.log(`checkback: failed (${result.checkback.reason ?? "?"})`);
   } else if (result.checkback?.ok) {
     console.log("checkback: armed");
+    const expect = `chat-room:${slug} peer update (${result.message.kind})`;
+    const hint = formatRoomCommsCheckback(expect, {
+      role: w.role,
+      slot: w.slot,
+      mini: mini || null,
+      workerCount: loaded.profile.session.workerCount,
+      miniMax: loaded.profile.session.miniMax,
+    });
+    console.log("--- on Check: fire, run ---");
+    for (const line of hint.split("\n").slice(1)) {
+      console.log(line);
+    }
   }
 }
 
@@ -82,7 +118,7 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
     .description("List chat room slugs (global always present)")
     .action(() => {
       const loaded = getLoaded();
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       ensureGlobalRoom(loaded.workspace, cfg);
       const slugs = new Set(listRooms(loaded.workspace, cfg));
       slugs.add(cfg.globalSlug);
@@ -104,7 +140,7 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
     .option("--from <id>", "creator agent id (default: tmux pane)")
     .action((slug, opts) => {
       const loaded = getLoaded();
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       if (isGlobalSlug(cfg, slug)) {
         console.error(`slug "${slug}" is reserved for the global room`);
         process.exit(2);
@@ -131,6 +167,7 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
     .option("-r, --room <slug>", "target room (default: global)")
     .option("--kind <kind>", "claim|done|blocked|fyi|broadcast|status|msg")
     .option("--no-checkback", "skip inbox checkback arm")
+    .option("--no-fanout", "ledger only — do not PEER-inject [mesh-inbox-room] to peers")
     .option("--from <id>", "sender agent id")
     .option("--pane <id>", "tmux pane for checkback target")
     .action(async (messageParts: string[], opts) => {
@@ -140,7 +177,7 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
         console.error("room say: message required");
         process.exit(2);
       }
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       const slug = resolveRoomSlug(cfg, opts.room);
       await runSay(loaded, slug, body, opts);
     });
@@ -150,6 +187,7 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
     .description("Manager/secretary: fan-out line to global (all agents)")
     .argument("<message...>", "BROADCAST line to every agent")
     .option("--no-checkback", "skip inbox checkback arm")
+    .option("--no-fanout", "ledger only — do not PEER-inject peers")
     .option("--from <id>", "sender agent id")
     .option("--pane <id>", "tmux pane for checkback target")
     .action(async (messageParts: string[], opts) => {
@@ -164,23 +202,109 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
         console.error("room broadcast: message required");
         process.exit(2);
       }
-      const cfg = chatRoomConfig(loaded.profile);
-      await runSay(loaded, cfg.globalSlug, body, { ...opts, kind: "broadcast" });
+      const cfg = chatRoomConfigForLoaded(loaded);
+      // Broadcast is fan-out FYI — do not arm sender checkback (was spamming Check: on
+      // manager and agents misread it as supervise targeting slots 1-8).
+      await runSay(loaded, cfg.globalSlug, body, {
+        ...opts,
+        kind: "broadcast",
+        checkback: false,
+      });
+    });
+
+  room
+    .command("call")
+    .description("Worker: invite another worker to open a peer room (they accept|decline)")
+    .argument("<target>", "slot-N or bare N")
+    .argument("<topic...>", "discussion topic / scope")
+    .action((_target, topicParts: string[]) => {
+      const loaded = getLoaded();
+      const topic = topicParts.join(" ").trim();
+      try {
+        runRoomCall(loaded, _target, topic);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  room
+    .command("accept")
+    .description("Worker: accept an incoming room call (creates peer room + CONNECTED line)")
+    .argument("<call-id>", "short call id from CALL inject")
+    .action(async (callId: string) => {
+      const loaded = getLoaded();
+      try {
+        await runRoomAccept(loaded, callId);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  room
+    .command("decline")
+    .description("Worker: decline an incoming room call")
+    .argument("<call-id>", "short call id")
+    .option("--reason <text>", "optional decline reason")
+    .action((callId: string, opts: { reason?: string }) => {
+      const loaded = getLoaded();
+      try {
+        runRoomDecline(loaded, callId, opts.reason);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  room
+    .command("calls")
+    .description("List pending room calls for this agent")
+    .action(() => {
+      const loaded = getLoaded();
+      try {
+        runRoomCallsList(loaded);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  room
+    .command("read")
+    .description("Mark room messages read for this agent (clears unseen count)")
+    .option("-r, --room <slug>", "room slug (required for contract rooms)")
+    .action((opts) => {
+      const loaded = getLoaded();
+      const cfg = chatRoomConfigForLoaded(loaded);
+      const slug = resolveRoomSlug(cfg, opts.room);
+      const agentId = resolveFrom(loaded);
+      const { marked } = markRoomRead(loaded.workspace, cfg, slug, agentId);
+      console.log(`ok room=${slug} marked=${marked} unseen=0`);
     });
 
   room
     .command("tail")
-    .description("Show last N lines (default room: global)")
+    .description("Show last N lines (default room: global); auto-marks read")
     .option("-r, --room <slug>", "room slug (default: global)")
     .option("-n, --lines <n>", "line count", "50")
+    .option("--no-read", "do not mark messages read")
     .action(async (opts) => {
       const loaded = getLoaded();
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       const slug = resolveRoomSlug(cfg, opts.room);
+      const agentId = resolveFrom(loaded);
+      const unseenBefore = unseenSummaryForAgent(loaded.workspace, cfg, slug, agentId);
+      if (unseenBefore > 0) {
+        console.log(`unseen: ${unseenBefore}`);
+      }
       const n = Number.parseInt(String(opts.lines), 10) || 50;
       const lines = await tailRoom(loaded.workspace, cfg, slug, n);
       for (const row of lines) {
         console.log(`${row.ts}\t${row.from}\t${row.kind}\t${row.body}`);
+      }
+      if (opts.read !== false) {
+        markRoomRead(loaded.workspace, cfg, slug, agentId);
       }
     });
 
@@ -202,7 +326,7 @@ export function buildContractCommands(getLoaded: () => LoadedProfile): Command {
     .option("--from <id>", "creator agent id")
     .action((slug, opts) => {
       const loaded = getLoaded();
-      const cfg = chatRoomConfig(loaded.profile);
+      const cfg = chatRoomConfigForLoaded(loaded);
       if (isGlobalSlug(cfg, slug)) {
         console.error(`slug "${slug}" is reserved for the global room`);
         process.exit(2);

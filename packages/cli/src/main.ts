@@ -9,9 +9,10 @@ import {
   runStackPassthrough,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
-import { createBuiltinRegistry } from "@seat-mesh/providers";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
   printWhoami,
+  printAgentCard,
   runWhoami,
   capturePaneSnapshot,
   listSessionPanes,
@@ -48,6 +49,8 @@ import {
   verifyMeshSession,
   printVerify,
   labelMeshSession,
+  liveMeshSession,
+  ensureBaseLayout,
   applyMeshSessionBorders,
   runFlush,
   printFlushResults,
@@ -55,18 +58,27 @@ import {
   setPaneTitle,
   setPaneStatus,
   printSeatContexts,
+  runPeek,
+  runPpa,
   runToSlot,
   runToMini,
   applyMeshState,
   saveMeshSession,
   submitPaneOp,
+  clearPaneOpsQueue,
   printPaneOpsList,
   printRelayoutPlan,
   assertRelayoutSafe,
+  buildColdStartBrief,
+  buildFullColdStartBrief,
+  enqueueColdStart,
+  runSeatInit,
 } from "@seat-mesh/tmux";
 import { buildChatCommands } from "./chat-cli.js";
 import { buildCheckbackCommands } from "./checkback-cli.js";
-import { buildContractCommands, buildRoomCommands } from "./room-cli.js";
+import { buildContractLockCommands } from "./contract-lock-cli.js";
+import { buildRoomCommands } from "./room-cli.js";
+import { runInit } from "./init.js";
 
 function parseArgs(argv: string[]) {
   const profileFlag: string[] = [];
@@ -91,44 +103,37 @@ function meshLoaded(profileArg?: string) {
 
 function usage(loaded?: ReturnType<typeof loadProfile>): void {
   const prof = loaded ? `profile=${loaded.profile.name}` : "";
-  console.log(`sm — seat-mesh${prof ? ` (${prof})` : ""} (NOT a tmux-zsign.sh plugin)
+  console.log(`seat-mesh${prof ? ` (${prof})` : ""} — profile-driven tmux multi-agent CLI
 
-  Tracker: seat-mesh/TODO.md + seat-mesh/NOW.md
-  Handout: seat-mesh/README.md + seat-mesh/docs/PARALLEL.md
+  Docs: README.md + docs/ONE-PATH.md + docs/QUICKSTART.md
+  Cold start: bin/seat-mesh auto-runs npm install + build when dist is stale
 
-  ./sm.sh                    attach/create profile session (zsign: mesh — not dev)
-  ./sm.sh session attach|up|status
-  ./sm.sh verify              layout + labels health (like tmux-zsign verify)
-  ./sm.sh reload [--layout]   lazy rebuild + labels (no session kill; --layout re-grids)
-  ./sm.sh layout [--no-leads] [--dry-run] [--yes]   workers 3x2 + minis grid (queued; --yes kills active doomed panes)
-  ./sm.sh ops list                      pane-op queue (launch/restart/relayout serial)
-  ./sm.sh save|auto             scrape live session -> mesh-agents.json (layout + CLI/resume per slot)
-  ./sm.sh labels              re-apply @mesh_* + border strip
-  ./sm.sh inbox [--json]              engine inbox status (auto-starts if down)
-  ./sm.sh inbox stop|restart          manual lifecycle (start is automatic)
-  ./sm.sh to-master <msg...>          enqueue to-master -> INBOX.jsonl (daemon injects manager)
-  ./sm.sh to-slot <1-8> <msg...>      enqueue peer -> PEER.jsonl (worker seats only)
-  ./sm.sh to-mini <1-8> <msg...>      enqueue peer -> mini pane (worker seats only)
-  ./sm.sh secretary start|dispatch|collect [--send] [--nudge]|status|watch on [5m]|watch off
-  ./sm.sh mini list|spawn|prompt|done|dispatch-all
-  ./sm.sh checkback start|list|cancel     (alias: patience) — mesh inbox :3100 /patience
-  ./sm.sh test                smoke: layout, targets, providers, inbox, proxy, OC patterns
-  ./sm.sh launch [all|manager|secretary|minis|mini-N|1-6|slot-N]
-  ./sm.sh prompt <target> <text...>       enqueue -> PEER.jsonl (daemon inject)
-  ./sm.sh prompt --manager <target> <text...>  manager prefix
-  ./sm.sh remind <slot|all> [note...]     manager-only seat refresh (workers 1-6)
-  ./sm.sh flush <slot|all|manager|mini-N>     rescue Enter (stuck composer)
-  ./sm.sh contexts [--json]           seat -> FOCUS map + open TASK/REMINDER counts
-  ./sm.sh switch <target> <agent|kiro|claude|opencode|empty> [--fresh] [reason]
-  ./sm.sh handoff ...                         alias for switch
-  ./sm.sh title <target> <text...>
-  ./sm.sh status <target> <text...>
-  ./sm.sh whoami [target]    mesh panes + @mesh_* ; pass slot|%{id}|manager outside tmux
-  ./sm.sh room|chat|index|proxy|providers|manager|stack …
+  init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
+  update [--dry-run] [--migrate]        refresh _vendor templates + paths.json
+  report [--json]         full stack report (same as bare npx seat-mesh)
+  session attach|up|status
+  verify              layout + labels health
+  reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
+  layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
+  ops list|clear                pane-op queue (serial)
+  save|auto                     scrape session -> mesh-agents.json (daemon also auto-scrapes every 10m)
+  labels                        re-apply @mesh_* + border strip
+  inbox [--json] | inbox stop|restart
+  peer <target> <msg...>        manager -> any pane (one path; alias: prompt -m)
+  to-master | to-slot | to-mini <msg...>    enqueue (daemon injects)
+  secretary start|dispatch|collect|status|watch …
+  mini list|spawn|prompt|done|dispatch-all
+  checkback start|list|cancel|cancel-all  (alias: patience)
+  test                          smoke: layout, providers, inbox, proxy
+  launch [--now] [targets…]
+  prompt | remind | flush
+  contexts [--json] | peek | ppa
+  switch | handoff | title | status
+  agent [target]              scoped can/cannot for this pane (profile role)
+  whoami [target] | cold-start [--inject] | seat init
+  room | chat | index | proxy | providers | manager | stack | profile show
 
-  ./tmux-zsign.sh            legacy harness only — session dev (separate tool)
-
-  --profile <dir> override (rare).
+  --profile <dir|yaml>   override config (default: .sm/ walk-up or bundled profile)
 `);
 }
 
@@ -138,12 +143,57 @@ async function main(): Promise<void> {
 
   if (!cmd) {
     const loaded = meshLoaded(profileArg);
-    printWhoami(loaded, sub || tail[0]);
-    return;
+    const { printStatusReport } = await import("./status-report.js");
+    const report = await printStatusReport(loaded, { json: rest.includes("--json") });
+    process.exit(report.ok ? 0 : 1);
   }
 
   if (cmd === "-h" || cmd === "--help" || cmd === "help") {
     usage(meshLoaded(profileArg));
+    return;
+  }
+
+  if (cmd === "update") {
+    const { runUpdate } = await import("./update.js");
+    const dryRun = rest.includes("--dry-run");
+    const migrate = rest.includes("--migrate");
+    const r = runUpdate({ profileArg, dryRun, migrate });
+    console.log(`OK: update dryRun=${dryRun} migrate=${migrate}`);
+    console.log(`  paths: ${r.pathsManifest}`);
+    for (const line of r.refreshed) console.log(`  refreshed: ${line}`);
+    for (const line of r.skipped) console.log(`  skipped (exists): ${line}`);
+    if (r.migrate) {
+      for (const line of r.migrate.copied) console.log(`  migrate copied: ${line}`);
+      for (const line of r.migrate.skipped) console.log(`  migrate skipped: ${line}`);
+    }
+    return;
+  }
+
+  if (cmd === "migrate-runtime") {
+    const { runMigrateRuntime } = await import("./migrate-runtime.js");
+    const dryRun = rest.includes("--dry-run");
+    const noSeats = rest.includes("--no-seats");
+    const r = runMigrateRuntime({ profileArg, dryRun, seats: !noSeats });
+    console.log(`OK: migrate-runtime dryRun=${dryRun}`);
+    for (const line of r.copied) console.log(`  copied: ${line}`);
+    for (const line of r.skipped) console.log(`  skipped: ${line}`);
+    for (const line of r.notes) console.log(`  note: ${line}`);
+    return;
+  }
+
+  if (cmd === "init") {
+    const force = rest.includes("--force");
+    const seatsIdx = rest.indexOf("--seats-root");
+    const seatsRoot =
+      seatsIdx >= 0 && rest[seatsIdx + 1] ? rest[seatsIdx + 1] : undefined;
+    const nameIdx = rest.indexOf("--name");
+    const name = nameIdx >= 0 && rest[nameIdx + 1] ? rest[nameIdx + 1] : undefined;
+    const r = runInit({ force, seatsRoot, name });
+    console.log(`OK: init ${r.smDir}`);
+    console.log(`  config: ${r.configPath}`);
+    console.log(`  created: ${r.created.length} file(s)`);
+    if (r.skipped.length) console.log(`  skipped (exists): ${r.skipped.length}`);
+    console.log("  next: npx seat-mesh session up  (or ./sm.sh if wired)");
     return;
   }
 
@@ -153,6 +203,11 @@ async function main(): Promise<void> {
     console.log(`name=${loaded.profile.name}`);
     console.log(`path=${loaded.profilePath}`);
     console.log(`workspace=${loaded.workspace}`);
+    console.log(`workspace_id=${loaded.workspaceId}`);
+    console.log(`session_name=${loaded.sessionName}`);
+    console.log(`daemon_port=${paths.daemonPort}`);
+    console.log(`data_root=${paths.dataRoot}`);
+    console.log(`daemon_dir=${paths.daemonDir}`);
     console.log(`seats_root=${paths.seatsRoot}`);
     console.log(`roles_dir=${paths.rolesDir}`);
     return;
@@ -162,7 +217,7 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     if (sub === "up") {
       sessionUp(loaded);
-      console.log(`OK: session '${loaded.profile.session.name}' created`);
+      console.log(`OK: session '${loaded.sessionName}' created`);
       printMeshInboxStatus(loaded);
       return;
     }
@@ -192,8 +247,8 @@ async function main(): Promise<void> {
     reloadMesh(loaded, { layout });
     console.log(
       layout
-        ? `OK: reload + relayout session ${loaded.profile.session.name}`
-        : `OK: reload (build + labels) session ${loaded.profile.session.name}`,
+        ? `OK: reload + relayout session ${loaded.sessionName}`
+        : `OK: reload (build + labels) session ${loaded.sessionName}`,
     );
     printMeshInboxStatus(loaded);
     return;
@@ -217,14 +272,17 @@ async function main(): Promise<void> {
       () => {
         assertRelayoutSafe(loaded, force);
         relayoutMeshSession(loaded, { skipMinisLeads: skipLeads, force });
+        const reg = createRegistryForProfile(loaded.profile);
+        const saved = saveMeshSession(loaded, reg);
         const grid = m?.grid ?? "4x2";
         const leadNote =
           skipLeads || !m
             ? ""
             : ` leads=[${Array.isArray(m.leads) ? m.leads.join(",") : "1,2"}]`;
         console.log(
-          `OK: relayout ${loaded.profile.session.name} (workers 3x2, minis ${grid}${leadNote})`,
+          `OK: relayout ${loaded.sessionName} (workers 3x2, minis ${grid}${leadNote})`,
         );
+        console.log(`OK: layout saved ${saved}`);
       },
     );
     return;
@@ -236,7 +294,16 @@ async function main(): Promise<void> {
       printPaneOpsList(loaded);
       return;
     }
-    console.error("usage: ops list");
+    if (sub === "clear") {
+      const n = clearPaneOpsQueue(loaded);
+      if (n < 0) {
+        console.error("pane-ops clear: inbox unavailable");
+        process.exit(1);
+      }
+      console.log(`OK: pane-ops cleared ${n} open`);
+      return;
+    }
+    console.error("usage: ops list|clear");
     process.exit(2);
   }
 
@@ -313,9 +380,27 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "peer") {
+    const loaded = meshLoaded(profileArg);
+    const target = sub;
+    const msg = tail.join(" ").trim();
+    if (!target || !msg) {
+      console.error("usage: peer <manager|secretary|slot-N|mini-N|pane> <msg...>");
+      process.exit(2);
+    }
+    try {
+      const { paneId, targetLabel } = enqueuePrompt(loaded, target, msg, { manager: true });
+      console.log(`OK: peer -> ${targetLabel} pane=${paneId} (daemon inject when idle)`);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (cmd === "mini") {
     const loaded = meshLoaded(profileArg);
-    const reg = createBuiltinRegistry(loaded.profile.providers);
+    const reg = createRegistryForProfile(loaded.profile);
     if (sub === "list" || !sub) {
       printMiniList(loaded);
       return;
@@ -397,18 +482,18 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "restart") {
-      const reg = createBuiltinRegistry(loaded.profile.providers);
+      const reg = createRegistryForProfile(loaded.profile);
       secretaryRestart(loaded, reg);
       saveMeshSession(loaded, reg);
       return;
     }
     if (sub === "dispatch") {
-      const reg = createBuiltinRegistry(loaded.profile.providers);
+      const reg = createRegistryForProfile(loaded.profile);
       secretaryDispatch(loaded, reg);
       return;
     }
     if (sub === "collect") {
-      const reg = createBuiltinRegistry(loaded.profile.providers);
+      const reg = createRegistryForProfile(loaded.profile);
       const send = rest.includes("--send");
       const nudge = rest.includes("--nudge");
       const digest = secretaryCollect(loaded, reg, { sendManager: send, nudgeOpen: nudge });
@@ -432,7 +517,7 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "supervise") {
-      const reg = createBuiltinRegistry(loaded.profile.providers);
+      const reg = createRegistryForProfile(loaded.profile);
       const action = (tail[0] ?? "status").toLowerCase();
       if (action === "on") {
         secretarySupervise(loaded, reg, "on", tail[1] ?? "5m");
@@ -451,9 +536,77 @@ async function main(): Promise<void> {
     process.exit(2);
   }
 
+  if (cmd === "peek") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const target = sub ?? "here";
+    const modeRaw = (tail[0] ?? "status").toLowerCase();
+    const mode = modeRaw === "full" ? "full" : "status";
+    try {
+      runPeek(loaded, reg, target, mode);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "ppa") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const ppaSub = sub ?? "perf-index";
+    if (ppaSub !== "perf-index" && ppaSub !== "index") {
+      console.error("usage: ppa [perf-index]");
+      process.exit(2);
+    }
+    try {
+      runPpa(loaded, reg);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (cmd === "contexts" || cmd === "seats") {
     const loaded = meshLoaded(profileArg);
     printSeatContexts(loaded, rest.includes("--json"));
+    return;
+  }
+
+  if (cmd === "cold-start" || cmd === "coldstart") {
+    const loaded = meshLoaded(profileArg);
+    const inject = rest.includes("--inject");
+    const force = rest.includes("--force");
+    const targetArg = sub && sub !== "--inject" ? sub : undefined;
+    const w = runWhoami(loaded, targetArg);
+    const miniMatch = targetArg?.match(/^mini-(\d+)$/);
+    const mini = miniMatch?.[1] ?? (w.role === "manager-mini" ? targetArg : undefined);
+    const target = targetArg ?? "here";
+    if (inject) {
+      const r = enqueueColdStart(loaded, target, {
+        mini: mini ?? null,
+        force,
+      });
+      console.log(
+        r.skipped
+          ? `OK: cold-start skipped (idempotent fingerprint=${r.fingerprint}) -> ${target}`
+          : `OK: cold-start enqueued fingerprint=${r.fingerprint} -> ${target}`,
+      );
+      return;
+    }
+    console.log(buildFullColdStartBrief(loaded, w, { mini: mini ?? null }));
+    return;
+  }
+
+  if (cmd === "seat" && sub === "init") {
+    const loaded = meshLoaded(profileArg);
+    const { created, ensured } = runSeatInit(loaded);
+    console.log(
+      `OK: seat init (ensured=${ensured.length} created=${created.length} — idempotent, never overwrites FOCUS/TASKS)`,
+    );
+    for (const p of created.slice(0, 12)) console.log(`  + ${p}`);
+    if (created.length > 12) console.log(`  ... +${created.length - 12} more`);
     return;
   }
 
@@ -467,7 +620,7 @@ async function main(): Promise<void> {
 
   if (cmd === "labels") {
     const loaded = meshLoaded(profileArg);
-    const session = loaded.profile.session.name;
+    const session = liveMeshSession(loaded);
     const layout = loaded.profile.layout;
     if (!layout) {
       console.error("profile missing layout");
@@ -486,20 +639,29 @@ async function main(): Promise<void> {
 
   if (cmd === "launch") {
     const loaded = meshLoaded(profileArg);
-    const targets = rest.filter((a) => a !== "--");
+    const rawArgs = [sub, ...tail].filter(
+      (a): a is string => Boolean(a) && a !== "--",
+    );
+    const launchNow = rawArgs.includes("--now");
+    const targets = rawArgs.filter((a) => a !== "--now");
     const label = targets.length ? targets.join(",") : "all";
+    const runLaunch = () => {
+      const results = launchSession(loaded, {
+        targets: targets.length ? targets : undefined,
+      });
+      printLaunchResults(results);
+      if (results.some((r) => r.status === "failed")) process.exit(1);
+    };
+    if (launchNow) {
+      runLaunch();
+      return;
+    }
     submitPaneOp(
       loaded,
       "launch",
       { targets: targets.length ? targets : undefined },
       `launch ${label}`,
-      () => {
-        const results = launchSession(loaded, {
-          targets: targets.length ? targets : undefined,
-        });
-        printLaunchResults(results);
-        if (results.some((r) => r.status === "failed")) process.exit(1);
-      },
+      runLaunch,
     );
     return;
   }
@@ -554,7 +716,7 @@ async function main(): Promise<void> {
 
   if (cmd === "flush") {
     const loaded = meshLoaded(profileArg);
-    const reg = createBuiltinRegistry(loaded.profile.providers);
+    const reg = createRegistryForProfile(loaded.profile);
     const target = sub ?? "all";
     if (!sub) {
       console.error("usage: flush <slot|all|manager|mini-N>");
@@ -567,7 +729,7 @@ async function main(): Promise<void> {
 
   if (cmd === "switch" || cmd === "handoff") {
     const loaded = meshLoaded(profileArg);
-    const reg = createBuiltinRegistry(loaded.profile.providers);
+    const reg = createRegistryForProfile(loaded.profile);
     const args = [sub, ...tail].filter(Boolean);
     if (args.length < 2) {
       console.error(
@@ -603,6 +765,13 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "report") {
+    const loaded = meshLoaded(profileArg);
+    const { printStatusReport } = await import("./status-report.js");
+    const report = await printStatusReport(loaded, { json: rest.includes("--json") });
+    process.exit(report.ok ? 0 : 1);
+  }
+
   if (cmd === "title") {
     const loaded = meshLoaded(profileArg);
     const [target, ...parts] = [sub, ...tail].filter(Boolean) as string[];
@@ -624,6 +793,13 @@ async function main(): Promise<void> {
     }
     setPaneStatus(loaded, target, parts.join(" "));
     console.log(`OK: status ${target}`);
+    return;
+  }
+
+  if (cmd === "agent") {
+    const loaded = meshLoaded(profileArg);
+    const w = runWhoami(loaded, sub || tail[0]);
+    printAgentCard(w);
     return;
   }
 
@@ -679,8 +855,15 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "reset") {
-      console.log("proxy reset: not implemented yet (phase 2b)");
-      process.exit(2);
+      const { spawnSync } = await import("node:child_process");
+      const path = await import("node:path");
+      const script = path.join(loaded.workspace, "scripts/oc-proxy-reset.sh");
+      const r = spawnSync("bash", [script], {
+        cwd: loaded.workspace,
+        encoding: "utf8",
+        stdio: "inherit",
+      });
+      process.exit(r.status ?? 1);
     }
     console.error("usage: proxy status|check|reset");
     process.exit(2);
@@ -688,13 +871,13 @@ async function main(): Promise<void> {
 
   if (cmd === "providers") {
     const loaded = meshLoaded(profileArg);
-    const reg = createBuiltinRegistry(loaded.profile.providers);
+    const reg = createRegistryForProfile(loaded.profile);
     if (sub === "list") {
       for (const p of reg.all()) console.log(p.id);
       return;
     }
     if (sub === "scan") {
-      const session = tail[0] ?? loaded.profile.session.name;
+      const session = tail[0] ?? liveMeshSession(loaded);
       const panes = listSessionPanes(session);
       if (!panes.length) {
         console.error(`no panes in session ${session} (tmux running?)`);
@@ -706,8 +889,8 @@ async function main(): Promise<void> {
         const prov = reg.detect(snap);
         const det = prov?.detect(snap);
         const state = prov?.composerState(snap) ?? { phase: "plain_shell" };
-        const slot = snap.options.mesh_slot || snap.options.zsign_slot || "-";
-        const ports = snap.options.mesh_ports || snap.options.zsign_ports || "-";
+        const slot = snap.options.mesh_slot || "-";
+        const ports = snap.options.mesh_ports || "-";
         console.log(
           `${paneId}\t${prov?.id ?? "?"}\t${det?.resumeId ?? "-"}\t${state.phase}${state.limitKind ? `:${state.limitKind}` : ""}\tslot=${slot}\tports=${ports}\t${snap.windowName}`,
         );
@@ -721,9 +904,28 @@ async function main(): Promise<void> {
   if (cmd === "manager") {
     const loaded = meshLoaded(profileArg);
     const w = runWhoami(loaded);
-    const isManager = w.role === "manager";
-    console.log(isManager ? "yes: master" : `no: role=${w.role}`);
+    const isManager = w.role === "manager" || w.role === "manager-2";
+    const label =
+      w.role === "manager-2"
+        ? "yes: manager-2"
+        : isManager
+          ? "yes: manager"
+          : `no: role=${w.role}`;
+    console.log(label);
     process.exit(isManager ? 0 : 1);
+  }
+
+  if (cmd === "base") {
+    const loaded = meshLoaded(profileArg);
+    if (sub === "ensure") {
+      const session = liveMeshSession(loaded);
+      const panes = ensureBaseLayout(loaded, session);
+      labelMeshSession(loaded, session);
+      console.log(`OK: base panes=${panes.length} columns=${loaded.profile.layout?.base.columns?.join("|") ?? "?"}`);
+      return;
+    }
+    console.error("usage: base ensure");
+    process.exit(2);
   }
 
   if (cmd === "stack" || cmd === "dc") {
@@ -739,7 +941,7 @@ async function main(): Promise<void> {
       cmd === "room"
         ? buildRoomCommands(getLoaded)
         : cmd === "contract"
-          ? buildContractCommands(getLoaded)
+          ? buildContractLockCommands(getLoaded)
           : buildChatCommands(getLoaded);
     if (!sub) {
       branch.outputHelp();
@@ -757,7 +959,7 @@ async function main(): Promise<void> {
 
   if (cmd === "save" || cmd === "auto") {
     const loaded = meshLoaded(profileArg);
-    const reg = createBuiltinRegistry(loaded.profile.providers);
+    const reg = createRegistryForProfile(loaded.profile);
     const file = saveMeshSession(loaded, reg);
     const m = loaded.profile.layout?.minis;
     const layoutNote = m

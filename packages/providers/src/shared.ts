@@ -25,12 +25,141 @@ export function extractUuid(cmd: string, flags: string[]): string | undefined {
   return undefined;
 }
 
+const OC_SESSION_ID_RE = /\bses_[A-Za-z0-9]+\b/;
+const OC_SESSION_ID_STRICT = /^ses_[A-Za-z0-9]+$/;
+
+export function isOpenCodeSessionId(id: string | null | undefined): id is string {
+  return Boolean(id && OC_SESSION_ID_STRICT.test(id.trim()));
+}
+
+/** Drop Claude/agent UUIDs and other junk stored in @mesh_oc_session by mistake. */
+export function normalizeOpenCodeSessionId(
+  id: string | null | undefined,
+): string | undefined {
+  const t = id?.trim();
+  return isOpenCodeSessionId(t) ? t : undefined;
+}
+
+/** OpenCode session ids from CLI flags (--session / -s) or scrollback. */
+export function extractOpenCodeSession(
+  cmd: string,
+  flags: string[] = ["--session", "-s"],
+): string | undefined {
+  for (const flag of flags) {
+    const esc = flag.replace(/-/g, "\\-");
+    const re = new RegExp(`${esc}[= ](ses_[A-Za-z0-9]+)`);
+    const m = cmd.match(re);
+    if (m?.[1]) return m[1];
+  }
+  const bare = cmd.match(OC_SESSION_ID_RE);
+  return bare?.[0];
+}
+
+export function scrapeOpenCodeSessionFromCapture(tail: string): string | undefined {
+  const hits = tail.match(new RegExp(OC_SESSION_ID_RE.source, "g"));
+  return hits?.[hits.length - 1];
+}
+
+export function paneStoredOpenCodeSession(
+  options: Record<string, string>,
+): string | undefined {
+  return normalizeOpenCodeSessionId(options.mesh_oc_session);
+}
+
+/** Best session id for `resume [id]` on a live OpenCode pane. Never returns Claude UUIDs. */
+export function resolveOpenCodeSessionForPane(pane: PaneSnapshot): string | null {
+  for (const cmd of cmdlines(pane)) {
+    const s = extractOpenCodeSession(cmd);
+    if (s) return s;
+  }
+  const stored = paneStoredOpenCodeSession(pane.options);
+  if (stored) return stored;
+  const fromCapture = scrapeOpenCodeSessionFromCapture(pane.captureTail);
+  if (fromCapture) return fromCapture;
+  return null;
+}
+
+export function formatOpenCodeResumeCommand(pane: PaneSnapshot): string | null {
+  const sid = resolveOpenCodeSessionForPane(pane);
+  return sid ? `resume [${sid}]` : null;
+}
+
+function bottomLines(text: string, n: number): string {
+  return text.split("\n").slice(-n).join("\n");
+}
+
+/** OpenCode composer draft above the Build auto footer (harness parity). */
+export function opencodeInputDraft(captureTail: string): string {
+  const b = bottomLines(captureTail, 14);
+  const lines = b.split("\n");
+  let footerIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (/Build\s+auto\s+·\s+Big Pickle\s+OpenCode Zen/i.test(lines[i]!)) {
+      footerIdx = i;
+      break;
+    }
+  }
+  if (footerIdx <= 0) return "";
+  const draftLines: string[] = [];
+  let passedBlank = false;
+  for (let i = footerIdx - 1; i >= 0; i--) {
+    const trimmed = lines[i]!.trim();
+    if (!trimmed) {
+      if (draftLines.length > 0) break;
+      passedBlank = true;
+      continue;
+    }
+    if (/^[^\x00-\x7f]+$/.test(trimmed) && !/\p{L}/u.test(trimmed)) {
+      if (draftLines.length > 0) break;
+      continue;
+    }
+    if (/^▣\s+Build\s+·/.test(trimmed)) {
+      if (draftLines.length > 0) break;
+      continue;
+    }
+    if (passedBlank) break;
+    draftLines.unshift(trimmed);
+  }
+  const draft = draftLines.join(" ").trim();
+  if (!draft || /Ask anything/i.test(draft)) return "";
+  return draft;
+}
+
+/** Cursor agent composer draft (leading arrow row only). */
+export function agentInputDraft(captureTail: string): string {
+  const b = bottomLines(captureTail, 14);
+  const drafts: string[] = [];
+  for (const line of b.split("\n")) {
+    if (!/^\s*\u2192(?:\s|$)/.test(line)) continue;
+    const after = line.replace(/^\s*\u2192\s*/, "").trim();
+    const cleaned = after.replace(/\s{2,}ctrl\+c to stop.*$/i, "").trim();
+    if (!cleaned) continue;
+    if (/^Add a follow-up$/i.test(cleaned)) continue;
+    if (/^[\u258e\u2502]/.test(cleaned)) continue;
+    if (/ctrl\+r to review/i.test(cleaned)) continue;
+    drafts.push(cleaned);
+  }
+  return drafts.join("\n");
+}
+
+/** Live unsent composer text for coord-pane settle gate. */
+export function coordComposerDraft(captureTail: string, providerId: string): string {
+  if (providerId === "opencode") return opencodeInputDraft(captureTail);
+  if (providerId === "cursor-agent") return agentInputDraft(captureTail);
+  return "";
+}
+
 const OC_LIMIT_RE =
-  /rate limit|usage limit|limit reached|too many requests/i;
+  /rate\s*limit|usage\s*limit|quota\s*exceed|hit your.*limit|limit reached|too many requests|\b429\b|free[ -]?tier.*limit|plan limit|OC-LIMIT|zen.*limit|session\s*(expired|limit|ended)|expired\s*session|provider\s*limit|free\s*usage\s*exceed|usage\s*exceeded|subscribe to go/i;
 const OC_CONNECT_RE =
-  /cannot connect to api|unable to connect|connection error|ECONNREFUSED/i;
+  /cannot\s+connect\s+to\s+api|unable\s+to\s+connect|service\s+unavailable|connection\s+error|ECONNREFUSED|socket\s+connection\s+was\s+closed/i;
 const CC_LIMIT_RE =
   /rate limit|usage limit|try again|quota/i;
+
+const OC_BUSY_RE =
+  /Thinking|Working|Running|⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|esc interrupt/i;
+const OC_COMPOSER_RE =
+  /Ask anything|Ask a question|Type a message|Send a message|What would you like/i;
 
 export function composerFromCapture(
   pane: PaneSnapshot,
@@ -41,13 +170,29 @@ export function composerFromCapture(
     return { phase: "plain_shell" };
   }
 
-  if (providerId === "opencode" && OC_CONNECT_RE.test(tail)) {
-    return { phase: "limit", limitKind: "oc-connect" };
+  if (providerId === "opencode") {
+    const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-8);
+    const bottom = bottomLines.join("\n");
+    const atComposer =
+      /ctrl\+p commands/i.test(bottom) || OC_COMPOSER_RE.test(bottom);
+    // Live composer wins over stale limit/Thinking lines left in scrollback after resume.
+    if (atComposer) {
+      const recentBusy =
+        /⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|esc interrupt/i.test(bottom) ||
+        bottomLines.slice(-3).some((l) => /^(Working|Running|Thinking)\b/.test(l.trim()));
+      if (!recentBusy) {
+        return { phase: "empty" };
+      }
+    }
+    const bottom28 = tail.split("\n").slice(-28).join("\n");
+    if (OC_CONNECT_RE.test(bottom28) && !OC_LIMIT_RE.test(bottom28)) {
+      return { phase: "limit", limitKind: "oc-connect" };
+    }
+    if (OC_LIMIT_RE.test(bottom28)) {
+      return { phase: "limit", limitKind: "oc-limit" };
+    }
   }
-  if (
-    (providerId === "opencode" || providerId === "claude") &&
-    OC_LIMIT_RE.test(tail)
-  ) {
+  if (providerId === "claude" && OC_LIMIT_RE.test(tail)) {
     return { phase: "limit", limitKind: "oc-limit" };
   }
   if (providerId === "claude" && CC_LIMIT_RE.test(tail)) {
@@ -72,14 +217,30 @@ export function composerFromCapture(
     return { phase: "afk" };
   }
 
-  // Composer draft heuristic: non-empty last lines without prompt submit
+  // Composer draft heuristic: only "typing" when a draft sits under a live prompt line
   const lines = tail.split("\n").filter((l) => l.trim());
   const last = lines.at(-1) ?? "";
-  if (last.length > 2 && !/^[❯›]/.test(last)) {
-    return { phase: "typing", draftFingerprint: last.slice(0, 80) };
+  const promptMatch = last.match(/^[❯›>](.+)/);
+  if (promptMatch && promptMatch[1]!.trim().length > 0) {
+    return { phase: "typing", draftFingerprint: promptMatch[1]!.trim().slice(0, 80) };
   }
 
   return { phase: "empty" };
+}
+
+/** Default: empty or AFK composer (cursor/claude/kiro). */
+export function defaultComposerReady(
+  pane: PaneSnapshot,
+  providerId: string,
+): boolean {
+  const state = composerFromCapture(pane, providerId);
+  return state.phase === "empty" || state.phase === "afk";
+}
+
+/** OpenCode splash must show composer prompt before paste. */
+export function opencodeComposerReady(pane: PaneSnapshot): boolean {
+  const state = composerFromCapture(pane, "opencode");
+  return state.phase === "empty" || state.phase === "afk";
 }
 
 const MANAGER_PREFIX_RE = /^\[agent-manager[^\]]*\]\s*/;

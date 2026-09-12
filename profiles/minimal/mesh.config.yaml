@@ -1,5 +1,5 @@
 name: minimal
-workspace: ../..   # seat-mesh repo root when demo; override per checkout
+workspace: ../..   # services/seat-mesh package root when demo; override per checkout
 
 session:
   name: dev
@@ -14,7 +14,8 @@ state:
   agentsJson: tmux-main-agents.json
 
 daemon:
-  port: 3099
+  port: 31671
+  portScope: profile
   managerPromptPrefix: "[agent-manager]"
 
 ports:

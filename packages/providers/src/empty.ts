@@ -27,6 +27,10 @@ export const emptyProvider: AgentProvider = {
     return { phase: "plain_shell" };
   },
 
+  composerReady() {
+    return false;
+  },
+
   injectPlan(): InjectPlan {
     return {
       prefix: "",

@@ -3,7 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadProfile } from "../profile.js";
-import type { LoadedProfile } from "../profile.js";
+import {
+  resolveSessionName,
+  workspaceScopeId,
+  type LoadedProfile,
+} from "../profile.js";
 import { stackConfig } from "./config.js";
 import { resolveStackScript } from "./exec.js";
 
@@ -40,15 +44,22 @@ describe("resolveStackScript", () => {
     fs.writeFileSync(script, "#!/usr/bin/env bash\nexit 0\n", "utf8");
     fs.chmodSync(script, 0o755);
 
+    const profile = {
+      name: "t",
+      workspace: ".",
+      session: { name: "mesh" },
+      seats: { root: "tasks/agent-seats" },
+      state: { meshAgentsJson: "mesh-agents.json" },
+      roles: { dir: "roles" },
+      stack: { command: "./dc.sh" },
+    } as import("../schema/profile.js").MeshProfile;
     const loaded: LoadedProfile = {
-      profile: {
-        name: "t",
-        workspace: ".",
-        stack: { command: "./dc.sh" },
-      } as import("../schema/profile.js").MeshProfile,
+      profile,
       profileDir: tmp,
       profilePath: path.join(tmp, "mesh.config.yaml"),
       workspace: tmp,
+      workspaceId: workspaceScopeId(tmp),
+      sessionName: resolveSessionName(profile, tmp),
     };
     expect(resolveStackScript(loaded)).toBe(script);
   });

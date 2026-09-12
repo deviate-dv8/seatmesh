@@ -86,12 +86,21 @@ export type MiniSlot = z.infer<typeof MiniSlotSchema>;
 
 // -- Conventions (defaults for secretary / mini CLI type) ---------------
 
+export const CoordSyncPolicySchema = z
+  .object({
+    reload: z.boolean().optional(),
+    attach: z.boolean().optional(),
+  })
+  .optional();
+
 export const ConventionsSchema = z
   .object({
     secretaryDefaultCli: CliTypeSchema.default("opencode"),
     miniDefaultCli: CliTypeSchema.default("opencode"),
     /** Skip empty seats when launching. */
     launchSkipsEmpty: z.boolean().default(true),
+    /** Overrides profile layout.base.coordSync when set in mesh-agents.json. */
+    coordSync: CoordSyncPolicySchema,
   })
   .default({});
 
@@ -104,9 +113,34 @@ export const SavedMinisLayoutSchema = z.object({
 
 export type SavedMinisLayout = z.infer<typeof SavedMinisLayoutSchema>;
 
-export const SavedLayoutSchema = z.object({
-  minis: SavedMinisLayoutSchema.optional(),
+export const SavedNvimLayoutSchema = z.object({
+  enabled: z.boolean(),
 });
+
+export const SavedWorkersLayoutSchema = z.object({
+  enabled: z.boolean(),
+  grid: z.literal("3x2").default("3x2"),
+  slots: z.number().int().min(1).max(12).optional(),
+});
+
+export const SavedMinisLayoutSchemaWithEnabled = SavedMinisLayoutSchema.extend({
+  enabled: z.boolean().optional(),
+});
+
+/** Persisted base-window layout — extendable; unknown keys preserved via passthrough. */
+/** Extendable base layout patch (unknown keys preserved). */
+export const SavedBaseLayoutSchema = z.object({}).passthrough();
+
+export type SavedBaseLayout = z.infer<typeof SavedBaseLayoutSchema>;
+
+export const SavedLayoutSchema = z
+  .object({
+    nvim: SavedNvimLayoutSchema.optional(),
+    workers: SavedWorkersLayoutSchema.optional(),
+    minis: SavedMinisLayoutSchemaWithEnabled.optional(),
+    base: SavedBaseLayoutSchema.optional(),
+  })
+  .passthrough();
 
 export type SavedLayout = z.infer<typeof SavedLayoutSchema>;
 
@@ -120,6 +154,7 @@ export const MeshAgentsSchema = z.object({
   /** Workspace root. */
   workdir: z.string().min(1),
   manager: ManagerSlotSchema.optional(),
+  manager2: ManagerSlotSchema.optional(),
   secretary: SecretarySlotSchema.optional(),
   workers: z.array(WorkerSlotSchema).default([]),
   minis: z.array(MiniSlotSchema).default([]),

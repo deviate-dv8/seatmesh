@@ -6,6 +6,45 @@ import {
 } from "@seat-mesh/core";
 import { tmux } from "../lib/tmux-run.js";
 
+/**
+ * Resolve mini-N pane by @mesh_mini label (survives 4x2 lead swaps).
+ * Falls back to pane_index N-1 when label missing.
+ */
+export function resolveMiniPaneId(
+  session: string,
+  window: string,
+  n: number,
+): string | null {
+  const target = `${session}:${window}`;
+  const out = tmux([
+    "list-panes",
+    "-t",
+    target,
+    "-F",
+    "#{@mesh_mini}\t#{pane_index}\t#{pane_id}",
+  ]).out;
+  if (!out) return null;
+  const rows = out
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [mini, idx, paneId] = line.split("\t");
+      return {
+        mini: mini ?? "",
+        idx: Number.parseInt(idx ?? "0", 10),
+        paneId: paneId ?? "",
+      };
+    })
+    .filter((r) => r.paneId.startsWith("%"));
+
+  const labeled = rows.find((r) => r.mini === String(n));
+  if (labeled) return labeled.paneId;
+
+  const byIndex = rows.find((r) => r.idx === n - 1);
+  return byIndex?.paneId ?? null;
+}
+
 /** Pane ids in a single window, sorted by pane_index (stable slot order). */
 export function listWindowPaneIds(session: string, window: string): string[] {
   const target = `${session}:${window}`;
@@ -307,6 +346,7 @@ export function applyMinisLeadsFromProfile(
 export function swapMinisLeadsLeft(session: string, window: string): void {
   applyMinisLeadsFromProfile(session, window, {
     window,
+    enabled: true,
     grid: "4x2",
     max: 8,
     leads: [1, 2],

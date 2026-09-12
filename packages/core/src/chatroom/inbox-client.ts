@@ -116,3 +116,16 @@ export async function cancelCheckback(
     .post(`patience/${encoded}/cancel`)
     .json<CancelCheckbackResult>();
 }
+
+export interface CancelAllCheckbacksResult {
+  ok: boolean;
+  cancelled: number;
+}
+
+export async function cancelAllCheckbacks(
+  inboxBase: string,
+): Promise<CancelAllCheckbacksResult> {
+  return inboxClient(inboxBase)
+    .post("patience/cancel-all")
+    .json<CancelAllCheckbacksResult>();
+}

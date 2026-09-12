@@ -27,5 +27,8 @@
     "@types/ms": "^2.1.0",
     "@types/ndjson": "^2.0.4",
     "@types/proper-lockfile": "^4.1.4"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

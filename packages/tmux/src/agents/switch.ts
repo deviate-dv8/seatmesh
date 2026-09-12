@@ -2,10 +2,11 @@ import { spawnSync } from "node:child_process";
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import { portsForSlot } from "@seat-mesh/core";
 import { buildLaunchCmd } from "./agents-state.js";
-import { focusBriefForPane } from "../inject/focus-brief.js";
 import { withPaneInputEnabled } from "../inject/inject.js";
-import { sendLaunch } from "./launch.js";
-import { injectPromptDirect } from "../inject/prompt.js";
+import { pasteLaunchCmd } from "./launch.js";
+import { isOpenCodeLaunch, verifyOpenCodeAfterPaste } from "./launch-verify.js";
+import { enqueueColdStart } from "../seats/cold-start-inject.js";
+import { invalidatePaneContext } from "../seats/cold-start-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { tmux } from "../lib/tmux-run.js";
@@ -40,7 +41,7 @@ export function runSwitch(
   newTypeRaw: string,
   opts: SwitchOptions = {},
 ): void {
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const newType = normalizeType(newTypeRaw);
   if (!CLI_TYPES.has(newType)) {
     throw new Error(`bad type: ${newTypeRaw} (want agent|kiro|claude|opencode|empty)`);
@@ -60,7 +61,7 @@ export function runSwitch(
     throw new Error("refused: do not leave manager empty");
   }
 
-  const resolved = resolvePaneTarget(target, session);
+  const resolved = resolvePaneTarget(target, loaded);
   if ("error" in resolved) throw new Error(resolved.error);
 
   const { paneId, row } = resolved;
@@ -115,36 +116,46 @@ export function runSwitch(
 
   const cmd = buildLaunchCmd(newType, loaded.workspace, keepRid);
   if (!cmd) throw new Error(`no launch command for type ${newType}`);
-  sendLaunch(paneId, cmd);
-  sleepMs(newType === "opencode" ? 3000 : 1500);
-
-  const prefix = loaded.profile.daemon.managerPromptPrefix;
-  const stamp =
-    row.role === "manager"
-      ? ""
-      : `slot-${slot} ports ${ports} - `;
-  let msg = `${prefix} ${stamp}HANDOFF: replacement CLI (was ${oldType}, now ${newType}).`;
-  if (keepRid) msg += ` Resumed session id ${keepRid}.`;
-  else msg += ` Fresh session.`;
-  if (row.role === "manager") {
-    msg +=
-      " You are MASTER manager. Docs: .agent/manager-agent.md .agent/manager-minis.md";
+  pasteLaunchCmd(paneId, cmd);
+  if (isOpenCodeLaunch(newType, cmd)) {
+    const verified = verifyOpenCodeAfterPaste(loaded, registry, paneId, () =>
+      pasteLaunchCmd(paneId, cmd),
+    );
+    if (!verified.ok) {
+      throw new Error(`switch ${target}: ${verified.reason}`);
+    }
   } else {
-    msg += ` Slot ${slot}. Ports ${ports} (paired only).`;
+    sleepMs(1500);
   }
-  if (opts.reason) msg += ` Reason: ${opts.reason}.`;
-  msg += " Continue from seat FOCUS below. .agent/agent-seats.md .agent/permissions.md.";
-  msg += `\n\n--- seat FOCUS ---\n${focusBriefForPane(loaded, row)}\n--- end FOCUS ---`;
 
+  const targetLabel =
+    row.role === "manager-mini" && row.mini
+      ? `mini-${row.mini}`
+      : row.role === "worker" && row.slot
+        ? `slot-${row.slot}`
+        : row.role === "manager"
+            ? "manager"
+            : row.role === "secretary"
+              ? "secretary"
+              : target;
+
+  invalidatePaneContext(loaded, paneId, targetLabel);
   try {
-    injectPromptDirect(loaded, registry, paneId, msg, { prefix: "" });
-    console.log(`injected HANDOFF + FOCUS into ${paneId}`);
+    const cs = enqueueColdStart(loaded, target, {
+      force: true,
+      mini: row.mini ?? undefined,
+    });
+    console.log(
+      cs.skipped
+        ? `cold-start skipped (fingerprint=${cs.fingerprint}) — inbox holds until hub changes`
+        : `cold-start enqueued fingerprint=${cs.fingerprint} — inbox held until delivered`,
+    );
   } catch (e) {
-    console.error(`WARN: HANDOFF not injected: ${(e as Error).message}`);
+    console.error(`WARN: cold-start enqueue failed: ${(e as Error).message}`);
   }
 
   if (row.role === "manager") {
-    tmux(["select-pane", "-t", paneId, "-T", "master"]);
+    tmux(["select-pane", "-t", paneId, "-T", "manager"]);
   }
   tmux([
     "set-option",

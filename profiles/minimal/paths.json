@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "profileDir": "profiles/minimal",
+  "workspace": ".",
+  "pathsScope": "profile",
+  "paths": {
+    "dataRoot": "profiles/minimal/runtime",
+    "daemonDir": "profiles/minimal/runtime/daemon",
+    "seatsRoot": "profiles/minimal/tasks/agent-seats",
+    "meshAgentsJson": "profiles/minimal/mesh-agents.json",
+    "agentsJson": "profiles/minimal/tmux-main-agents.json",
+    "chatRoomsRoot": "profiles/minimal/chat-rooms",
+    "chatFilesRoot": "profiles/minimal/chat-files",
+    "rolesDir": "profiles/minimal/roles",
+    "contractsDir": "profiles/minimal/contracts",
+    "sqlitePath": "profiles/minimal/runtime/mesh.sqlite",
+    "storageBackend": "sqlite"
+  }
+}

@@ -1,31 +1,45 @@
 #!/usr/bin/env node
-/**
- * seat-mesh inbox daemon — TypeScript only. Does NOT use scripts/inbox-server.mjs.
- * Default port 3100 (harness legacy inbox stays on 3099 if running).
- */
+/** seat-mesh inbox daemon — sole pane inject consumer for mesh sessions. */
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { loadProfile } from "@seat-mesh/core";
-import { createBuiltinRegistry } from "@seat-mesh/providers";
+import {
+  loadProfile,
+  meshRuntimePaths,
+  resolveDaemonPort,
+  resolveUxConfig,
+} from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
   capturePaneSnapshot,
   listMeshMonitorPanes,
   listMeshWorkers,
   listMeshMinis,
   meshSecretaryPane,
+  resolveLiveTmuxSession,
+  saveMeshSession,
 } from "@seat-mesh/tmux";
+import { createQueueStore } from "./create-queue-store.js";
+import type { CheckbackRow } from "./jsonl-store.js";
 import {
-  startBullmqRuntime,
-  enqueueDrainTick,
-  enqueueInboxRow,
-  enqueuePeerRow,
-  type BullmqRuntime,
-} from "./bullmq-runtime.js";
-import { JsonlStore, type CheckbackRow } from "./jsonl-store.js";
-import { orchestratorDrainTick, type MeshOrchestratorCtx } from "./mesh-orchestrator.js";
+  orchestratorDrainTickAsync,
+  type MeshOrchestratorCtx,
+} from "./mesh-orchestrator.js";
+import { repaintMeshPaneBorder } from "./border-paint.js";
+import {
+  clearOcLimitBannerForPane,
+  maybeEndRateLimitEpisode,
+  newConnectivityRecoveryState,
+  pollConnectivityRecovery,
+} from "./connectivity-recovery.js";
+import {
+  notifyResumeWave,
+  resumeAllOpenCodePanes,
+  type ResumeWaveMeta,
+} from "./oc-resume.js";
+import { armResumeAckWave, pollResumeAcks } from "./oc-resume-ack.js";
 import {
   drainPaneOpsOnce,
   enqueuePaneOp,
@@ -72,27 +86,42 @@ async function main(): Promise<void> {
   const workersWindow = meshLayout.workers.window;
   const minisWindow = meshLayout.minis.window;
 
-  const session = profile.session.name;
-  const port = profile.daemon?.port ?? 3100;
+  const session = resolveLiveTmuxSession(loaded);
+  const port = resolveDaemonPort(profile, loaded.workspace);
   const pollMs = profile.daemon?.pollMs ?? 4000;
-  const redisUrl = profile.orchestrator?.redisUrl ?? "redis://127.0.0.1:6379";
+  const autoScrapeMs = profile.state.autoScrapeIntervalMs ?? 600_000;
+  let lastAutoScrapeAt = 0;
   const workspace = loaded.workspace;
-  const stateDir = path.join(workspace, "tasks/seat-mesh/daemon");
-  const metaPath = path.join(stateDir, "mesh-inbox.json");
-  const logPath = path.join(stateDir, "mesh-inbox.log");
+  const rt = meshRuntimePaths(loaded);
+  const stateDir = rt.daemonDir;
+  const metaPath = rt.meshInboxMeta;
+  const logPath = rt.meshInboxLog;
+  fs.mkdirSync(stateDir, { recursive: true });
 
-  const store = new JsonlStore(stateDir);
-  const registry = createBuiltinRegistry(profile.providers);
-  const ocLimited = new Set<string>();
-  let monitorPanes: Array<{ paneId: string; label: string }> = [];
-  let monitorPaneCursor = 0;
+  function log(line: string): void {
+    const row = `${new Date().toISOString()} ${line}\n`;
+    fs.appendFileSync(logPath, row);
+  }
+
+  const store = createQueueStore(loaded, log);
+  const registry = createRegistryForProfile(profile);
+  const uxResolved = profile.ux !== undefined ? resolveUxConfig(profile.ux) : null;
+  const connectivity = newConnectivityRecoveryState();
+  const ocLimited = connectivity.ocLimited;
   let pollBusy = false;
   let paneOpBusy = false;
-  let bullmq: BullmqRuntime | null = null;
   let healthSnap = {
     workerPanes: 0,
     miniPanes: 0,
     secretaryPane: null as string | null,
+    updatedAt: 0,
+  };
+  /** Cached queue counts — /health must not parse JSONL on every curl (event-loop wedge). */
+  let queueSnap = {
+    checkbackActive: 0,
+    inboxUnresolved: 0,
+    peerUnsent: 0,
+    paneOpsPending: 0,
     updatedAt: 0,
   };
 
@@ -105,9 +134,14 @@ async function main(): Promise<void> {
     };
   }
 
-  function log(line: string): void {
-    const row = `${new Date().toISOString()} ${line}\n`;
-    fs.appendFileSync(logPath, row);
+  function refreshQueueSnap(): void {
+    queueSnap = {
+      checkbackActive: store.readCheckbacks().filter((r) => r.status === "active").length,
+      inboxUnresolved: store.readInbox().filter((r) => !r.resolved).length,
+      peerUnsent: store.readPeer().filter((r) => !r.sent).length,
+      paneOpsPending: store.countPaneOpsPending(),
+      updatedAt: Date.now(),
+    };
   }
 
   const paneOpsCtx: PaneOpsDrainCtx = {
@@ -131,8 +165,13 @@ async function main(): Promise<void> {
     minisWindow,
     log,
     ocLimitedPaneIds: ocLimited,
+    proxyDownActive: connectivity.proxyDownActive,
     paneOps: paneOpsCtx,
   };
+
+  function refreshOrchConnectivity(): void {
+    orchCtx.proxyDownActive = connectivity.proxyDownActive;
+  }
 
   function drainPaneOpsChain(): void {
     for (let i = 0; i < 12; i++) {
@@ -141,113 +180,62 @@ async function main(): Promise<void> {
   }
 
   async function runDrain(): Promise<void> {
-    orchestratorDrainTick(orchCtx);
+    await orchestratorDrainTickAsync(orchCtx);
   }
 
-  bullmq = await startBullmqRuntime(
-    redisUrl,
-    async (data) => {
-      if (data.op === "drain-tick" || data.op === "inbox-row" || data.op === "peer-row") {
-        await runDrain();
-      }
-    },
-    log,
-  );
+  let drainCoalesce = false;
 
   function scheduleDrain(): void {
-    if (bullmq) {
-      void enqueueDrainTick(bullmq.injectQueue).catch((e) => {
-        log(`enqueue drain-tick error ${(e as Error).message} — poll fallback`);
-        runDrain();
-      });
-    } else {
-      runDrain();
-    }
+    runDrainCoalesced();
   }
 
-  async function enqueueAfterAppend(kind: "inbox" | "peer", rowId: string): Promise<void> {
-    if (!bullmq) {
-      scheduleDrain();
+  /** Without BullMQ, coalesce burst enqueues (room-fanout) so /health stays responsive. */
+  function runDrainCoalesced(onDone?: () => void): void {
+    if (drainCoalesce) {
+      onDone?.();
       return;
     }
-    try {
-      if (kind === "inbox") await enqueueInboxRow(bullmq.injectQueue, rowId);
-      else await enqueuePeerRow(bullmq.injectQueue, rowId);
-    } catch (e) {
-      log(`enqueue ${kind}-row error ${(e as Error).message} — poll fallback`);
-      scheduleDrain();
-    }
+    drainCoalesce = true;
+    setImmediate(() => {
+      void runDrain().finally(() => {
+        drainCoalesce = false;
+        onDone?.();
+      });
+    });
   }
 
-  function runCpeProxyUp(): void {
-    const sh = path.join(workspace, "scripts/cpe-proxy-up.sh");
-    if (!fs.existsSync(sh)) return;
-    spawnSync("bash", [sh], { cwd: workspace, stdio: "ignore" });
+  async function enqueueAfterAppend(_kind: "inbox" | "peer", _rowId: string): Promise<void> {
+    scheduleDrain();
   }
 
-  function resumeOpenCodePanes(): void {
-    for (const { paneId } of listMeshMonitorPanes(
+  function resumeOpenCodePanes(reason = "recovery", meta?: ResumeWaveMeta): void {
+    const panes = listMeshMonitorPanes(
       session,
       baseWindow,
       workersWindow,
       minisWindow,
-    )) {
-      const snap = capturePaneSnapshot(paneId);
-      if (!snap) continue;
-      const prov = registry.detect(snap);
-      if (prov?.id !== "opencode") continue;
-      spawnSync("tmux", ["send-keys", "-t", paneId, "Escape"], { encoding: "utf8" });
-      spawnSync("tmux", ["send-keys", "-t", paneId, "resume"], { encoding: "utf8" });
-      spawnSync("tmux", ["send-keys", "-t", paneId, "Enter"], { encoding: "utf8" });
+    ).map((p) => p.paneId);
+    const { sent, total, sentPaneIds } = resumeAllOpenCodePanes(panes, registry, log);
+    log(`OC-RESUME wave (${reason}) sent=${sent}/${total}`);
+    notifyResumeWave(workspace, reason, sent, total, meta);
+    if (sent > 0) {
+      armResumeAckWave(sentPaneIds, reason);
     }
-  }
-
-  function refreshMonitorPanes(): void {
-    monitorPanes = listMeshMonitorPanes(session, baseWindow, workersWindow, minisWindow);
-    if (monitorPaneCursor >= monitorPanes.length) monitorPaneCursor = 0;
   }
 
   function pollOcLimitsTick(): void {
-    if (!monitorPanes.length) refreshMonitorPanes();
-    if (!monitorPanes.length) return;
-
-    const batch = Math.min(2, monitorPanes.length);
-    let anyLimit = false;
-    for (let i = 0; i < batch; i++) {
-      const idx = (monitorPaneCursor + i) % monitorPanes.length;
-      const { paneId, label } = monitorPanes[idx];
-      const snap = capturePaneSnapshot(paneId);
-      if (!snap) continue;
-      const prov = registry.detect(snap);
-      if (prov?.id !== "opencode") continue;
-      const state = prov.composerState(snap);
-      const limited = state.phase === "limit";
-      if (!limited) {
-        ocLimited.delete(paneId);
-        continue;
-      }
-      anyLimit = true;
-      const rising = !ocLimited.has(paneId);
-      ocLimited.add(paneId);
-      if (rising) {
-        log(`OC-LIMIT rising edge ${label} ${paneId} kind=${state.limitKind ?? "?"}`);
-      }
-      spawnSync("tmux", [
-        "set-option",
-        "-p",
-        "-t",
-        paneId,
-        "@mesh_status",
-        `OC-LIMIT:${state.limitKind ?? "limit"}`,
-      ]);
-    }
-    monitorPaneCursor = (monitorPaneCursor + batch) % monitorPanes.length;
-    if (monitorPaneCursor === 0) refreshMonitorPanes();
-
-    if (anyLimit || ocLimited.size > 0) {
-      runCpeProxyUp();
-      if (anyLimit) resumeOpenCodePanes();
-    }
+    pollConnectivityRecovery({
+      loaded,
+      registry,
+      workspace,
+      session,
+      baseWindow,
+      workersWindow,
+      minisWindow,
+      state: connectivity,
+      log,
+      resumeOpenCodePanes,
+    });
   }
 
   const server = http.createServer(async (req, res) => {
@@ -260,16 +248,18 @@ async function main(): Promise<void> {
           session,
           port,
           pid: process.pid,
-          bullmq: Boolean(bullmq),
-          redisUrl,
+          storage: rt.storageBackend,
           workerPanes: healthSnap.workerPanes,
           miniPanes: healthSnap.miniPanes,
           secretaryPane: healthSnap.secretaryPane,
           ocLimitActive: ocLimited.size,
-          checkbackActive: store.readCheckbacks().filter((r) => r.status === "active").length,
-          inboxUnresolved: store.readInbox().filter((r) => !r.resolved).length,
-          peerUnsent: store.readPeer().filter((r) => !r.sent).length,
-          paneOpsPending: store.countPaneOpsPending(),
+          proxyDownActive: connectivity.proxyDownActive,
+          connectivityRecovery: connectivity.recoveryRunning,
+          checkbackActive: queueSnap.checkbackActive,
+          inboxUnresolved: queueSnap.inboxUnresolved,
+          peerUnsent: queueSnap.peerUnsent,
+          paneOpsPending: queueSnap.paneOpsPending,
+          queueSnapAgeMs: Date.now() - queueSnap.updatedAt,
           paneOpBusy,
           stateDir,
         });
@@ -315,10 +305,19 @@ async function main(): Promise<void> {
         return json(res, 200, { entries: rows });
       }
 
+      if (req.method === "POST" && url.pathname === "/patience/cancel-all") {
+        const n = store.cancelAllCheckbacks();
+        log(`checkback cancel-all n=${n}`);
+        return json(res, 200, { ok: true, cancelled: n });
+      }
+
       if (req.method === "POST" && url.pathname === "/patience") {
         const raw = await readBody(req);
         const body = JSON.parse(raw || "{}") as Partial<CheckbackRow>;
         const now = new Date().toISOString();
+        if (body.ownerPane && body.expect) {
+          store.cancelCheckbacksForPaneExpect(body.ownerPane, body.expect);
+        }
         const row: CheckbackRow = {
           id: String(body.id ?? `cb-${Date.now()}`),
           kind: String(body.kind ?? "checkback"),
@@ -339,8 +338,18 @@ async function main(): Promise<void> {
       const cancelMatch = /^\/patience\/([^/]+)\/cancel$/.exec(url.pathname);
       if (req.method === "POST" && cancelMatch) {
         const id = decodeURIComponent(cancelMatch[1]);
+        if (id === "cancel-all") {
+          const n = store.cancelAllCheckbacks();
+          return json(res, 200, { ok: true, cancelled: n });
+        }
         store.cancelCheckback(id);
         return json(res, 200, { ok: true, cancelled: id });
+      }
+
+      if (req.method === "POST" && url.pathname === "/pane-ops/clear") {
+        const n = store.clearPaneOps();
+        log(`pane-ops clear n=${n}`);
+        return json(res, 200, { ok: true, cleared: n });
       }
 
       if (req.method === "POST" && url.pathname === "/to-peer") {
@@ -350,7 +359,10 @@ async function main(): Promise<void> {
         const targetPane = String(body.targetPane ?? "").trim();
         const kindRaw = String(body.kind ?? "to-slot");
         const kind: import("./jsonl-store.js").PeerKind =
-          kindRaw === "to-mini" || kindRaw === "prompt" || kindRaw === "remind"
+          kindRaw === "to-mini" ||
+          kindRaw === "prompt" ||
+          kindRaw === "remind" ||
+          kindRaw === "room"
             ? kindRaw
             : "to-slot";
         if (!msg || !targetPane.startsWith("%")) {
@@ -363,6 +375,8 @@ async function main(): Promise<void> {
           kind,
           fromSlot: String(body.fromSlot ?? "?"),
           fromPorts: body.fromPorts != null ? String(body.fromPorts) : null,
+          roomSlug: body.roomSlug != null ? String(body.roomSlug) : null,
+          fromAgent: body.fromAgent != null ? String(body.fromAgent) : null,
           targetPane,
           targetLabel: String(body.targetLabel ?? targetPane),
           msg,
@@ -372,6 +386,68 @@ async function main(): Promise<void> {
         log(`TO-PEER ${kind} from=slot-${row.fromSlot} -> ${row.targetLabel}`);
         await enqueueAfterAppend("peer", row.id);
         return json(res, 200, { ok: true, entry: row });
+      }
+
+      if (req.method === "POST" && url.pathname === "/room-fanout") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          msg?: string;
+          fromSlot?: string;
+          fromPorts?: string | null;
+          roomSlug?: string | null;
+          fromAgent?: string | null;
+          excludePane?: string;
+          targets?: { targetPane?: string; targetLabel?: string; msg?: string }[];
+        };
+        const defaultMsg = String(body.msg ?? "").trim();
+        const exclude = String(body.excludePane ?? "").trim();
+        const now = new Date().toISOString();
+        const rows: import("./jsonl-store.js").PeerRow[] = [];
+        for (const t of body.targets ?? []) {
+          const targetPane = String(t.targetPane ?? "").trim();
+          const rowMsg = String(t.msg ?? defaultMsg).trim();
+          if (!targetPane.startsWith("%")) continue;
+          if (!rowMsg) continue;
+          if (exclude && targetPane === exclude) continue;
+          rows.push({
+            id: crypto.randomUUID(),
+            at: now,
+            kind: "room",
+            fromSlot: String(body.fromSlot ?? "?"),
+            fromPorts: body.fromPorts != null ? String(body.fromPorts) : null,
+            roomSlug: body.roomSlug != null ? String(body.roomSlug) : null,
+            fromAgent: body.fromAgent != null ? String(body.fromAgent) : null,
+            targetPane,
+            targetLabel: String(t.targetLabel ?? targetPane),
+            msg: rowMsg,
+            sent: false,
+          });
+        }
+        if (!rows.length) {
+          return json(res, 200, { ok: true, enqueued: 0, skipped: (body.targets ?? []).length });
+        }
+        store.appendPeers(rows);
+        log(`ROOM-FANOUT from=${body.fromSlot ?? "?"} targets=${rows.length}`);
+        scheduleDrain();
+        return json(res, 200, { ok: true, enqueued: rows.length });
+      }
+
+      if (req.method === "GET" && url.pathname === "/inbox") {
+        const all = url.searchParams.get("all") === "1";
+        let rows = store.readInbox();
+        if (!all) rows = rows.filter((r) => !r.resolved);
+        return json(res, 200, { ok: true, entries: rows, count: rows.length });
+      }
+
+      if (req.method === "POST" && url.pathname === "/inbox/resolve") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { id?: string; all?: boolean };
+        const result = store.resolveInbox({
+          id: body.id != null ? String(body.id) : undefined,
+          all: body.all === true,
+        });
+        log(`INBOX resolve count=${result.resolved} ids=${result.ids.map((i) => i.slice(0, 8)).join(",")}`);
+        return json(res, 200, { ok: true, ...result });
       }
 
       if (req.method === "POST" && url.pathname === "/to-master") {
@@ -409,48 +485,112 @@ async function main(): Promise<void> {
     }
   });
 
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    log(`listen error ${err.code ?? "?"} ${err.message}`);
+    console.error(`mesh-inbox: listen failed ${err.message}`);
+    process.exit(1);
+  });
+
   server.listen(port, "127.0.0.1", () => {
-    fs.writeFileSync(
-      metaPath,
-      JSON.stringify(
-        {
-          pid: process.pid,
-          port,
-          session,
-          bullmq: Boolean(bullmq),
-          redisUrl,
-          startedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      ) + "\n",
-    );
-    log(`listening :${port} session=${session} bullmq=${Boolean(bullmq)}`);
+    if (process.env.MESH_INBOX_SUPERVISED !== "1") {
+      fs.writeFileSync(
+        metaPath,
+        JSON.stringify(
+          {
+            pid: process.pid,
+            port,
+            session,
+            storage: rt.storageBackend,
+            sqlitePath: rt.sqlitePath,
+            startedAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        ) + "\n",
+      );
+    }
+    log(`listening :${port} session=${session} storage=${rt.storageBackend}`);
     console.log(
-      `mesh-inbox: listening http://127.0.0.1:${port} session=${session} bullmq=${Boolean(bullmq)}`,
+      `mesh-inbox: listening http://127.0.0.1:${port} session=${session} storage=${rt.storageBackend}`,
     );
   });
 
-  refreshMonitorPanes();
   refreshHealthSnap();
+  refreshQueueSnap();
   setInterval(() => {
     if (pollBusy) return;
     pollBusy = true;
     setImmediate(() => {
       try {
         pollOcLimitsTick();
-        scheduleDrain();
-        refreshHealthSnap();
+        pollResumeAcks(registry, workspace, log, (paneId) => {
+          if (clearOcLimitBannerForPane(connectivity, paneId)) {
+            maybeEndRateLimitEpisode(connectivity);
+            repaintMeshPaneBorder(
+              registry,
+              store,
+              paneId,
+              {
+                proxyDownActive: connectivity.proxyDownActive,
+                ocLimitedPaneIds: connectivity.ocLimited,
+              },
+              false,
+              "",
+              stateDir,
+              uxResolved,
+            );
+            log(`OC-RESUME ack removed OC-LIMIT banner ${paneId}`);
+            if (connectivity.ocLimited.size === 0) {
+              const sec = meshSecretaryPane(session, baseWindow);
+              if (sec) {
+                repaintMeshPaneBorder(
+                  registry,
+                  store,
+                  sec,
+                  {
+                    proxyDownActive: connectivity.proxyDownActive,
+                    ocLimitedPaneIds: connectivity.ocLimited,
+                  },
+                  true,
+                  "secretary",
+                  stateDir,
+                  uxResolved,
+                );
+              }
+            }
+          }
+        });
+        refreshOrchConnectivity();
       } catch (e) {
-        log(`poll error ${(e as Error).message}`);
-      } finally {
-        pollBusy = false;
+        log(`connectivity poll error ${(e as Error).message}`);
       }
+      runDrainCoalesced(() => {
+        try {
+          refreshHealthSnap();
+          refreshQueueSnap();
+          if (
+            autoScrapeMs > 0 &&
+            Date.now() - lastAutoScrapeAt >= autoScrapeMs &&
+            spawnSync("tmux", ["has-session", "-t", session], { stdio: "ignore" }).status === 0
+          ) {
+            lastAutoScrapeAt = Date.now();
+            saveMeshSession(loaded, registry);
+            log("auto-scrape mesh-agents.json");
+          }
+        } catch (e) {
+          log(`health snap error ${(e as Error).message}`);
+        } finally {
+          pollBusy = false;
+        }
+      });
     });
   }, pollMs);
 
   process.on("SIGTERM", () => {
-    void bullmq?.close().finally(() => process.exit(0));
+    if ("close" in store && typeof store.close === "function") {
+      store.close();
+    }
+    process.exit(0);
   });
 }
 

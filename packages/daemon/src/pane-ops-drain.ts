@@ -1,11 +1,11 @@
 import type { LoadedProfile, PaneOpRow, ProviderRegistry } from "@seat-mesh/core";
 import { executePaneOp, saveMeshSession } from "@seat-mesh/tmux";
-import type { JsonlStore } from "./jsonl-store.js";
+import type { QueueStore } from "./create-queue-store.js";
 
 export interface PaneOpsDrainCtx {
   loaded: LoadedProfile;
   registry: ProviderRegistry;
-  store: JsonlStore;
+  store: QueueStore;
   log: (line: string) => void;
   isBusy: () => boolean;
   setBusy: (v: boolean) => void;
@@ -47,7 +47,7 @@ export function drainPaneOpsOnce(ctx: PaneOpsDrainCtx): boolean {
 }
 
 export function enqueuePaneOp(
-  store: JsonlStore,
+  store: QueueStore,
   kind: PaneOpRow["kind"],
   who: string,
   summary: string,
@@ -66,6 +66,6 @@ export function enqueuePaneOp(
   return row;
 }
 
-export function queueAheadCount(store: JsonlStore): number {
+export function queueAheadCount(store: QueueStore): number {
   return store.readPaneOps().filter((r) => r.status === "pending" || r.status === "running").length;
 }

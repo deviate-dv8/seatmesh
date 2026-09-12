@@ -41,10 +41,24 @@ function listWindowMeta(session: string, window: string): MeshPaneMeta[] {
 }
 
 export function listMeshWorkers(session: string, workersWindow: string): MeshPaneMeta[] {
-  return listWindowMeta(session, workersWindow).filter((m) => {
-    const n = Number(m.slot);
-    return m.role === "worker" && n >= 1;
-  });
+  return listWindowMeta(session, workersWindow)
+    .filter((m) => {
+      const n = Number(m.slot);
+      return m.role === "worker" && n >= 1;
+    })
+    .sort((a, b) => Number(a.slot) - Number(b.slot));
+}
+
+/** Worker pane by @mesh_slot (not pane_index). */
+export function resolveWorkerPaneId(
+  session: string,
+  window: string,
+  slot: number,
+): string | null {
+  for (const m of listMeshWorkers(session, window)) {
+    if (Number(m.slot) === slot) return m.paneId;
+  }
+  return null;
 }
 
 export function listMeshMinis(session: string, minisWindow: string): MeshPaneMeta[] {
@@ -58,11 +72,39 @@ export function meshManagerPane(session: string, baseWindow: string): string | n
   return listWindowMeta(session, baseWindow)[0]?.paneId ?? null;
 }
 
+/** Resolve a base-window coord pane by @mesh_role (profile layout driven). */
+export function coordPaneForRole(
+  session: string,
+  baseWindow: string,
+  role: string,
+): string | null {
+  for (const m of listWindowMeta(session, baseWindow)) {
+    if (m.role === role) return m.paneId;
+  }
+  return null;
+}
+
+export function meshManagerPanes(session: string, baseWindow: string): string[] {
+  const out: string[] = [];
+  for (const m of listWindowMeta(session, baseWindow)) {
+    if (m.role === "manager") out.push(m.paneId);
+  }
+  return out;
+}
+
 export function meshSecretaryPane(session: string, baseWindow: string): string | null {
   for (const m of listWindowMeta(session, baseWindow)) {
     if (m.role === "secretary") return m.paneId;
   }
   return null;
+}
+
+/** Single-pane meta via tmux display-message (for checkback reply routing). */
+export function paneMetaForPane(paneId: string): MeshPaneMeta | null {
+  if (!paneId?.startsWith("%")) return null;
+  const out = tmux(["display-message", "-t", paneId, "-p", PANE_META_FMT]).out;
+  if (!out) return null;
+  return parsePaneMetaLine(out);
 }
 
 export function listMeshMonitorPanes(
@@ -85,7 +127,7 @@ export function listMeshMonitorPanes(
     add(m.paneId, `mini-${m.mini}`);
   }
   const mgr = meshManagerPane(session, baseWindow);
-  if (mgr) add(mgr, "master");
+  if (mgr) add(mgr, "manager");
   const sec = meshSecretaryPane(session, baseWindow);
   if (sec) add(sec, "secretary");
   return out;

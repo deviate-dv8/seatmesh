@@ -1,0 +1,5 @@
+kind: manager
+extends: common
+read_first:
+  - path: .sm/mesh.config.yaml
+    note: layout + daemon + coord policy

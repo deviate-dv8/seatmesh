@@ -47,10 +47,26 @@ export async function snapshotConnectivity(
     smartRestart: false,
     rotateMaxAttempts: 3,
     cooldownMs: 1_800_000,
+    ipifyFailBeforeRecovery: 3,
   };
+  const ipifyAttempts = policy.ipifyFailBeforeRecovery ?? 3;
 
   const listen = enabled ? await proxyListenOkAsync(port) : false;
-  const carrierIp = enabled && listen ? await fetchCarrierIp(port) : null;
+  let carrierIp: string | null = null;
+  let ipifyFailStreak = 0;
+  if (enabled && listen) {
+    for (let i = 0; i < ipifyAttempts; i++) {
+      carrierIp = await fetchCarrierIp(port);
+      if (carrierIp) {
+        ipifyFailStreak = 0;
+        break;
+      }
+      ipifyFailStreak = i + 1;
+      if (i + 1 < ipifyAttempts) {
+        await new Promise((r) => setTimeout(r, 2_000));
+      }
+    }
+  }
 
   const pendingTriggers: string[] = [];
   if (!enabled) {
@@ -58,7 +74,9 @@ export async function snapshotConnectivity(
   } else if (!listen) {
     pendingTriggers.push("proxy not listening");
   } else if (!carrierIp) {
-    pendingTriggers.push("ipify failed through proxy");
+    pendingTriggers.push(
+      `ipify failed through proxy (${ipifyFailStreak}/${ipifyAttempts} probes)`,
+    );
   }
 
   return {

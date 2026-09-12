@@ -10,7 +10,8 @@ export function resolveAgentId(input: {
     return m != null && String(m).length ? `mini-${m}` : "mini";
   }
   if (role === "secretary") return "secretary";
-  if (role === "manager") return "manager";
+  if (role === "manager-2") return "manager-2";
+  if (role === "manager" || role === "master") return "manager";
   if (input.slot != null) return `worker-${input.slot}`;
   return role || "unknown";
 }

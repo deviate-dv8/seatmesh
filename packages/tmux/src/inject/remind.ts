@@ -14,12 +14,12 @@ export interface RemindOptions {
   note?: string;
 }
 
-/** Manager-only gate: run from the master manager pane in the mesh session. */
+/** Manager-only gate: run from the manager pane in the mesh session. */
 export function requireMeshManager(loaded: LoadedProfile): void {
   const w = runWhoami(loaded);
   if (w.role !== "manager") {
     throw new Error(
-      `refused: remind is manager-only - run ./sm.sh remind from the master manager pane (you_are=${w.role})`,
+      `refused: remind is manager-only - run ./sm.sh remind from the manager pane (you_are=${w.role})`,
     );
   }
 }
@@ -32,18 +32,18 @@ function buildRemindMessage(
 ): string {
   let msg =
     `${prefix} slot-${slot} ports ${ports || "?"} - ` +
-    "REMIND (from Dan via manager): Update your agent-seats context now.\n" +
+    "REMIND (from operator via manager): Update your seat context now.\n" +
     "1) ./sm.sh whoami\n" +
     "2) Edit seat files: FOCUS.md (NOW only + Mark), TASKS.md (todos), REMINDER.md (self-queue).\n" +
     "   Report whether your session TASKS are done (open checkboxes count).\n" +
-    "   Mark OPEN only if all session TASKS are done/cleared; else Mark BUSY or BLOCKED (Dan preference).\n" +
+    "   Mark OPEN only if all session TASKS are done/cleared; else Mark BUSY or BLOCKED (operator preference).\n" +
     "3) Stamp **Tmux seat:** on your ACTIVE-FOCUS block if you own one.\n" +
     "4) Re-read .agent/agent-seats.md Worker POV - to signal the master you MUST shell:\n" +
     "   ./sm.sh room say <msg> (chat-only reply is not a master signal).\n" +
-    "   Dan-first: for eyeball/approve/prove, ./scripts/notify.sh FIRST then room say (never ask master to toast Dan).\n" +
+    "   Operator-first: for eyeball/approve/prove, notify script FIRST then room say (never ask master to toast operator).\n" +
     "   Peer seats: ./sm.sh room say (live CLI only; no merge authority).\n" +
     `   Slot ${slot}, ports ${ports} (paired only).`;
-  if (note) msg += `\nDan note: ${note}`;
+  if (note) msg += `\nOperator note: ${note}`;
   return msg;
 }
 
@@ -54,7 +54,7 @@ export function runRemind(
 ): RemindResult[] {
   requireMeshManager(loaded);
 
-  const session = loaded.profile.session.name;
+  const session = loaded.sessionName;
   const workerCount = loaded.profile.session.workerCount;
   const prefix = loaded.profile.daemon.managerPromptPrefix;
   const note = opts.note;
@@ -75,7 +75,7 @@ export function runRemind(
   const results: RemindResult[] = [];
   for (const slot of slots) {
     const targetLabel = `slot-${slot}`;
-    const resolved = resolvePaneTarget(String(slot), session);
+    const resolved = resolvePaneTarget(String(slot), loaded);
     if ("error" in resolved) {
       results.push({ target: targetLabel, paneId: "-", status: "skipped", reason: resolved.error });
       continue;

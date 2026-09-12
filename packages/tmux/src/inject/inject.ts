@@ -36,7 +36,7 @@ function pasteMessage(paneId: string, message: string): void {
   }
 }
 
-/** Harness-aligned cursor-agent paste (tmux-zsign.sh submit_cli_prompt agent). */
+/** Cursor-agent paste with bracketed-paste guard. */
 function injectCursorAgent(paneId: string, message: string, captureTail: string): void {
   const bottom = captureTail.split("\n").slice(-14).join("\n");
   const generating = /Working|Running|Thinking|enter steer/.test(bottom);
