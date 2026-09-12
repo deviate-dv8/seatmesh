@@ -1,6 +1,6 @@
 import net from "node:net";
 import { spawnSync } from "node:child_process";
-import type { MeshProfile } from "@seat-mesh/core";
+import type { MeshProfile } from "seat-mesh-core";
 
 export async function proxyListenOkAsync(port: number): Promise<boolean> {
   return new Promise((resolve) => {

@@ -1,5 +1,5 @@
-import type { BaseColumn, LoadedProfile } from "@seat-mesh/core";
-import { normalizeMinisLeads, portsForSlot } from "@seat-mesh/core";
+import type { BaseColumn, LoadedProfile } from "seat-mesh-core";
+import { normalizeMinisLeads, portsForSlot } from "seat-mesh-core";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
 import { baseColumns, ensureBaseLayout } from "./base-layout.js";
 import { coordPaneForRole, listMeshMinis, listMeshWorkers } from "../lib/pane-meta.js";

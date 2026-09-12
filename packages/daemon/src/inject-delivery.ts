@@ -2,8 +2,8 @@
  * Sole daemon inject path: registry.detect -> provider.injectPlan -> injectToPane.
  */
 import { spawnSync } from "node:child_process";
-import type { ComposerState, ProviderRegistry } from "@seat-mesh/core";
-import { capturePaneSnapshot, injectToPane, paneMetaForPane } from "@seat-mesh/tmux";
+import type { ComposerState, ProviderRegistry } from "seat-mesh-core";
+import { capturePaneSnapshot, injectToPane, paneMetaForPane } from "seat-mesh-tmux";
 import { classifyCoordDelivery } from "./compose-gate.js";
 
 function sleepMs(ms: number): void {

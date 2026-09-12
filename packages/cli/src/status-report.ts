@@ -5,8 +5,8 @@ import {
   meshRuntimePaths,
   profilePaths,
   type LoadedProfile,
-} from "@seat-mesh/core";
-import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
+} from "seat-mesh-core";
+import { snapshotConnectivity, formatStatus } from "seat-mesh-connectivity";
 import {
   inboxHealth,
   meshInboxPort,
@@ -14,7 +14,7 @@ import {
   printVerify,
   tmuxHasSession,
   verifyMeshSession,
-} from "@seat-mesh/tmux";
+} from "seat-mesh-tmux";
 
 export interface PrereqRow {
   name: string;

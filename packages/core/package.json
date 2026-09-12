@@ -1,5 +1,5 @@
 {
-  "name": "@seat-mesh/core",
+  "name": "seat-mesh-core",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",

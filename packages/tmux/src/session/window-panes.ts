@@ -3,7 +3,7 @@ import {
   normalizeMinisLeads,
   parseGridSpec,
   type MeshLayout,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 import { tmux } from "../lib/tmux-run.js";
 
 /**

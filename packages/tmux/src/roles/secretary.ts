@@ -8,13 +8,13 @@ import {
   superviseLockPath,
   type LoadedProfile,
   type ProviderRegistry,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 import {
   createRegistryForProfile,
   waitForCli,
   waitForComposerReady,
-} from "@seat-mesh/providers";
-import { guessSecretaryOpenCodeSession } from "@seat-mesh/providers";
+} from "seat-mesh-providers";
+import { guessSecretaryOpenCodeSession } from "seat-mesh-providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
 import { loadLaunchState, resolveLaunchCmd } from "../agents/agents-state.js";
 import { enqueuePeer, ensureMeshInbox, inboxHealth, meshInboxPort } from "../comms/inbox-bridge.js";

@@ -1,5 +1,5 @@
-import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
-import { formatWorkerInjectStamp, portsForSlot } from "@seat-mesh/core";
+import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
+import { formatWorkerInjectStamp, portsForSlot } from "seat-mesh-core";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { paneMetaForPane } from "../lib/pane-meta.js";

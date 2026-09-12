@@ -1,4 +1,4 @@
-import type { LoadedProfile } from "@seat-mesh/core";
+import type { LoadedProfile } from "seat-mesh-core";
 import { tmuxHasSession } from "../lib/tmux-run.js";
 import { baseColumns, expectedBasePaneCount } from "./base-layout.js";
 import { listWindowPaneIds } from "./window-panes.js";

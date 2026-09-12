@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import type { ProviderRegistry } from "@seat-mesh/core";
-import { formatOpenCodeResumeCommand } from "@seat-mesh/providers";
-import { capturePaneSnapshot, injectToPane, withPaneInputEnabled } from "@seat-mesh/tmux";
+import type { ProviderRegistry } from "seat-mesh-core";
+import { formatOpenCodeResumeCommand } from "seat-mesh-providers";
+import { capturePaneSnapshot, injectToPane, withPaneInputEnabled } from "seat-mesh-tmux";
 
 /** Desktop toasts from mesh inbox daemon — not manager seat. */
 export const INBOX_NOTIFY_SLOT = "inbox";

@@ -1,5 +1,5 @@
-import { capturePaneSnapshot, isPaneContextReady } from "@seat-mesh/tmux";
-import type { ProviderRegistry } from "@seat-mesh/core";
+import { capturePaneSnapshot, isPaneContextReady } from "seat-mesh-tmux";
+import type { ProviderRegistry } from "seat-mesh-core";
 import type { MeshOrchestratorCtx } from "./mesh-orchestrator.js";
 
 export interface DeliveryHoldResult {

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile, PaneOpKind, PaneOpRow } from "@seat-mesh/core";
+import type { LoadedProfile, PaneOpKind, PaneOpRow } from "seat-mesh-core";
 import { ensureMeshInbox, meshInboxPort } from "../comms/inbox-bridge.js";
 import { runWhoami } from "../agents/whoami.js";
 

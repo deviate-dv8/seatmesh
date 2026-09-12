@@ -1,5 +1,5 @@
 {
-  "name": "@seat-mesh/providers",
+  "name": "seat-mesh-providers",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seat-mesh/core": "0.1.0"
+    "seat-mesh-core": "0.1.0"
   },
   "publishConfig": {
     "access": "public"

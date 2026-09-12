@@ -1,5 +1,5 @@
-import type { LoadedProfile } from "@seat-mesh/core";
-import { meshRuntimePaths } from "@seat-mesh/core";
+import type { LoadedProfile } from "seat-mesh-core";
+import { meshRuntimePaths } from "seat-mesh-core";
 import { JsonlStore } from "./jsonl-store.js";
 import { migrateJsonlDirToSqlite, SqliteStore } from "./sqlite-store.js";
 

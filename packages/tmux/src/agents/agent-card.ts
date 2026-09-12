@@ -3,7 +3,7 @@ import {
   type CommsAction,
   type SlotGuard,
   type SlotRole,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 import type { WhoamiResult } from "./whoami.js";
 
 /** Map tmux mesh role -> guard role + optional extra deny. */

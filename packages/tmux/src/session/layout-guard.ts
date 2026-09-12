@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { parseGridSpec, type LoadedProfile } from "@seat-mesh/core";
+import { parseGridSpec, type LoadedProfile } from "seat-mesh-core";
 import { loadMinisState } from "../roles/minis.js";
 import type { MeshPaneMeta } from "../lib/pane-meta.js";
 import { listMeshMinis, listMeshWorkers, PANE_META_FMT } from "../lib/pane-meta.js";

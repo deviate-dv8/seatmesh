@@ -7,8 +7,8 @@ import {
   cancelCheckback,
   chatRoomConfigForLoaded,
   listCheckbacks,
-} from "@seat-mesh/core";
-import { ensureMeshInbox, runWhoami } from "@seat-mesh/tmux";
+} from "seat-mesh-core";
+import { ensureMeshInbox, runWhoami } from "seat-mesh-tmux";
 
 function resolvePane(loaded: LoadedProfile, explicit?: string): string | undefined {
   if (explicit) return explicit;

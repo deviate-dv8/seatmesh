@@ -1,5 +1,5 @@
-import type { ProviderRegistry } from "@seat-mesh/core";
-import { capturePaneSnapshot } from "@seat-mesh/tmux";
+import type { ProviderRegistry } from "seat-mesh-core";
+import { capturePaneSnapshot } from "seat-mesh-tmux";
 import { notifyConnectivityStatus, RESUME_ACK_HOWTO } from "./oc-resume.js";
 
 /** How long to wait for a resumed pane to prove it's working again before flagging it stuck. */

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { loadProfile, profilePaths } from "@seat-mesh/core";
+import { loadProfile, profilePaths } from "seat-mesh-core";
 
 export interface MigrateRuntimeOptions {
   workspace?: string;

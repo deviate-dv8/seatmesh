@@ -16,7 +16,7 @@ import {
   isGlobalSlug,
   formatRoomCommsCheckback,
   unseenSummaryForAgent,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 import {
   fanOutRoomMessage,
   runRoomAccept,
@@ -24,7 +24,7 @@ import {
   runRoomCallsList,
   runRoomDecline,
   runWhoami,
-} from "@seat-mesh/tmux";
+} from "seat-mesh-tmux";
 
 function tmuxOpt(pane: string, key: string): string {
   const r = spawnSync("tmux", ["display-message", "-t", pane, "-p", key], { encoding: "utf8" });

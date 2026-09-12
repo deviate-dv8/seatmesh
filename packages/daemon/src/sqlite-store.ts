@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { formatMeshSteeringInject, type PaneOpRow } from "@seat-mesh/core";
+import { formatMeshSteeringInject, type PaneOpRow } from "seat-mesh-core";
 import {
   dedupeJsonlRowsById,
   type CheckbackRow,

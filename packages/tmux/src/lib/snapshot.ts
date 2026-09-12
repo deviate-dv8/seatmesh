@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import type { PaneSnapshot } from "@seat-mesh/core";
+import type { PaneSnapshot } from "seat-mesh-core";
 
 function tmux(args: string[]): string | null {
   const r = spawnSync("tmux", args, { encoding: "utf8" });

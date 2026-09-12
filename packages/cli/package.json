@@ -1,5 +1,5 @@
 {
-  "name": "@seat-mesh/cli",
+  "name": "seatmesh",
   "version": "0.1.0",
   "type": "module",
   "files": [
@@ -20,10 +20,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@seat-mesh/connectivity": "0.1.0",
-    "@seat-mesh/core": "0.1.0",
-    "@seat-mesh/providers": "0.1.0",
-    "@seat-mesh/tmux": "0.1.0",
+    "seat-mesh-connectivity": "0.1.0",
+    "seat-mesh-core": "0.1.0",
+    "seat-mesh-providers": "0.1.0",
+    "seat-mesh-tmux": "0.1.0",
     "commander": "^15.0.0"
   }
 }

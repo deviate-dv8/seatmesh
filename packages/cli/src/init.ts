@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { SM_DIR, SM_CONFIG } from "@seat-mesh/core";
+import { SM_DIR, SM_CONFIG } from "seat-mesh-core";
 
 export interface InitOptions {
   /** Project root (default cwd). */

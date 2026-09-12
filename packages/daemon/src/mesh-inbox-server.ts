@@ -10,8 +10,8 @@ import {
   meshRuntimePaths,
   resolveDaemonPort,
   resolveUxConfig,
-} from "@seat-mesh/core";
-import { createRegistryForProfile } from "@seat-mesh/providers";
+} from "seat-mesh-core";
+import { createRegistryForProfile } from "seat-mesh-providers";
 import {
   capturePaneSnapshot,
   listMeshMonitorPanes,
@@ -20,7 +20,7 @@ import {
   meshSecretaryPane,
   resolveLiveTmuxSession,
   saveMeshSession,
-} from "@seat-mesh/tmux";
+} from "seat-mesh-tmux";
 import { createQueueStore } from "./create-queue-store.js";
 import type { CheckbackRow } from "./jsonl-store.js";
 import {
@@ -46,7 +46,7 @@ import {
   queueAheadCount,
   type PaneOpsDrainCtx,
 } from "./pane-ops-drain.js";
-import type { PaneOpKind } from "@seat-mesh/core";
+import type { PaneOpKind } from "seat-mesh-core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { LoadedProfile } from "@seat-mesh/core";
+import type { LoadedProfile } from "seat-mesh-core";
 import { buildColdStartBrief, buildFullColdStartBrief, openTaskLines } from "./cold-start.js";
 import { runSeatInit } from "./seat-init.js";
 import { gateQueuePath } from "./seat-paths.js";

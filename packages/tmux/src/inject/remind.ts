@@ -1,4 +1,4 @@
-import { portsForSlot, type LoadedProfile } from "@seat-mesh/core";
+import { portsForSlot, type LoadedProfile } from "seat-mesh-core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { runWhoami } from "../agents/whoami.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";

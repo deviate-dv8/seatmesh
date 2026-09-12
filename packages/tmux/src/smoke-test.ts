@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
-import { createRegistryForProfile, formatOpenCodeResumeCommand } from "@seat-mesh/providers";
-import { snapshotConnectivity } from "@seat-mesh/connectivity";
+import { meshRuntimePaths, type LoadedProfile } from "seat-mesh-core";
+import { createRegistryForProfile, formatOpenCodeResumeCommand } from "seat-mesh-providers";
+import { snapshotConnectivity } from "seat-mesh-connectivity";
 import { inboxHealth, meshInboxPort } from "./comms/inbox-bridge.js";
 import { resolvePaneTarget } from "./lib/resolve-pane.js";
 import { capturePaneSnapshot, listSessionPanes } from "./lib/snapshot.js";

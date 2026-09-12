@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { seatMeshPackageRoot, type LoadedProfile } from "@seat-mesh/core";
+import { seatMeshPackageRoot, type LoadedProfile } from "seat-mesh-core";
 import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
 import { ensureMeshInbox } from "../comms/inbox-bridge.js";

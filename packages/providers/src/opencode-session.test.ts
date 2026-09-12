@@ -8,7 +8,7 @@ import {
   resolveOpenCodeSessionForPane,
   scrapeOpenCodeSessionFromCapture,
 } from "./shared.js";
-import type { PaneSnapshot } from "@seat-mesh/core";
+import type { PaneSnapshot } from "seat-mesh-core";
 
 describe("extractOpenCodeSession", () => {
   it("reads --session from cmdline", () => {

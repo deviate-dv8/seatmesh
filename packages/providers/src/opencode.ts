@@ -6,7 +6,7 @@ import type {
   LimitContext,
   LimitDetector,
   PaneSnapshot,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 import {
   cmdlines,
   composerFromCapture,

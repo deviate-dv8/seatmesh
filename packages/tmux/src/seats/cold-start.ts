@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { loadRoleIndex, profilePaths, renderRoleIndex, type LoadedProfile } from "@seat-mesh/core";
+import { loadRoleIndex, profilePaths, renderRoleIndex, type LoadedProfile } from "seat-mesh-core";
 import type { WhoamiResult } from "../agents/whoami.js";
 import { gateQueuePath, seatDirFor, seatFile, type SeatTarget } from "./seat-paths.js";
 

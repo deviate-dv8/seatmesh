@@ -12,13 +12,13 @@ import {
   mergeMeshAgentsIntoProfile,
   normalizeMinisLeads,
   portsForSlot,
-} from "@seat-mesh/core";
-import type { ProviderRegistry } from "@seat-mesh/core";
+} from "seat-mesh-core";
+import type { ProviderRegistry } from "seat-mesh-core";
 import {
   extractOpenCodeSession,
   guessSecretaryOpenCodeSession,
   normalizeOpenCodeSessionId,
-} from "@seat-mesh/providers";
+} from "seat-mesh-providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
 import { loadMeshAgents } from "../agents/agents-state.js";
 import { loadMinisState } from "../roles/minis.js";

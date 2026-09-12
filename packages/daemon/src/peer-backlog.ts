@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import type { ProviderRegistry } from "@seat-mesh/core";
-import { capturePaneSnapshot, tmux } from "@seat-mesh/tmux";
+import type { ProviderRegistry } from "seat-mesh-core";
+import { capturePaneSnapshot, tmux } from "seat-mesh-tmux";
 import type { QueueStore, PeerRow } from "./create-queue-store.js";
 import { isPeerDelivered } from "./create-queue-store.js";
 

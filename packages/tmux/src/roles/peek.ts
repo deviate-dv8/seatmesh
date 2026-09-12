@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
-import { composerFromCapture } from "@seat-mesh/providers";
+import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
+import { composerFromCapture } from "seat-mesh-providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 

@@ -4,7 +4,7 @@ import {
   type MeshProfile,
   type ProviderRegistry,
   type UxConfig,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 import { cursorAgentProvider } from "./cursor-agent.js";
 import { kiroProvider } from "./kiro.js";
 import { claudeProvider } from "./claude.js";

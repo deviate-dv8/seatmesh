@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { buildResolvedPaths, portsForSlot, type LoadedProfile } from "@seat-mesh/core";
+import { buildResolvedPaths, portsForSlot, type LoadedProfile } from "seat-mesh-core";
 
 export interface SeatContextRow {
   seat: string;

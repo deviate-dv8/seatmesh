@@ -6,7 +6,7 @@ import {
   resolveDaemonPort,
   seatMeshPackageRoot,
   type LoadedProfile,
-} from "@seat-mesh/core";
+} from "seat-mesh-core";
 
 function inboxBase(port: number): string {
   return `http://127.0.0.1:${port}`;

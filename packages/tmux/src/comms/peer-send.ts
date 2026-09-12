@@ -1,6 +1,6 @@
-import type { LoadedProfile } from "@seat-mesh/core";
-import { formatToSlotReplyCmd, portsForSlot } from "@seat-mesh/core";
-import { createRegistryForProfile } from "@seat-mesh/providers";
+import type { LoadedProfile } from "seat-mesh-core";
+import { formatToSlotReplyCmd, portsForSlot } from "seat-mesh-core";
+import { createRegistryForProfile } from "seat-mesh-providers";
 import { enqueuePeer } from "./inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { runWhoami } from "../agents/whoami.js";

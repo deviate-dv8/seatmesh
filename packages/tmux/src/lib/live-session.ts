@@ -1,4 +1,4 @@
-import type { LoadedProfile } from "@seat-mesh/core";
+import type { LoadedProfile } from "seat-mesh-core";
 import { tmux, tmuxHasSession } from "./tmux-run.js";
 
 /** Read MESH_WORKSPACE_ID stamped on a tmux session (session up / reload). */
