@@ -20,6 +20,7 @@ raw-paste into tmux from scripts when a command exists.
 |------|---------|
 | What can I run (scoped) | `agent [target]` |
 | Who am I / hub inline | `whoami [target]` |
+| Validate role-index paths | `whoami --validate` |
 | Role briefing inject | automatic on attach when configured; `cold-start [target] --inject` |
 | Ensure seat templates | `seat init` (also runs on reload / session up) |
 | Seat map | `contexts [--json]` |
