@@ -6,7 +6,12 @@ import { tmux } from "../lib/tmux-run.js";
  */
 export function ensureMeshSessionEnv(
   session: string,
-  opts: { workspaceId?: string; sessionName?: string } = {},
+  opts: {
+    workspaceId?: string;
+    sessionName?: string;
+    workspace?: string;
+    profilePath?: string;
+  } = {},
 ): void {
   tmux(["set-environment", "-gu", "NO_COLOR"]);
   tmux(["set-environment", "-gu", "FORCE_COLOR"]);
@@ -21,5 +26,11 @@ export function ensureMeshSessionEnv(
   }
   if (opts.sessionName) {
     tmux(["set-environment", "-t", session, "MESH_SESSION", opts.sessionName]);
+  }
+  if (opts.workspace) {
+    tmux(["set-environment", "-t", session, "MESH_WORKSPACE", opts.workspace]);
+  }
+  if (opts.profilePath) {
+    tmux(["set-environment", "-t", session, "MESH_PROFILE_PATH", opts.profilePath]);
   }
 }

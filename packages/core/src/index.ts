@@ -25,3 +25,4 @@ export * from "./jsonl/index.js";
 export * from "./chatfile/index.js";
 export * from "./stack/index.js";
 export * from "./contracts/index.js";
+export * from "./global-registry.js";

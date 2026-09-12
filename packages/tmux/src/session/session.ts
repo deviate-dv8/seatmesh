@@ -76,6 +76,8 @@ export function sessionUp(loaded: LoadedProfile): void {
   ensureMeshSessionEnv(session, {
     workspaceId: loaded.workspaceId,
     sessionName: loaded.sessionName,
+    workspace: loaded.workspace,
+    profilePath: loaded.profilePath,
   });
   ensureBaseLayout(loaded, session);
   labelMeshSession(loaded, session);
@@ -103,6 +105,12 @@ export function sessionAttach(loaded: LoadedProfile): void {
     sessionUp(loaded);
   } else {
     ensureSeatFiles(loaded);
+    ensureMeshSessionEnv(session, {
+      workspaceId: loaded.workspaceId,
+      sessionName: loaded.sessionName,
+      workspace: loaded.workspace,
+      profilePath: loaded.profilePath,
+    });
     ensureMeshInbox(loaded, { quiet: true });
     logCoordSyncResults(syncCoordClisFromProfile(loaded, { trigger: "attach" }));
   }

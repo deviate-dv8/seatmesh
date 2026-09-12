@@ -1,13 +1,26 @@
 import type { LoadedProfile } from "@seat-mesh/core";
 import { tmux, tmuxHasSession } from "./tmux-run.js";
 
+function sessionEnvValue(session: string, key: string): string | null {
+  const r = tmux(["show-environment", "-t", session, key]);
+  const line = r.out.trim();
+  const prefix = `${key}=`;
+  if (!line.startsWith(prefix)) return null;
+  const v = line.slice(prefix.length);
+  return v || null;
+}
+
 /** Read MESH_WORKSPACE_ID stamped on a tmux session (session up / reload). */
 export function sessionWorkspaceId(session: string): string | null {
-  const r = tmux(["show-environment", "-t", session, "MESH_WORKSPACE_ID"]);
-  const line = r.out.trim();
-  if (!line.startsWith("MESH_WORKSPACE_ID=")) return null;
-  const v = line.slice("MESH_WORKSPACE_ID=".length);
-  return v || null;
+  return sessionEnvValue(session, "MESH_WORKSPACE_ID");
+}
+
+export function sessionProfilePath(session: string): string | null {
+  return sessionEnvValue(session, "MESH_PROFILE_PATH");
+}
+
+export function sessionWorkspacePath(session: string): string | null {
+  return sessionEnvValue(session, "MESH_WORKSPACE");
 }
 
 export function listTmuxSessionNames(): string[] {

@@ -16,6 +16,7 @@ import {
   tmuxHasSession,
   verifyMeshSession,
 } from "@seat-mesh/tmux";
+import { printSeatmeshBanner } from "./banner.js";
 
 export interface PrereqRow {
   name: string;
@@ -214,23 +215,15 @@ export async function printStatusReport(
     return report;
   }
 
-  const cwd = process.cwd();
-  const projectCfg = findDotSmConfig(cwd);
-  const usingBundled =
-    !projectCfg && !loaded.profilePath.includes(`${path.sep}.sm${path.sep}`);
-  console.log(`seatmesh status  profile=${loaded.profile.name}  session=${loaded.sessionName}`);
+  const projectCfg = findDotSmConfig(process.cwd());
+  printSeatmeshBanner({
+    subtitle: `status  profile=${loaded.profile.name}  session=${loaded.sessionName}`,
+    tagline: !projectCfg,
+  });
   if (!projectCfg) {
-    printSection("This folder");
-    console.log(`cwd=${cwd}`);
-    console.log(`project=MISSING  (no .sm/mesh.config.yaml here or above)`);
-    if (usingBundled) {
-      console.log(`note=using bundled demo profile (${loaded.profilePath})`);
-      console.log("next:  npx seatmesh init");
-    }
-  } else {
-    printSection("This folder");
-    console.log(`cwd=${cwd}`);
-    console.log(`project=FOUND  ${projectCfg}`);
+    const { terminalBold } = await import("./logo-color.js");
+    console.log("seatmesh is not initialized on this project");
+    console.log(terminalBold("npx seatmesh init"));
   }
   const pOk = printPrereqs(prereqs);
   printProfile(loaded);

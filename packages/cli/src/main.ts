@@ -110,6 +110,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   Cold start: bin/seatmesh auto-runs npm install + build when dist is stale
 
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
+  sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
   update [--dry-run] [--migrate]        refresh _vendor templates + paths.json
   report [--json]         full stack report (same as bare npx seatmesh)
   session attach|up|status
@@ -204,8 +205,19 @@ async function main(): Promise<void> {
     console.log(`  config: ${r.configPath}`);
     console.log(`  created: ${r.created.length} file(s)`);
     if (r.skipped.length) console.log(`  skipped (exists): ${r.skipped.length}`);
+    try {
+      const { upsertGlobalSession } = await import("@seat-mesh/core");
+      await upsertGlobalSession(meshLoaded(r.configPath));
+    } catch {
+      /* non-fatal */
+    }
     console.log("  next: npx seatmesh session up  (or ./sm.sh if wired)");
     return;
+  }
+
+  if (cmd === "sessions") {
+    const { runSessionsCommand } = await import("./sessions-cli.js");
+    process.exit(await runSessionsCommand(sub, tail, profileArg));
   }
 
   if (cmd === "profile" && sub === "show") {
@@ -226,13 +238,23 @@ async function main(): Promise<void> {
 
   if (cmd === "session") {
     const loaded = meshLoaded(profileArg);
+    const touchRegistry = async () => {
+      try {
+        const { upsertGlobalSession } = await import("@seat-mesh/core");
+        await upsertGlobalSession(loaded);
+      } catch {
+        /* non-fatal */
+      }
+    };
     if (sub === "up") {
       sessionUp(loaded);
+      await touchRegistry();
       console.log(`OK: session '${loaded.sessionName}' created`);
       printMeshInboxStatus(loaded);
       return;
     }
     if (sub === "attach" || !sub) {
+      await touchRegistry();
       sessionAttach(loaded);
       return;
     }

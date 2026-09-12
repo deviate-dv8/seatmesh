@@ -20,11 +20,14 @@
     "prepublishOnly": "node scripts/bundle-profiles.mjs && npm run build"
   },
   "dependencies": {
+    "@clack/prompts": "^1.8.0",
     "@seat-mesh/connectivity": "0.1.8",
     "@seat-mesh/core": "0.1.8",
     "@seat-mesh/daemon": "0.1.8",
     "@seat-mesh/providers": "0.1.8",
     "@seat-mesh/tmux": "0.1.8",
+    "boxen": "^8.0.1",
+    "cfonts": "^3.3.1",
     "commander": "^15.0.0"
   }
 }

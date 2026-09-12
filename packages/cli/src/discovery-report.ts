@@ -1,16 +1,14 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { findDotSmConfig, SM_DIR } from "@seat-mesh/core";
+import { findDotSmConfig } from "@seat-mesh/core";
+import { printSeatmeshBanner, SEATMESH_TAGLINE } from "./banner.js";
+import { terminalBold } from "./logo-color.js";
+
+export { SEATMESH_TAGLINE };
 
 function which(bin: string): boolean {
   const r = spawnSync("sh", ["-c", `command -v ${bin}`], { encoding: "utf8" });
   return r.status === 0;
-}
-
-function tmuxVersion(): string | null {
-  const r = spawnSync("tmux", ["-V"], { encoding: "utf8" });
-  if (r.status !== 0) return null;
-  return (r.stdout ?? "").trim() || null;
 }
 
 export interface DiscoveryReportOptions {
@@ -25,28 +23,17 @@ export interface DiscoveryReport {
   projectConfig: string | null;
 }
 
-const COMMANDS: Array<{ cmd: string; note: string }> = [
-  { cmd: "init", note: "create .sm/ project config in this folder" },
-  { cmd: "session up", note: "start tmux workbench (after init)" },
-  { cmd: "session attach", note: "attach to running session" },
-  { cmd: "whoami", note: "pane identity (inside tmux)" },
-  { cmd: "verify", note: "layout + labels health" },
-  { cmd: "inbox", note: "inbox daemon status" },
-  { cmd: "contexts", note: "seat FOCUS summary" },
-  { cmd: "help", note: "full command list" },
-];
+const COMMANDS = ["init", "sessions", "session up", "session attach", "help"];
 
-/** Greenfield / no `.sm/` — no profile load, no bundled minimal fallback. */
+/** Greenfield / no `.sm/` — no profile load. */
 export async function printDiscoveryReport(
   opts: DiscoveryReportOptions = {},
 ): Promise<DiscoveryReport> {
   const cwd = path.resolve(opts.cwd ?? process.cwd());
   const projectConfig = findDotSmConfig(cwd);
   const hasProject = projectConfig != null;
-
   const tmuxOk = which("tmux");
   const curlOk = which("curl");
-  const gitOk = which("git");
 
   const report: DiscoveryReport = {
     ok: hasProject || (tmuxOk && curlOk),
@@ -58,11 +45,7 @@ export async function printDiscoveryReport(
   if (opts.json) {
     console.log(
       JSON.stringify(
-        {
-          ...report,
-          prereqs: { tmux: tmuxOk, curl: curlOk, git: gitOk },
-          commands: COMMANDS,
-        },
+        { ...report, tagline: SEATMESH_TAGLINE, commands: COMMANDS },
         null,
         2,
       ),
@@ -70,40 +53,15 @@ export async function printDiscoveryReport(
     return report;
   }
 
-  console.log("seatmesh — workspace check\n");
-
-  console.log("## This folder");
-  console.log(`cwd=${cwd}`);
+  printSeatmeshBanner({ tagline: true });
   if (hasProject) {
-    console.log(`project=FOUND  ${projectConfig}`);
-    console.log("next:  npx seatmesh        (full stack status)");
-    console.log("       npx seatmesh session attach");
+    console.log(terminalBold("npx seatmesh"));
   } else {
-    console.log(`project=MISSING  (no ${SM_DIR}/mesh.config.yaml here or above)`);
-    console.log("next:  npx seatmesh init   (create a project in this folder)");
+    console.log("seatmesh is not initialized on this project");
+    console.log(terminalBold("npx seatmesh init"));
   }
-
-  console.log("\n## Prerequisites");
-  console.log(
-    `${tmuxOk ? "PASS" : "FAIL"}  tmux: ${tmuxOk ? (tmuxVersion() ?? "ok") : "not in PATH"}`,
-  );
-  console.log(`${curlOk ? "PASS" : "FAIL"}  curl: ${curlOk ? "ok" : "missing"}`);
-  console.log(`${gitOk ? "PASS" : "WARN"}  git: ${gitOk ? "ok" : "not found"}`);
-
-  console.log("\n## Commands (after init)");
-  for (const { cmd, note } of COMMANDS) {
-    console.log(`  ${cmd.padEnd(16)} ${note}`);
-  }
-
-  console.log("\n## Note");
-  console.log(
-    "seatmesh is a tmux multi-agent workbench (terminal UI), not a fullscreen TUI.",
-  );
-  console.log("Bare `npx seatmesh` = this checklist; `npx seatmesh init` starts a project.");
-
-  if (!hasProject) {
-    console.log("\nHint: run  npx seatmesh init  in this folder, then  npx seatmesh session up");
-  }
+  console.log("");
+  for (const cmd of COMMANDS) console.log(`  ${cmd}`);
 
   return report;
 }
