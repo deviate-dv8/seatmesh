@@ -90,7 +90,7 @@
 Open rows from the sm-functions campaign. Each ships as one function per SPEC (SMFUNCTIONS-SPEC.md) and gets a ONE-PATH.md row.
 
 - [x] **5.1** `checkback start` — harness shape `start <duration> --expect "topic" [--renew] [--here|--slot|--mini]` + loud-fail inbox down
-- [~] **5.2** `inbox list|resolve` + daemon routes `GET /inbox` + `POST /inbox/resolve` — CLI shipped; `--wait|--meta` + log/instances still open
+- [x] **5.2** `inbox list|resolve` + status `--wait|--meta` + `log|instances` — daemon routes + CLI (`inbox-bridge.ts`)
 - [~] **5.3** `tag` — `set`/`tag` shipped (resume id); `--auto` + `self` alias still open
 - [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)
 - [x] **5.5** `whoami --json` (P1-3)

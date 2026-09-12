@@ -28,6 +28,12 @@ import {
   stopMeshInbox,
   restartMeshInbox,
   printMeshInboxStatus,
+  waitForMeshInbox,
+  printInboxMeta,
+  tailInboxLog,
+  listInboxInstances,
+  parseInboxStatusFlags,
+  inboxStatusArgv,
   listInbox,
   resolveInbox,
   sendToMaster,
@@ -129,7 +135,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   ops list|clear                pane-op queue (serial)
   save|auto                     scrape session -> mesh-agents.json (daemon also auto-scrapes every 10m)
   labels                        re-apply @mesh_* + border strip
-  inbox [--json] | inbox list|resolve|stop|restart
+  inbox [--json] [--wait N] [--meta] | inbox list|resolve|log|instances|stop|restart
   peer <target> <msg...>        manager -> any pane (one path; alias: prompt -m)
   to-master | to-slot | to-mini <msg...>    enqueue (daemon injects)
   secretary start|dispatch|collect|status|watch …
@@ -353,7 +359,10 @@ async function main(): Promise<void> {
 
   if (cmd === "inbox") {
     const loaded = meshLoaded(profileArg);
-    const json = rest.includes("--json");
+    const flagArgs = inboxStatusArgv(sub, tail);
+    const flags = parseInboxStatusFlags(flagArgs);
+    const json = flags.json || rest.includes("--json");
+
     if (sub === "stop") {
       stopMeshInbox(loaded);
       return;
@@ -364,6 +373,23 @@ async function main(): Promise<void> {
     }
     if (sub === "start") {
       startMeshInbox(loaded);
+      return;
+    }
+    if (sub === "log") {
+      const logArgs = tail.filter(Boolean) as string[];
+      const follow = logArgs.includes("-f");
+      const tailIdx = logArgs.indexOf("tail");
+      let lines = 50;
+      if (tailIdx >= 0 && logArgs[tailIdx + 1] && /^\d+$/.test(logArgs[tailIdx + 1]!)) {
+        lines = Number(logArgs[tailIdx + 1]);
+      } else {
+        const num = logArgs.find((a) => /^\d+$/.test(a));
+        if (num) lines = Number(num);
+      }
+      process.exit(tailInboxLog(loaded, { lines, follow }) ? 0 : 1);
+    }
+    if (sub === "instances") {
+      listInboxInstances(loaded);
       return;
     }
     if (sub === "list" || sub === "all") {
@@ -384,7 +410,16 @@ async function main(): Promise<void> {
         process.exit(2);
       }
     }
-    // status (default): engine auto-starts, then one-line status
+    // status (default): optional --wait / --meta; else auto-start + one-line status
+    if (flags.waitSec != null) {
+      process.exit(
+        waitForMeshInbox(loaded, flags.waitSec, { json, meta: flags.meta }) ? 0 : 1,
+      );
+    }
+    if (flags.meta) {
+      printInboxMeta(loaded, { json });
+      process.exit(0);
+    }
     ensureMeshInbox(loaded, { quiet: true });
     const ok = printMeshInboxStatus(loaded, { json });
     process.exit(ok ? 0 : 1);

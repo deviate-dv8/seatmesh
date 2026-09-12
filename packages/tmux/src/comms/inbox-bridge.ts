@@ -20,6 +20,9 @@ interface MeshInboxMeta {
   hmr?: boolean;
   session?: string;
   workspaceId?: string;
+  startedAt?: string;
+  storage?: string;
+  sqlitePath?: string;
 }
 
 function enginePaths() {
@@ -495,4 +498,175 @@ export function printMeshInboxStatus(
     return ok;
   }
   return printInboxStatus(loaded);
+}
+
+/** Retry GET /health until @seat-mesh/daemon answers or timeout (wrapper only; probe stays fast). */
+export function waitForMeshInbox(
+  loaded: LoadedProfile,
+  seconds: number,
+  opts: { json?: boolean; meta?: boolean; quiet?: boolean } = {},
+): boolean {
+  const port = meshInboxPort(loaded);
+  const deadline = Date.now() + seconds * 1000;
+  while (Date.now() < deadline) {
+    const h = inboxHealth(port);
+    if (h?.engine === "@seat-mesh/daemon") {
+      if (opts.meta) printInboxMeta(loaded, { json: opts.json });
+      else if (opts.json) console.log(JSON.stringify(h, null, 2));
+      else if (!opts.quiet) printInboxStatus(loaded);
+      return true;
+    }
+    spawnSync("sleep", ["0.5"]);
+  }
+  const { logPath } = meshDaemonPaths(loaded);
+  console.error(`FAIL: inbox not healthy on :${port} after ${seconds}s`);
+  console.error(`  log: ${logPath}`);
+  return false;
+}
+
+/** On-disk mesh-inbox.json beside live /health (stale-meta cross-check). */
+export function printInboxMeta(
+  loaded: LoadedProfile,
+  opts: { json?: boolean } = {},
+): void {
+  const port = meshInboxPort(loaded);
+  const paths = meshDaemonPaths(loaded);
+  const meta = readMeshInboxMeta(loaded);
+  const h = inboxHealth(port);
+  const payload = {
+    port,
+    session: loaded.sessionName,
+    metaPath: paths.metaPath,
+    logPath: paths.logPath,
+    stateDir: paths.stateDir,
+    fileMeta: meta,
+    supervisorAlive: pidAlive(meta?.supervisorPid),
+    serverAlive: pidAlive(meta?.pid),
+    health: h ?? null,
+    healthOk: Boolean(h && h.engine === "@seat-mesh/daemon"),
+  };
+  if (opts.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  console.log(`inbox meta (:${port}) session=${loaded.sessionName}`);
+  console.log(`  meta file: ${paths.metaPath}`);
+  if (meta) {
+    const sup = meta.supervisorPid;
+    const srv = meta.pid;
+    console.log(
+      `  supervisorPid: ${sup ?? "-"} ${pidAlive(sup) ? "(alive)" : "(dead)"}`,
+    );
+    console.log(`  serverPid: ${srv ?? "-"} ${pidAlive(srv) ? "(alive)" : "(dead)"}`);
+    if (meta.startedAt) console.log(`  startedAt: ${meta.startedAt}`);
+    if (meta.storage) console.log(`  storage: ${meta.storage}`);
+  } else {
+    console.log("  (no mesh-inbox.json on disk)");
+  }
+  console.log(`  log: ${paths.logPath}`);
+  console.log("  live /health:");
+  if (h?.engine === "@seat-mesh/daemon") {
+    console.log(
+      `    up pid=${String(h.pid)} workers=${String(h.workerPanes)} minis=${String(h.miniPanes)}`,
+    );
+    console.log(
+      `    inboxUnresolved=${String(h.inboxUnresolved)} peerUnsent=${String(h.peerUnsent)} checkback=${String(h.checkbackActive)}`,
+    );
+  } else {
+    console.log("    down or wrong engine");
+  }
+}
+
+export function tailInboxLog(
+  loaded: LoadedProfile,
+  opts: { lines?: number; follow?: boolean } = {},
+): boolean {
+  const { logPath } = meshDaemonPaths(loaded);
+  if (!fs.existsSync(logPath)) {
+    console.error(`no log: ${logPath}`);
+    return false;
+  }
+  const lines = opts.lines ?? 50;
+  if (opts.follow) {
+    const r = spawnSync("tail", ["-f", "-n", String(lines), logPath], { stdio: "inherit" });
+    return r.status === 0;
+  }
+  const r = spawnSync("tail", ["-n", String(lines), logPath], { encoding: "utf8" });
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  return r.status === 0;
+}
+
+/** pgrep + ss one-shot — find stray mesh-inbox listeners on the daemon port. */
+export function listInboxInstances(loaded: LoadedProfile): void {
+  const port = meshInboxPort(loaded);
+  const paths = meshDaemonPaths(loaded);
+  console.log(`mesh-inbox instances (port :${port})`);
+  console.log(`  meta:  ${paths.metaPath}`);
+  console.log(`  log:   ${paths.logPath}`);
+  console.log(`  state: ${paths.stateDir}`);
+
+  const pg = spawnSync("pgrep", ["-af", "mesh-inbox"], { encoding: "utf8" });
+  if (pg.stdout?.trim()) {
+    console.log("\nProcesses (pgrep -af mesh-inbox):");
+    for (const line of pg.stdout.trim().split("\n")) console.log(`  ${line}`);
+  } else {
+    console.log("\nProcesses: (none matching mesh-inbox)");
+  }
+
+  const ss = spawnSync("ss", ["-ltnp"], { encoding: "utf8" });
+  const portLines =
+    ss.stdout?.split("\n").filter((l) => l.includes(`:${port}`) || l.includes(`:${port} `)) ??
+    [];
+  console.log(`\nListeners on :${port}:`);
+  if (portLines.length) {
+    for (const l of portLines) console.log(`  ${l.trim()}`);
+  } else {
+    console.log("  (none)");
+  }
+}
+
+export interface InboxStatusFlags {
+  json: boolean;
+  meta: boolean;
+  waitSec?: number;
+}
+
+const INBOX_SUBCMDS = new Set([
+  "stop",
+  "restart",
+  "start",
+  "list",
+  "all",
+  "resolve",
+  "read",
+  "log",
+  "instances",
+  "status",
+  "unsent",
+]);
+
+/** Parse `--json`, `--meta`, `--wait N` from inbox status argv (after optional `status` sub). */
+export function parseInboxStatusFlags(args: string[]): InboxStatusFlags {
+  let json = false;
+  let meta = false;
+  let waitSec: number | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (a === "--json") json = true;
+    else if (a === "--meta") meta = true;
+    else if (a === "--wait") {
+      const n = Number(args[i + 1] ?? "30");
+      waitSec = Number.isFinite(n) && n > 0 ? n : 30;
+      i++;
+    }
+  }
+  return { json, meta, waitSec };
+}
+
+export function inboxStatusArgv(sub: string | undefined, tail: (string | undefined)[]): string[] {
+  const parts = [sub, ...tail].filter((a): a is string => a != null && a !== "");
+  if (parts[0] === "status") return parts.slice(1);
+  if (parts[0] && INBOX_SUBCMDS.has(parts[0])) return [];
+  return parts;
 }

@@ -76,6 +76,7 @@ Targets for `peer`: `manager`, `secretary`, `slot-N`, `mini-N`, pane id.
 | Inbox lifecycle | `inbox stop\|restart` |
 | Night / continue | `night on\|off\|status` then `continue <slot\|all>` (manager pane only) |
 | Slot advice | `slot-advice <slot\|slot-N> [--send] [note...]` (manager; worktree DB/Redis heuristics) |
+| Inbox forensics | `inbox [--wait N] [--meta]` · `inbox log [N]` · `inbox instances` |
 | Canonical port | `profile show` → `daemon_port=` |
 | Proxy / connectivity | `proxy status\|check\|reset\|rotate` |
 | Provider scan | `providers list\|scan` |
