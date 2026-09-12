@@ -14,7 +14,11 @@ import {
   paneMetaForPane,
 } from "@seat-mesh/tmux";
 import type { ToMasterRow } from "./create-queue-store.js";
-import { paintMeshBorders, type BorderPaintConnectivity } from "./border-paint.js";
+import {
+  paintMeshBorders,
+  paintMeshBordersAsync,
+  type BorderPaintConnectivity,
+} from "./border-paint.js";
 import { deliverToPane } from "./inject-delivery.js";
 import type { QueueStore } from "./create-queue-store.js";
 import { isInboxDelivered, isPeerDelivered } from "./create-queue-store.js";
@@ -416,7 +420,7 @@ export async function orchestratorDrainTickAsync(ctx: MeshOrchestratorCtx): Prom
   await yieldEventLoop();
   fireDueCheckbacks(ctx);
   await yieldEventLoop();
-  paintMeshBorders(
+  await paintMeshBordersAsync(
     ctx.loaded,
     ctx.registry,
     ctx.store,

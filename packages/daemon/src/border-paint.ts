@@ -26,6 +26,10 @@ function tmuxSet(paneId: string, key: string, value: string): void {
 const BORDER_PAINT_BATCH = 6;
 let borderPaintOffset = 0;
 
+function yieldEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
 function phaseLabel(phase: string, busyLabel?: string, limitKind?: string): string {
   if (phase === "busy") return busyLabel ?? "BUSY";
   if (phase === "limit") return limitKind ?? "LIMIT";
@@ -226,6 +230,113 @@ export function paintMeshBorders(
     paintCoordInboxOrComposer(mgr, "manager", "manager", false);
   }
 
+  const sec = meshSecretaryPane(session, baseWindow);
+  if (sec) {
+    paintOne(sec, "secretary", true, "secretary");
+  }
+}
+
+/** Yield between panes so GET /health can answer mid-paint. */
+export async function paintMeshBordersAsync(
+  loaded: LoadedProfile,
+  registry: ProviderRegistry,
+  store: QueueStore,
+  session: string,
+  baseWindow: string,
+  workersWindow: string,
+  minisWindow: string,
+  skipPaneIds: Set<string> = new Set(),
+  connectivity?: BorderPaintConnectivity,
+  stateDir?: string,
+): Promise<void> {
+  const ux =
+    loaded.profile.ux !== undefined ? resolveUxConfig(loaded.profile.ux) : null;
+  const ppa = stateDir ? ppaForStateDir(stateDir) : null;
+  const activeCb = store.readCheckbacks().filter((r) => r.status === "active").length;
+  const unresolved = store.readInbox().filter((r) => !r.resolved).length;
+  const unsent = store
+    .readInbox()
+    .filter((r) => !r.resolved && !(r.sent && r.sentAt && r.deliverPane)).length;
+
+  const paintOne = (
+    paneId: string,
+    _defaultPorts: string,
+    inheritGlobal = false,
+    label = "",
+  ) => {
+    if (skipPaneIds.has(paneId)) return;
+    paintOnePaneBorder(
+      registry,
+      store,
+      paneId,
+      connectivity,
+      inheritGlobal,
+      label,
+      ppa,
+      activeCb,
+      ux,
+    );
+  };
+
+  const targets: { paneId: string; ports: string; label: string }[] = [
+    ...listMeshWorkers(session, workersWindow).map((w) => ({
+      paneId: w.paneId,
+      ports: w.ports,
+      label: `slot-${w.slot}`,
+    })),
+    ...listMeshMinis(session, minisWindow).map((m) => ({
+      paneId: m.paneId,
+      ports: m.ports,
+      label: `mini-${m.mini}`,
+    })),
+  ];
+  if (targets.length) {
+    const batch = Math.min(BORDER_PAINT_BATCH, targets.length);
+    for (let i = 0; i < batch; i++) {
+      if (i > 0) await yieldEventLoop();
+      const t = targets[(borderPaintOffset + i) % targets.length]!;
+      paintOne(t.paneId, t.ports, false, t.label);
+    }
+    borderPaintOffset = (borderPaintOffset + batch) % targets.length;
+  }
+
+  const paintCoordInboxOrComposer = async (
+    paneId: string,
+    ports: string,
+    label: string,
+    inheritGlobal: boolean,
+  ) => {
+    if (unsent > 0) {
+      const snap = capturePaneSnapshot(paneId);
+      const prov = snap ? registry.detect(snap) : null;
+      const st = prov && snap ? prov.composerState(snap) : null;
+      const gate =
+        prov && snap && st
+          ? classifyCoordDelivery(paneId, st, snap.captureTail, prov.id)
+          : null;
+      let suffix = "pending";
+      if (gate?.phase === "wait-typing") suffix = "wait typing";
+      else if (gate?.phase === "wait-busy") suffix = "wait generate";
+      else if (gate?.phase === "wait-settle" && gate.settleInSec != null) {
+        suffix = `settle ${gate.settleInSec}s`;
+      }
+      tmuxSet(paneId, "@mesh_status", `INBOX · ${unsent} · ${suffix}`);
+      return;
+    }
+    if (unresolved > 0) {
+      tmuxSet(paneId, "@mesh_status", `INBOX · ${unresolved} unresolved`);
+      return;
+    }
+    paintOne(paneId, ports, inheritGlobal, label);
+  };
+
+  await yieldEventLoop();
+  const mgr = meshManagerPane(session, baseWindow);
+  if (mgr) {
+    await paintCoordInboxOrComposer(mgr, "manager", "manager", false);
+  }
+
+  await yieldEventLoop();
   const sec = meshSecretaryPane(session, baseWindow);
   if (sec) {
     paintOne(sec, "secretary", true, "secretary");

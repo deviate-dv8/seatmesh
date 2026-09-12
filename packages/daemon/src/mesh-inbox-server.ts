@@ -3,7 +3,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   loadProfile,
@@ -109,6 +109,8 @@ async function main(): Promise<void> {
   const connectivity = newConnectivityRecoveryState();
   const ocLimited = connectivity.ocLimited;
   let pollBusy = false;
+  let snapRefreshBusy = false;
+  let scrapeBusy = false;
   let paneOpBusy = false;
   let healthSnap = {
     workerPanes: 0,
@@ -142,6 +144,50 @@ async function main(): Promise<void> {
       paneOpsPending: store.countPaneOpsPending(),
       updatedAt: Date.now(),
     };
+  }
+
+  /** Defer tmux + store reads off the poll/drain path so GET /health can interleave. */
+  function scheduleHealthSnapRefresh(): void {
+    if (snapRefreshBusy) return;
+    snapRefreshBusy = true;
+    setImmediate(() => {
+      try {
+        refreshHealthSnap();
+        refreshQueueSnap();
+      } catch (e) {
+        log(`health snap error ${(e as Error).message}`);
+      } finally {
+        snapRefreshBusy = false;
+      }
+    });
+  }
+
+  function tmuxHasSessionAsync(sess: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const p = spawn("tmux", ["has-session", "-t", sess], { stdio: "ignore" });
+      p.on("close", (code) => resolve(code === 0));
+      p.on("error", () => resolve(false));
+    });
+  }
+
+  function scheduleAutoScrape(): void {
+    if (scrapeBusy || autoScrapeMs <= 0 || Date.now() - lastAutoScrapeAt < autoScrapeMs) return;
+    scrapeBusy = true;
+    setImmediate(() => {
+      void (async () => {
+        try {
+          if (await tmuxHasSessionAsync(session)) {
+            lastAutoScrapeAt = Date.now();
+            saveMeshSession(loaded, registry);
+            log("auto-scrape mesh-agents.json");
+          }
+        } catch (e) {
+          log(`auto-scrape error ${(e as Error).message}`);
+        } finally {
+          scrapeBusy = false;
+        }
+      })();
+    });
   }
 
   const paneOpsCtx: PaneOpsDrainCtx = {
@@ -260,6 +306,11 @@ async function main(): Promise<void> {
           peerUnsent: queueSnap.peerUnsent,
           paneOpsPending: queueSnap.paneOpsPending,
           queueSnapAgeMs: Date.now() - queueSnap.updatedAt,
+          healthSnapAgeMs: Date.now() - healthSnap.updatedAt,
+          ready: healthSnap.updatedAt > 0 && queueSnap.updatedAt > 0,
+          pollBusy,
+          snapRefreshBusy,
+          scrapeBusy,
           paneOpBusy,
           stateDir,
         });
@@ -542,76 +593,71 @@ async function main(): Promise<void> {
     console.log(
       `mesh-inbox: listening http://127.0.0.1:${port} session=${session} storage=${rt.storageBackend}`,
     );
+    scheduleHealthSnapRefresh();
   });
 
-  refreshHealthSnap();
-  refreshQueueSnap();
+  const snapRefreshMs = Math.min(pollMs, 2000);
+  setInterval(scheduleHealthSnapRefresh, snapRefreshMs);
+  setInterval(scheduleAutoScrape, Math.min(pollMs, 30_000));
+  setInterval(scheduleDrain, pollMs);
+
+  function onResumeAckPane(paneId: string): void {
+    if (clearOcLimitBannerForPane(connectivity, paneId)) {
+      maybeEndRateLimitEpisode(connectivity);
+      repaintMeshPaneBorder(
+        registry,
+        store,
+        paneId,
+        {
+          proxyDownActive: connectivity.proxyDownActive,
+          ocLimitedPaneIds: connectivity.ocLimited,
+        },
+        false,
+        "",
+        stateDir,
+        uxResolved,
+      );
+      log(`OC-RESUME ack removed OC-LIMIT banner ${paneId}`);
+      if (connectivity.ocLimited.size === 0) {
+        const sec = meshSecretaryPane(session, baseWindow);
+        if (sec) {
+          repaintMeshPaneBorder(
+            registry,
+            store,
+            sec,
+            {
+              proxyDownActive: connectivity.proxyDownActive,
+              ocLimitedPaneIds: connectivity.ocLimited,
+            },
+            true,
+            "secretary",
+            stateDir,
+            uxResolved,
+          );
+        }
+      }
+    }
+  }
+
   setInterval(() => {
     if (pollBusy) return;
     pollBusy = true;
     setImmediate(() => {
       try {
         pollOcLimitsTick();
-        pollResumeAcks(registry, workspace, log, (paneId) => {
-          if (clearOcLimitBannerForPane(connectivity, paneId)) {
-            maybeEndRateLimitEpisode(connectivity);
-            repaintMeshPaneBorder(
-              registry,
-              store,
-              paneId,
-              {
-                proxyDownActive: connectivity.proxyDownActive,
-                ocLimitedPaneIds: connectivity.ocLimited,
-              },
-              false,
-              "",
-              stateDir,
-              uxResolved,
-            );
-            log(`OC-RESUME ack removed OC-LIMIT banner ${paneId}`);
-            if (connectivity.ocLimited.size === 0) {
-              const sec = meshSecretaryPane(session, baseWindow);
-              if (sec) {
-                repaintMeshPaneBorder(
-                  registry,
-                  store,
-                  sec,
-                  {
-                    proxyDownActive: connectivity.proxyDownActive,
-                    ocLimitedPaneIds: connectivity.ocLimited,
-                  },
-                  true,
-                  "secretary",
-                  stateDir,
-                  uxResolved,
-                );
-              }
-            }
-          }
-        });
-        refreshOrchConnectivity();
       } catch (e) {
         log(`connectivity poll error ${(e as Error).message}`);
+      } finally {
+        pollBusy = false;
       }
-      runDrainCoalesced(() => {
-        try {
-          refreshHealthSnap();
-          refreshQueueSnap();
-          if (
-            autoScrapeMs > 0 &&
-            Date.now() - lastAutoScrapeAt >= autoScrapeMs &&
-            spawnSync("tmux", ["has-session", "-t", session], { stdio: "ignore" }).status === 0
-          ) {
-            lastAutoScrapeAt = Date.now();
-            saveMeshSession(loaded, registry);
-            log("auto-scrape mesh-agents.json");
-          }
-        } catch (e) {
-          log(`health snap error ${(e as Error).message}`);
-        } finally {
-          pollBusy = false;
-        }
-      });
+    });
+    setImmediate(() => {
+      try {
+        pollResumeAcks(registry, workspace, log, onResumeAckPane);
+        refreshOrchConnectivity();
+      } catch (e) {
+        log(`resume ack poll error ${(e as Error).message}`);
+      }
     });
   }, pollMs);
 

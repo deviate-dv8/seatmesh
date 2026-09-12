@@ -1,22 +1,20 @@
 # seatmesh NOW
 
-**Updated:** 2026-09-13 05:40
+**Updated:** 2026-09-13 05:50
 
-**Slice:** **P1.7 save/auto polish** — summary, labels, mini refuse, secretary persist.
+**Slice:** **2.1e /health wedge** — snap refresh + auto-scrape off poll/drain path.
 
 **Read:** [docs/ONE-PATH.md](docs/ONE-PATH.md) · [TODO.md](TODO.md)
 
 ## Done this session
 
-- **P1.7** — `save`/`auto`: harness-style `--- summary ---`, apply labels, `--json` / `--no-labels`
-- Mini pane refused from save/auto (harness parity)
-- Secretary `wanted=true` preserved when coord pane missing
-- `save-session.test.ts` + resume-extract test mock fix
+- **2.1e** — `/health` stays responsive during poll/drain: deferred snap refresh (2s), async auto-scrape, poll releases before drain; `ready`, `healthSnapAgeMs`, `pollBusy` on `/health`
+- **2.1f / 2.4** (prior) — checkback reset/ack + auto-start on down
 
 ## Next (one at a time)
 
-1. **P5.1** — checkback `reset`/`ack` + auto-start on down
-2. **2.1e** — `/health` wedge (async probe off event loop)
-3. **P1.7 follow** — `4.1` mesh-agents json engine (full switch/set parity)
+1. **5.7** — `sm notify` wrapper
+2. **4.1** — mesh-agents json engine polish
+3. **5.2** — inbox list/resolve CLI parity
 
-**Tracker:** [TODO.md](TODO.md)
+**Tracker:** [TODO.md](TODO.md) · [IMPLEMENT-CHECK.md](../tasks/seat-mesh/IMPLEMENT-CHECK.md)
