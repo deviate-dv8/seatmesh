@@ -1,6 +1,6 @@
 {
   "name": "@seat-mesh/providers",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,7 +16,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@seat-mesh/core": "0.1.12"
+    "@seat-mesh/core": "0.1.13"
   },
   "publishConfig": {
     "access": "public"

@@ -5,6 +5,7 @@ import { loadMeshAgents } from "./agents-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget, type PaneRow } from "../lib/resolve-pane.js";
 import { saveMeshAgentsFile } from "../session/save-session.js";
+import { extractResumeIdAuto } from "./resume-extract.js";
 
 const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "empty"]);
 
@@ -260,20 +261,49 @@ export function runSet(
   printSlot(next, resolved.row);
 }
 
+function normalizeTagTarget(target: string): string {
+  const t = target.trim();
+  if (t === "self") return "here";
+  return t;
+}
+
+function targetLabel(row: PaneRow): string {
+  if (row.role === "manager") return "manager";
+  if (row.role === "manager-2") return "manager-2";
+  if (row.role === "secretary") return "secretary";
+  if (row.mini) return `mini-${row.mini}`;
+  if (row.slot && /^\d+$/.test(row.slot)) return `slot-${row.slot}`;
+  return row.paneId;
+}
+
+export interface RunTagOptions {
+  auto?: boolean;
+}
+
 /** Persist resume id for a pane (keeps current type). Harness parity: tag without relaunch. */
 export function runTag(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
   target: string,
   resumeIdRaw: string,
+  opts: RunTagOptions = {},
 ): void {
-  const resumeId = resumeIdRaw.trim();
-  if (!resumeId) {
-    throw new Error("usage: tag <target> <resume_id>");
-  }
-
-  const resolved = resolvePaneTarget(target, loaded);
+  const resolved = resolvePaneTarget(normalizeTagTarget(target), loaded);
   if ("error" in resolved) throw new Error(resolved.error);
+
+  let resumeId = resumeIdRaw.trim();
+  if (opts.auto || resumeId === "--auto") {
+    const extracted = extractResumeIdAuto(resolved.paneId, registry);
+    if (!extracted) {
+      throw new Error(
+        `tag ${targetLabel(resolved.row)}: --auto found no resume_id on live CLI (empty/opencode or plain shell?)`,
+      );
+    }
+    resumeId = extracted;
+  }
+  if (!resumeId) {
+    throw new Error("usage: tag <target|self> <resume_id|--auto>");
+  }
 
   const mesh = ensureMeshAgentsRecord(loaded);
   const type =
@@ -281,7 +311,7 @@ export function runTag(
     detectLiveType(resolved.paneId, registry);
   if (type === "empty") {
     throw new Error(
-      `tag ${target}: pane type is empty — run set <target> <type> first`,
+      `tag ${targetLabel(resolved.row)}: pane type is empty — run set <target> <type> first`,
     );
   }
 
@@ -290,6 +320,8 @@ export function runTag(
     resumeId,
   });
   const file = persistPatched(loaded, next);
-  console.log(`OK: tag ${target} resumeId=${resumeId} type=${type} (${file})`);
+  const label = targetLabel(resolved.row);
+  const short = resumeId.length > 8 ? `${resumeId.slice(0, 8)}...` : resumeId;
+  console.log(`OK: tagged ${label} resume=${short} type=${type} (${file})`);
   printSlot(next, resolved.row);
 }

@@ -118,7 +118,7 @@ export function resolvePaneTarget(
   const raw = (arg ?? "").trim();
   const workspaceId = workspaceIdFromContext(ctx);
 
-  if (!raw || raw === "here") {
+  if (!raw || raw === "here" || raw === "self") {
     const paneId = process.env.TMUX_PANE;
     if (!paneId) {
       return {
@@ -227,6 +227,6 @@ export function resolvePaneTarget(
   }
 
   return {
-    error: `bad target: ${raw} (want here | 1-8 | slot-N | manager | secretary | mini-N | %id)`,
+    error: `bad target: ${raw} (want here | self | 1-8 | slot-N | manager | secretary | mini-N | %id)`,
   };
 }

@@ -145,7 +145,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   launch [--now] [targets…]
   prompt | remind | flush
   contexts [--json] | peek | ppa
-  switch | handoff | set | tag | title | status
+  switch | handoff | set | tag <target|self> <id|--auto> | title | status
   night on|off|status | continue <slot|all>   (manager + night on)
   slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
   agent [target]              scoped can/cannot for this pane (profile role)
@@ -937,13 +937,21 @@ async function main(): Promise<void> {
   if (cmd === "tag") {
     const loaded = meshLoaded(profileArg);
     const reg = createRegistryForProfile(loaded.profile);
-    const target = sub;
-    const resumeId = tail[0];
-    if (!target || !resumeId) {
-      console.error("usage: tag <target> <resume_id>");
+    const args = [sub, ...tail].filter((a): a is string => a != null && a !== "");
+    const auto = args.includes("--auto");
+    const parts = args.filter((a) => a !== "--auto");
+    const target = parts[0];
+    const resumeId = parts[1];
+    if (!target || (!auto && !resumeId)) {
+      console.error("usage: tag <target|self> <resume_id|--auto>");
       process.exit(2);
     }
-    runTag(loaded, reg, target, resumeId);
+    try {
+      runTag(loaded, reg, target, resumeId ?? "--auto", { auto });
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
     return;
   }
 

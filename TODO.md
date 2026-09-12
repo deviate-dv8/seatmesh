@@ -91,7 +91,7 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 
 - [x] **5.1** `checkback start` — harness shape `start <duration> --expect "topic" [--renew] [--here|--slot|--mini]` + loud-fail inbox down
 - [x] **5.2** `inbox list|resolve` + status `--wait|--meta` + `log|instances` — daemon routes + CLI (`inbox-bridge.ts`)
-- [~] **5.3** `tag` — `set`/`tag` shipped (resume id); `--auto` + `self` alias still open
+- [x] **5.3** `tag` — `set`/`tag` + `self`/`--auto` resume extract (`resume-extract.ts` + mesh-agents write)
 - [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)
 - [x] **5.5** `whoami --json` (P1-3)
 - [ ] **5.6** workers layout profile-config — `layoutWorkersFromProfile` replaces hard-coded `layoutWorkers3x2` (DAN req; P1-4)
