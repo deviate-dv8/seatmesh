@@ -13,6 +13,13 @@ export function createQueueStore(loaded: LoadedProfile, log: (line: string) => v
   if (rt.storageBackend === "jsonl") {
     return new JsonlStore(rt.daemonDir, log);
   }
-  migrateJsonlDirToSqlite(rt.sqlitePath, rt.daemonDir, log);
-  return new SqliteStore(rt.sqlitePath, rt.daemonDir, log);
+  try {
+    migrateJsonlDirToSqlite(rt.sqlitePath, rt.daemonDir, log);
+    return new SqliteStore(rt.sqlitePath, rt.daemonDir, log);
+  } catch (e) {
+    log(
+      `WARN: sqlite unavailable (${(e as Error).message}) — falling back to jsonl in ${rt.daemonDir}`,
+    );
+    return new JsonlStore(rt.daemonDir, log);
+  }
 }

@@ -76,7 +76,7 @@
 
 ## P4 — cutover (see `docs/SURPASS.md`)
 
-- [~] **4.1** `mesh-agents.json` (mesh-owned state) — save/read layout + set/tag persist; switch relaunch still does not auto-save
+- [~] **4.1** `mesh-agents.json` (mesh-owned state) — save/read + set/tag + switch auto-save; full json engine still open
 - [ ] **4.2** `session down` (never touch `dev`)
 - [ ] **4.3** kiro trust dialog on launch
 - [ ] **4.4** Cursor composer-ready wait before handoff
@@ -93,7 +93,7 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 - [~] **5.2** `inbox list|resolve` + daemon routes `GET /inbox` + `POST /inbox/resolve` — CLI shipped; `--wait|--meta` + log/instances still open
 - [~] **5.3** `tag` — `set`/`tag` shipped (resume id); `--auto` + `self` alias still open
 - [ ] **5.4** `seat update|set|stamp|snap` — FOCUS/TASKS/REMINDER writes + ACTIVE-FOCUS stamp + snapshot wrap; filesystem parts shippable now, `seat set` blocks on 4.1 (P1-2)
-- [ ] **5.5** `whoami --json` (P1-3)
+- [x] **5.5** `whoami --json` (P1-3)
 - [ ] **5.6** workers layout profile-config — `layoutWorkersFromProfile` replaces hard-coded `layoutWorkers3x2` (DAN req; P1-4)
 - [ ] **5.7** `notify` — `sm notify "<session>" ["<check>"]`, seat from TMUX_PANE, loud FAIL on missing notify-send (P2-1)
 - [ ] **5.8** `preview` — `sm preview <file...> [--set <days>] [--notify]` wrapping publish-mdview.sh (P2-3)

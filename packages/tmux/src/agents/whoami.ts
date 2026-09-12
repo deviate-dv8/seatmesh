@@ -96,6 +96,42 @@ export function runWhoami(loaded: LoadedProfile, target?: string): WhoamiResult 
 /** @deprecated use runWhoami */
 export const runWhere = runWhoami;
 
+export function whoamiJson(loaded: LoadedProfile, target?: string): Record<string, unknown> {
+  const w = runWhoami(loaded, target);
+  const paths = profilePaths(loaded);
+  const mini = w.paneId ? tmuxDisplay(w.paneId, "#{@mesh_mini}") ?? "" : "";
+  const jobRole = w.paneId ? tmuxDisplay(w.paneId, "#{@mesh_job_role}") ?? "" : "";
+  const kind =
+    w.role === "manager-mini"
+      ? "mini"
+      : w.role === "secretary"
+        ? "secretary"
+        : w.role === "manager-2"
+          ? "manager-2"
+          : w.role === "manager"
+            ? "manager"
+            : "worker";
+  return {
+    profile: w.profile,
+    workspace: w.workspace,
+    workspaceId: loaded.workspaceId,
+    meshSession: loaded.sessionName,
+    inTmux: w.inTmux,
+    session: w.session,
+    window: w.window,
+    pane: w.paneId,
+    youAre: w.role,
+    kind,
+    slot: w.slotLabel ?? w.slot,
+    ports: w.ports,
+    mini: mini || null,
+    jobRole: jobRole || null,
+    daemonPort: paths.daemonPort,
+    dataRoot: paths.dataRoot,
+    seatsRoot: paths.seatsRoot,
+  };
+}
+
 export function printWhoami(loaded: LoadedProfile, target?: string): void {
   const w = runWhoami(loaded, target);
   const paths = profilePaths(loaded);

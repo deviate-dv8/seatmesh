@@ -13,6 +13,7 @@ import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
   printWhoami,
+  whoamiJson,
   printAgentCard,
   runWhoami,
   capturePaneSnapshot,
@@ -889,7 +890,15 @@ async function main(): Promise<void> {
       console.error("note: where is deprecated — use ./sm.sh whoami");
     }
     const loaded = meshLoaded(profileArg);
-    printWhoami(loaded, sub || tail[0]);
+    const json = rest.includes("--json");
+    const targetArg = (sub === "--json" ? tail[0] : sub || tail.find((a) => a !== "--json")) as
+      | string
+      | undefined;
+    if (json) {
+      console.log(JSON.stringify(whoamiJson(loaded, targetArg), null, 2));
+    } else {
+      printWhoami(loaded, targetArg);
+    }
     return;
   }
 
