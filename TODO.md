@@ -38,7 +38,7 @@
 - [x] **1.4** `flush` — `flush.ts` (Enter rescue / Esc stuck draft)
 - [x] **1.5** `switch` / `handoff` — relaunch + FOCUS handoff (`switch.ts`)
 - [x] **1.6** `set` / `tag` — persist type/resumeId to `mesh-agents.json` (`set-tag.ts`; JSON only, no relaunch)
-- [~] **1.7** `save` / `auto` — scrape live mesh -> `mesh-agents.json`; switch auto-save after relaunch
+- [x] **1.7** `save` / `auto` — scrape + summary + labels; mini-pane refuse; secretary wanted persist
 - [x] **1.8** `title` / `status` — `@mesh_title` / `@mesh_status` + border
 - [x] **1.9** `remind` — manager-only; enqueue PEER.jsonl (`remind.ts`)
 - [x] **1.10** `continue` + `night` — manager-only; flag `.sm/seats/manager/night.on` + peer enqueue

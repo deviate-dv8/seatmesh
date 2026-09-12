@@ -82,6 +82,9 @@ import {
   runToMini,
   applyMeshState,
   saveMeshSession,
+  saveMeshSessionDetailed,
+  assertSaveAllowed,
+  formatSaveSummary,
   submitPaneOp,
   clearPaneOpsQueue,
   printPaneOpsList,
@@ -135,7 +138,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
   layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
   ops list|clear                pane-op queue (serial)
-  save|auto                     scrape session -> mesh-agents.json (daemon also auto-scrapes every 10m)
+  save|auto [--json] [--no-labels]   scrape session -> mesh-agents.json (+ labels; daemon auto-scrapes every 10m)
   labels                        re-apply @mesh_* + border strip
   inbox [--json] [--wait N] [--meta] | inbox list|resolve|log|instances|stop|restart
   peer <target> <msg...>        manager -> any pane (one path; alias: prompt -m)
@@ -1166,13 +1169,21 @@ async function main(): Promise<void> {
 
   if (cmd === "save" || cmd === "auto") {
     const loaded = meshLoaded(profileArg);
+    assertSaveAllowed(loaded);
     const reg = createRegistryForProfile(loaded.profile);
-    const file = saveMeshSession(loaded, reg);
-    const m = loaded.profile.layout?.minis;
-    const layoutNote = m
-      ? ` minis=${m.grid} max=${m.max} leads=[${Array.isArray(m.leads) ? m.leads.join(",") : "?"}]`
-      : "";
-    console.log(`OK: saved ${file}${layoutNote}`);
+    const json = rest.includes("--json");
+    const skipLabels = rest.includes("--no-labels");
+    const { file, data } = saveMeshSessionDetailed(loaded, reg);
+    if (!skipLabels) {
+      console.log("Applying pane labels...");
+      labelMeshSession(loaded);
+    }
+    if (json) {
+      console.log(JSON.stringify({ file, agents: data }, null, 2));
+    } else {
+      console.log(`OK: saved ${file}`);
+      console.log(formatSaveSummary(data, file));
+    }
     return;
   }
 

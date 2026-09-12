@@ -21,7 +21,10 @@ describe("extractAgentIdFromLogs (via auto path)", () => {
 
   it("is covered by provider detect when cmdline has --resume", () => {
     const reg = {
-      detect: () => ({ providerId: "cursor-agent", resumeId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }),
+      detect: () => ({
+        id: "cursor-agent",
+        detect: () => ({ resumeId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }),
+      }),
     } as unknown as ProviderRegistry;
     expect(extractResumeIdAuto("%1", reg)).toBe("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
   });

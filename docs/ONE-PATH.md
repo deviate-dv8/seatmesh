@@ -12,7 +12,7 @@ raw-paste into tmux from scripts when a command exists.
 | Rebuild + refresh labels | `reload` |
 | Re-grid workers/minis | `layout` (`--dry-run` then `--yes` if shrink would kill live panes) |
 | Label health | `verify` |
-| Persist CLI map | `save` or `auto` |
+| Persist CLI map | `save` or `auto` (summary + labels; `--json` / `--no-labels`) |
 
 ## Identity and seats
 

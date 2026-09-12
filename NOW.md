@@ -1,22 +1,22 @@
 # seatmesh NOW
 
-**Updated:** 2026-09-13 05:35
+**Updated:** 2026-09-13 05:40
 
-**Slice:** **P1.1 whoami POV doc map** — role YAML templates + `--validate`.
+**Slice:** **P1.7 save/auto polish** — summary, labels, mini refuse, secretary persist.
 
-**Read:** [docs/ROLE-YAML.md](docs/ROLE-YAML.md) · [docs/ONE-PATH.md](docs/ONE-PATH.md) · [TODO.md](TODO.md)
+**Read:** [docs/ONE-PATH.md](docs/ONE-PATH.md) · [TODO.md](TODO.md)
 
 ## Done this session
 
-- **P1.1** — full init `roles/*.yaml` (manager, manager-2, secretary, worker, mini, common); removed `master.yaml` template alias
-- `./sm.sh whoami --validate` — checks `read_first` / `files` / policy paths exist
-- Live `.sm/roles/` secretary mesh-native cmds; manager harness parity files
-- `role-index.test.ts` — merge + validate + master alias
+- **P1.7** — `save`/`auto`: harness-style `--- summary ---`, apply labels, `--json` / `--no-labels`
+- Mini pane refused from save/auto (harness parity)
+- Secretary `wanted=true` preserved when coord pane missing
+- `save-session.test.ts` + resume-extract test mock fix
 
 ## Next (one at a time)
 
-1. **P1.7** — `save`/`auto` scrape polish
-2. **5.1** — checkback `reset`/`ack` + auto-start on down
-3. **2.1e** — `/health` wedge (async probe off event loop)
+1. **P5.1** — checkback `reset`/`ack` + auto-start on down
+2. **2.1e** — `/health` wedge (async probe off event loop)
+3. **P1.7 follow** — `4.1` mesh-agents json engine (full switch/set parity)
 
-**Tracker:** [TODO.md](TODO.md) · [IMPLEMENT-CHECK.md](../tasks/seatmesh/IMPLEMENT-CHECK.md)
+**Tracker:** [TODO.md](TODO.md)

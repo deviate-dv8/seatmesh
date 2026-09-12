@@ -7,6 +7,7 @@ import {
   type MeshAgents,
   type MiniSlot,
   type SavedLayout,
+  type SecretarySlot,
   type WorkerSlot,
   buildResolvedPaths,
   mergeMeshAgentsIntoProfile,
@@ -32,6 +33,7 @@ import {
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
 import { listWindowPaneIds } from "./window-panes.js";
+import { runWhoami } from "../agents/whoami.js";
 
 function cliTypeFromProvider(providerId: string | undefined): CliType {
   if (!providerId) return "empty";
@@ -245,31 +247,37 @@ export function scrapeMeshAgents(
       })()
     : undefined;
 
-  const secretary = secPane
-    ? (() => {
-        let preserved: PreservedSlot | undefined = existing?.secretary;
-        const preservedSid = normalizeOpenCodeSessionId(preserved?.resumeId);
-        if (!preservedSid) {
-          const guess = guessSecretaryOpenCodeSession(loaded.workspace);
-          preserved = {
-            ...preserved,
-            type: "opencode",
-            resumeId: guess ?? null,
-          };
-        } else {
-          preserved = { ...preserved, type: "opencode", resumeId: preservedSid };
-        }
-        const det = detectPane(secPane, registry, loaded.workspace, preserved);
-        return {
-          type: det.type === "empty" ? "opencode" : det.type,
-          wanted: true,
-          resumeId: det.resumeId,
-          resumeCmd: det.resumeCmd,
-          ports: "secretary",
-          paneIndex: 1,
-        };
-      })()
-    : undefined;
+  let secretary: SecretarySlot | undefined;
+  if (secPane) {
+    let preserved: PreservedSlot | undefined = existing?.secretary;
+    const preservedSid = normalizeOpenCodeSessionId(preserved?.resumeId);
+    if (!preservedSid) {
+      const guess = guessSecretaryOpenCodeSession(loaded.workspace);
+      preserved = {
+        ...preserved,
+        type: "opencode",
+        resumeId: guess ?? null,
+      };
+    } else {
+      preserved = { ...preserved, type: "opencode", resumeId: preservedSid };
+    }
+    const det = detectPane(secPane, registry, loaded.workspace, preserved);
+    secretary = {
+      type: det.type === "empty" ? "opencode" : det.type,
+      wanted: true,
+      resumeId: det.resumeId,
+      resumeCmd: det.resumeCmd,
+      ports: "secretary",
+      paneIndex: 1,
+    };
+  } else if (existing?.secretary) {
+    secretary = {
+      ...existing.secretary,
+      wanted: existing.secretary.wanted ?? true,
+      type: existing.secretary.type ?? "opencode",
+      ports: existing.secretary.ports ?? "secretary",
+    };
+  }
 
   return MeshAgentsSchema.parse({
     schemaVersion: 1,
@@ -312,11 +320,80 @@ export function saveMeshAgentsFile(workspace: string, relPath: string, data: Mes
   return file;
 }
 
+/** Refuse save/auto from a mini pane (harness parity). */
+export function assertSaveAllowed(loaded: LoadedProfile): void {
+  if (!process.env.TMUX_PANE) return;
+  let w;
+  try {
+    w = runWhoami(loaded);
+  } catch {
+    return;
+  }
+  const minisWin = loaded.profile.layout?.minis.window;
+  if (
+    w.role === "manager-mini" ||
+    (minisWin && w.window === minisWin) ||
+    w.role === "mini"
+  ) {
+    throw new Error(
+      "refused: mini pane cannot run save/auto (use manager, worker, secretary, or a shell outside tmux)",
+    );
+  }
+}
+
+/** Human-readable post-save summary (harness print_auto_summary parity). */
+export function formatSaveSummary(data: MeshAgents, file: string): string {
+  const lines: string[] = ["--- summary ---"];
+  lines.push(`session: ${data.session}`);
+  if (data.updatedAt) lines.push(`updated: ${data.updatedAt}`);
+  if (data.manager) {
+    const m = data.manager;
+    lines.push(`manager: ${m.type}${m.resumeId ? " resume" : ""}`);
+  }
+  if (data.manager2) {
+    const m = data.manager2;
+    lines.push(`manager-2: ${m.type}${m.resumeId ? " resume" : ""}`);
+  }
+  if (data.secretary) {
+    const s = data.secretary;
+    lines.push(
+      `secretary: wanted=${s.wanted} type=${s.type}${s.resumeId ? " resume" : ""}`,
+    );
+  }
+  for (const w of [...data.workers].sort((a, b) => a.slot - b.slot)) {
+    lines.push(`slot ${w.slot}: ${w.type}${w.resumeId ? " resume" : ""}`);
+  }
+  for (const m of [...data.minis].sort((a, b) => a.mini - b.mini)) {
+    const roleNote = m.role ? ` role=${m.role}` : "";
+    lines.push(`mini ${m.mini}: ${m.type}${roleNote}${m.resumeId ? " resume" : ""}`);
+  }
+  const minisLay = data.layout?.minis;
+  if (minisLay) {
+    const leads = Array.isArray(minisLay.leads) ? minisLay.leads.join(",") : "?";
+    lines.push(`layout.minis: ${minisLay.grid} max=${minisLay.max} leads=[${leads}]`);
+  }
+  lines.push(`full JSON: ${file}`);
+  return lines.join("\n");
+}
+
+export interface SaveMeshSessionResult {
+  file: string;
+  data: MeshAgents;
+}
+
 /** Scrape live mesh session -> mesh-agents.json (layout + slot CLI state). */
-export function saveMeshSession(loaded: LoadedProfile, registry: ProviderRegistry): string {
+export function saveMeshSessionDetailed(
+  loaded: LoadedProfile,
+  registry: ProviderRegistry,
+): SaveMeshSessionResult {
   const file = buildResolvedPaths(loaded).meshAgentsJson;
   const data = scrapeMeshAgents(loaded, registry);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
-  return file;
+  return { file, data };
+}
+
+/** Scrape live mesh session -> mesh-agents.json (layout + slot CLI state). */
+export function saveMeshSession(loaded: LoadedProfile, registry: ProviderRegistry): string {
+  return saveMeshSessionDetailed(loaded, registry).file;
 }
