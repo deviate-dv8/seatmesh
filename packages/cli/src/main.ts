@@ -53,6 +53,7 @@ import {
   runNight,
   runContinue,
   printContinueResults,
+  runSlotAdvice,
   verifyMeshSession,
   printVerify,
   labelMeshSession,
@@ -140,6 +141,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   contexts [--json] | peek | ppa
   switch | handoff | set | tag | title | status
   night on|off|status | continue <slot|all>   (manager + night on)
+  slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
   agent [target]              scoped can/cannot for this pane (profile role)
   whoami [target] | cold-start [--inject] | seat init
   room | chat | index | proxy | providers | manager | stack | profile show
@@ -778,6 +780,30 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     try {
       runNight(loaded, sub ?? "status");
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "slot-advice") {
+    const loaded = meshLoaded(profileArg);
+    const args = [sub, ...tail].filter(Boolean) as string[];
+    if (!args.length) {
+      console.error("usage: slot-advice <slot|slot-N> [--send] [note...]");
+      process.exit(2);
+    }
+    const send = args.includes("--send");
+    const noteParts = args.filter((a) => a !== "--send");
+    const target = noteParts[0];
+    const note = noteParts.slice(1).join(" ") || undefined;
+    if (!target) {
+      console.error("usage: slot-advice <slot|slot-N> [--send] [note...]");
+      process.exit(2);
+    }
+    try {
+      runSlotAdvice(loaded, target, { send, note });
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);

@@ -28,6 +28,7 @@ export * from "./roles/title-status.js";
 export * from "./inject/focus-brief.js";
 export * from "./roles/contexts.js";
 export * from "./roles/peek.js";
+export * from "./roles/slot-advice.js";
 export * from "./roles/ppa.js";
 export * from "./session/reload.js";
 export * from "./comms/inbox-bridge.js";
