@@ -1,19 +1,19 @@
 # seatmesh NOW
 
-**Updated:** 2026-09-13 05:50
+**Updated:** 2026-09-13 05:52
 
-**Slice:** **2.1e /health wedge** — snap refresh + auto-scrape off poll/drain path.
+**Slice:** **5.7 sm notify** — one-shape desktop toast wrapper.
 
-**Read:** [docs/ONE-PATH.md](docs/ONE-PATH.md) · [TODO.md](TODO.md)
+**Read:** [docs/ONE-PATH.md](docs/ONE-PATH.md) · [docs/SMFUNCTIONS-SPEC.md](docs/SMFUNCTIONS-SPEC.md)
 
 ## Done this session
 
-- **2.1e** — `/health` stays responsive during poll/drain: deferred snap refresh (2s), async auto-scrape, poll releases before drain; `ready`, `healthSnapAgeMs`, `pollBusy` on `/health`
-- **2.1f / 2.4** (prior) — checkback reset/ack + auto-start on down
+- **5.7** — `./sm.sh notify "<session>" "<check>" [--url URL]`; seat from TMUX whoami; loud FAIL if notify-send missing; `notify-operator.test.ts`
+- **2.1e** (prior) — `/health` wedge fix @0.1.17
 
 ## Next (one at a time)
 
-1. **5.7** — `sm notify` wrapper
+1. **5.8** — `sm preview` wrapper (publish-mdview.sh)
 2. **4.1** — mesh-agents json engine polish
 3. **5.2** — inbox list/resolve CLI parity
 

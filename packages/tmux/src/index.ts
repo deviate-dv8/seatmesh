@@ -39,6 +39,7 @@ export * from "./comms/peer-send.js";
 export * from "./comms/chat-checkback.js";
 export * from "./comms/room-fanout.js";
 export * from "./comms/room-call.js";
+export * from "./comms/notify-operator.js";
 export * from "./session/save-session.js";
 export * from "./session/layout-guard.js";
 export * from "./ops/pane-ops-client.js";
