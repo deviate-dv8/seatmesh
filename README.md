@@ -6,20 +6,19 @@ enqueue-only comms so nothing stomps a live composer.
 
 ## Install and cold start
 
-The CLI entry (`bin/seat-mesh` or `sm`) **auto-builds on first run**: if `dist/` is
-missing or stale, it runs `npm install` and `npm run build` in the package root,
-then execs the CLI. No manual build step required for normal use.
+The CLI entry (`bin/seat-mesh`) **auto-builds on first run**: if `dist/` is missing
+or stale, it runs `npm install` and `npm run build` in the package root, then execs
+the CLI. No manual build step required for normal use.
 
 ```bash
-# From the package (development or vendored copy)
+npx --package=seatmesh seat-mesh
+npx --package=seatmesh seat-mesh init
+npx --package=seatmesh seat-mesh session up
+
+# Git checkout (development)
 ./bin/seat-mesh --help
 
-# Greenfield project
-npx seatmesh init
-npx seatmesh update
-npx seatmesh session up
-
-# With a consumer wrapper (example: workspace-root sm.sh)
+# Consumer wrapper (example: workspace-root sm.sh)
 ./sm.sh session up
 ```
 
@@ -55,7 +54,7 @@ services/seat-mesh/
   bin/seat-mesh          CLI entry (cold start + node dist)
   packages/
     core/                Schemas, profile loader, chatroom, paths
-    cli/                 Command router
+    cli/                 Command router (npm package seatmesh)
     tmux/                Session, launch, inject, seats
     daemon/              Inbox server (sole pane writer)
     providers/           Agent CLI detection and inject plans
