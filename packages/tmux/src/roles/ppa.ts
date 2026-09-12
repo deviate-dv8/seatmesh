@@ -1,7 +1,7 @@
-import { meshRuntimePaths, type LoadedProfile, type ProviderRegistry } from "seat-mesh-core";
+import { meshRuntimePaths, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
 import fs from "node:fs";
 import path from "node:path";
-import { composerFromCapture } from "seat-mesh-providers";
+import { composerFromCapture } from "@seat-mesh/providers";
 import {
   listMeshMinis,
   listMeshWorkers,

@@ -5,8 +5,8 @@ import {
   meshRuntimePaths,
   profilePaths,
   type LoadedProfile,
-} from "seat-mesh-core";
-import { snapshotConnectivity, formatStatus } from "seat-mesh-connectivity";
+} from "@seat-mesh/core";
+import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import {
   inboxHealth,
   meshInboxPort,
@@ -14,7 +14,7 @@ import {
   printVerify,
   tmuxHasSession,
   verifyMeshSession,
-} from "seat-mesh-tmux";
+} from "@seat-mesh/tmux";
 
 export interface PrereqRow {
   name: string;
@@ -131,7 +131,7 @@ function printInbox(loaded: LoadedProfile): { ok: boolean; health: Record<string
   printSection("Inbox daemon");
   const port = meshInboxPort(loaded);
   const h = inboxHealth(port);
-  let ok = Boolean(h && h.engine === "seat-mesh-daemon");
+  let ok = Boolean(h && h.engine === "@seat-mesh/daemon");
   console.log(meshInboxStatusLine(loaded, h));
   if (ok && h) {
     const daemonSession = String(h.session ?? "");
@@ -163,7 +163,7 @@ function printInbox(loaded: LoadedProfile): { ok: boolean; health: Record<string
 
 function printPaneOps(h: Record<string, unknown> | null): void {
   printSection("Pane ops queue");
-  if (!h || h.engine !== "seat-mesh-daemon") {
+  if (!h || h.engine !== "@seat-mesh/daemon") {
     console.log("pending=? (inbox down)");
     return;
   }
@@ -216,7 +216,7 @@ export async function printStatusReport(
   const port = meshInboxPort(loaded);
   const h0 = inboxHealth(port);
   const inboxOk =
-    Boolean(h0 && h0.engine === "seat-mesh-daemon") &&
+    Boolean(h0 && h0.engine === "@seat-mesh/daemon") &&
     String(h0?.session ?? loaded.sessionName) === loaded.sessionName;
   const layoutIssues = sessionOk ? verifyMeshSession(loaded) : [];
   const layoutOk = layoutIssues.every((i) => i.level !== "error");

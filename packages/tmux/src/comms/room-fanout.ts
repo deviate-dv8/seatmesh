@@ -1,4 +1,4 @@
-import type { LoadedProfile, RoomMessageKind } from "seat-mesh-core";
+import type { LoadedProfile, RoomMessageKind } from "@seat-mesh/core";
 import {
   agentIdToSlot,
   chatRoomConfigForLoaded,
@@ -15,7 +15,7 @@ import {
   resolveFanoutDelivery,
   roomDir,
   unseenSummaryForAgent,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import {
   listMeshMonitorPanes,
   meshManagerPane,

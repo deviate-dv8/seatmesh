@@ -1,5 +1,5 @@
-import type { BaseColumn, LoadedProfile, PaneSnapshot, ProviderRegistry } from "seat-mesh-core";
-import { createRegistryForProfile } from "seat-mesh-providers";
+import type { BaseColumn, LoadedProfile, PaneSnapshot, ProviderRegistry } from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { resolveLiveTmuxSession } from "../lib/live-session.js";
 import { coordPaneForRole } from "../lib/pane-meta.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";

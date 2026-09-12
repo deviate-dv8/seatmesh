@@ -5,8 +5,8 @@ import {
   expectRoomCallPending,
   expectRoomCallResolved,
   expectRoomPeerReply,
-} from "seat-mesh-core";
-import type { LoadedProfile } from "seat-mesh-core";
+} from "@seat-mesh/core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import { runWhoami } from "../agents/whoami.js";
 
 function ownerPane(loaded: LoadedProfile, explicit?: string): string | undefined {

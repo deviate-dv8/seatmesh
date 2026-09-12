@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
+import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import { deliveryHoldForPane } from "./delivery-hold.js";
 import type { MeshOrchestratorCtx } from "./mesh-orchestrator.js";
 

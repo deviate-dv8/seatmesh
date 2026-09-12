@@ -1,4 +1,4 @@
-import type { LoadedProfile } from "seat-mesh-core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import {
   chatRoomConfigForLoaded,
   createPendingCall,
@@ -11,7 +11,7 @@ import {
   resolveAgentId,
   sayInRoom,
   updateCall,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { runWhoami } from "../agents/whoami.js";
 import { paneMetaForPane } from "../lib/pane-meta.js";
@@ -23,7 +23,7 @@ import {
   armRecipientRoomPing,
   armSenderChatCheckback,
 } from "./chat-checkback.js";
-import { expectRoomPeerReply } from "seat-mesh-core";
+import { expectRoomPeerReply } from "@seat-mesh/core";
 
 function requireWorker(loaded: LoadedProfile): {
   slot: string;

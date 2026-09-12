@@ -1,6 +1,6 @@
 {
   "name": "seat-mesh",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Typed tmux agent coordination: profiles, role index, inbox daemon, connectivity recovery.",
@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w seat-mesh-core && npm run build -w seat-mesh-providers && npm run build -w seat-mesh-tmux && npm run build -w seat-mesh-connectivity && npm run build -w seat-mesh-daemon && npm run build -w seatmesh",
+    "build": "npm run build -w @seat-mesh/core && npm run build -w @seat-mesh/providers && npm run build -w @seat-mesh/tmux && npm run build -w @seat-mesh/connectivity && npm run build -w @seat-mesh/daemon && npm run build -w @seat-mesh/cli",
     "typecheck": "npm run typecheck -ws --if-present",
     "test": "vitest run",
     "seat-mesh": "node packages/cli/dist/main.js"

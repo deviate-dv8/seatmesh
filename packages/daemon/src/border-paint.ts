@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
-import type { ComposerState, LoadedProfile, ProviderRegistry, ResolvedUxConfig } from "seat-mesh-core";
-import { evaluateUxRules, resolveUxConfig } from "seat-mesh-core";
+import type { ComposerState, LoadedProfile, ProviderRegistry, ResolvedUxConfig } from "@seat-mesh/core";
+import { evaluateUxRules, resolveUxConfig } from "@seat-mesh/core";
 import {
   capturePaneSnapshot,
   listMeshMinis,
   listMeshWorkers,
   meshManagerPane,
   meshSecretaryPane,
-} from "seat-mesh-tmux";
+} from "@seat-mesh/tmux";
 import { classifyCoordDelivery } from "./compose-gate.js";
 import type { QueueStore } from "./create-queue-store.js";
 import { PpaStateStore } from "./ppa-state.js";

@@ -1,18 +1,18 @@
-import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
+import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import {
   formatCompactSeat,
   formatGenericCheckback,
   formatRoomCallCheckback,
   formatRoomCommsCheckback,
   isRoomCallExpect,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import {
   buildMiniCampaignDigest,
   capturePaneSnapshot,
   meshManagerPane,
   meshSecretaryPane,
   paneMetaForPane,
-} from "seat-mesh-tmux";
+} from "@seat-mesh/tmux";
 import type { ToMasterRow } from "./create-queue-store.js";
 import { paintMeshBorders, type BorderPaintConnectivity } from "./border-paint.js";
 import { deliverToPane } from "./inject-delivery.js";
@@ -33,7 +33,7 @@ import {
   shouldSkipGlobalWorkerRoomPing,
 } from "./peer-skip.js";
 import { deliveryHoldForPane } from "./delivery-hold.js";
-import { markColdStartDelivered } from "seat-mesh-tmux";
+import { markColdStartDelivered } from "@seat-mesh/tmux";
 
 export interface MeshOrchestratorCtx {
   loaded: LoadedProfile;

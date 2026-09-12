@@ -1,5 +1,5 @@
-import type { LoadedProfile, PaneOpRow, ProviderRegistry } from "seat-mesh-core";
-import { executePaneOp, saveMeshSession } from "seat-mesh-tmux";
+import type { LoadedProfile, PaneOpRow, ProviderRegistry } from "@seat-mesh/core";
+import { executePaneOp, saveMeshSession } from "@seat-mesh/tmux";
 import type { QueueStore } from "./create-queue-store.js";
 
 export interface PaneOpsDrainCtx {

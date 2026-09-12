@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { meshRuntimePaths, type LoadedProfile } from "seat-mesh-core";
-import { createRegistryForProfile, formatOpenCodeResumeCommand } from "seat-mesh-providers";
-import { snapshotConnectivity } from "seat-mesh-connectivity";
+import { meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
+import { createRegistryForProfile, formatOpenCodeResumeCommand } from "@seat-mesh/providers";
+import { snapshotConnectivity } from "@seat-mesh/connectivity";
 import { inboxHealth, meshInboxPort } from "./comms/inbox-bridge.js";
 import { resolvePaneTarget } from "./lib/resolve-pane.js";
 import { capturePaneSnapshot, listSessionPanes } from "./lib/snapshot.js";
@@ -89,11 +89,11 @@ function testMeshInbox(loaded: LoadedProfile): SmokeResult {
   const port = meshInboxPort(loaded);
   const h = inboxHealth(port);
   if (!h) return row("mesh-inbox", false, "mesh-inbox DOWN — ./sm.sh reload or ./sm.sh inbox");
-  if (h.engine !== "seat-mesh-daemon") {
+  if (h.engine !== "@seat-mesh/daemon") {
     return row(
       "mesh-inbox",
       false,
-      `port :${port} is not seat-mesh-daemon (engine=${String(h.engine ?? "?")})`,
+      `port :${port} is not @seat-mesh/daemon (engine=${String(h.engine ?? "?")})`,
     );
   }
   const session = String(h.session ?? "");

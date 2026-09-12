@@ -1,5 +1,5 @@
-import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
-import { createRegistryForProfile, waitForCli } from "seat-mesh-providers";
+import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { createRegistryForProfile, waitForCli } from "@seat-mesh/providers";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { syncOpenCodePaneSession } from "./oc-session-sync.js";
 

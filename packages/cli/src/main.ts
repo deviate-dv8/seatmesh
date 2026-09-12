@@ -7,9 +7,9 @@ import {
   renderRoleIndex,
   validateRoleIndex,
   runStackPassthrough,
-} from "seat-mesh-core";
-import { snapshotConnectivity, formatStatus } from "seat-mesh-connectivity";
-import { createRegistryForProfile } from "seat-mesh-providers";
+} from "@seat-mesh/core";
+import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
   printWhoami,
   printAgentCard,
@@ -73,7 +73,7 @@ import {
   buildFullColdStartBrief,
   enqueueColdStart,
   runSeatInit,
-} from "seat-mesh-tmux";
+} from "@seat-mesh/tmux";
 import { buildChatCommands } from "./chat-cli.js";
 import { buildCheckbackCommands } from "./checkback-cli.js";
 import { buildContractLockCommands } from "./contract-lock-cli.js";

@@ -6,13 +6,13 @@ import type {
   LimitJob,
   PaneSnapshot,
   UxConfig,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import {
   evaluateUxRules,
   resolveUxConfig,
   type ResolvedUxConfig,
   type UxTrigger,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 
 function triggerToJobType(trigger: UxTrigger): string {
   switch (trigger) {

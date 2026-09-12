@@ -1,4 +1,4 @@
-import type { Detection, PaneSnapshot, ComposerState, PromptCapture } from "seat-mesh-core";
+import type { Detection, PaneSnapshot, ComposerState, PromptCapture } from "@seat-mesh/core";
 
 /** Process cmdlines attached to snapshot (from pane tree walk). */
 export function cmdlines(pane: PaneSnapshot): string[] {

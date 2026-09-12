@@ -3,7 +3,7 @@ import {
   nvimLayoutEnabled,
   workersLayoutEnabled,
   type LoadedProfile,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import { loadMeshAgents } from "../agents/agents-state.js";
 import { tmux } from "../lib/tmux-run.js";
 

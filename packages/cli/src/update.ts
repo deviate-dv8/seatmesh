@@ -7,7 +7,7 @@ import {
   loadProfile,
   writePathsManifest,
   type LoadedProfile,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import { runMigrateRuntime, type MigrateRuntimeResult } from "./migrate-runtime.js";
 
 export interface UpdateOptions {

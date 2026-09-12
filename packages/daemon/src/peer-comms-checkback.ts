@@ -5,8 +5,8 @@ import {
   expectRoomCallPending,
   expectRoomPeerReply,
   parseDurationToSeconds,
-} from "seat-mesh-core";
-import type { LoadedProfile } from "seat-mesh-core";
+} from "@seat-mesh/core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import type { CheckbackRow, QueueStore, PeerRow } from "./create-queue-store.js";
 
 function expiresIn(duration: string, fallbackSec = 300): string {

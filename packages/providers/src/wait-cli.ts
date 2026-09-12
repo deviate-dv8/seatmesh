@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { PaneSnapshot, ProviderRegistry } from "seat-mesh-core";
+import type { PaneSnapshot, ProviderRegistry } from "@seat-mesh/core";
 
 function sleepMs(ms: number): void {
   if (ms <= 0) return;

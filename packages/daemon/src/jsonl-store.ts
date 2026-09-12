@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { formatMeshSteeringInject, type PaneOpRow } from "seat-mesh-core";
+import { formatMeshSteeringInject, type PaneOpRow } from "@seat-mesh/core";
 
 export interface CheckbackRow {
   id: string;

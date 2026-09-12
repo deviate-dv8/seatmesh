@@ -1,5 +1,5 @@
-import type { LoadedProfile, PaneSnapshot } from "seat-mesh-core";
-import { createBuiltinRegistry } from "seat-mesh-providers";
+import type { LoadedProfile, PaneSnapshot } from "@seat-mesh/core";
+import { createBuiltinRegistry } from "@seat-mesh/providers";
 import { describe, expect, it } from "vitest";
 import {
   coordSyncDisruptLiveOnReload,

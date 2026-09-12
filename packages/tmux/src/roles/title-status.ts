@@ -1,4 +1,4 @@
-import type { LoadedProfile } from "seat-mesh-core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 

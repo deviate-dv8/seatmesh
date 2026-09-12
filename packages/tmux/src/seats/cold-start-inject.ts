@@ -1,4 +1,4 @@
-import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
+import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";
 import { injectPromptDirect } from "../inject/prompt.js";

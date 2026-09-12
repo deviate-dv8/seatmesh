@@ -12,9 +12,9 @@ import {
   resolveAgentId,
   type LoadedProfile,
   upsertContractRoom,
-} from "seat-mesh-core";
-import { createRegistryForProfile } from "seat-mesh-providers";
-import { runWhoami, secretarySupervise } from "seat-mesh-tmux";
+} from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
+import { runWhoami, secretarySupervise } from "@seat-mesh/tmux";
 
 function tmuxOpt(pane: string, key: string): string {
   const r = spawnSync("tmux", ["display-message", "-t", pane, "-p", key], { encoding: "utf8" });

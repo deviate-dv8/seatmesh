@@ -6,7 +6,7 @@ import {
   resolveDaemonPort,
   seatMeshPackageRoot,
   type LoadedProfile,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 
 function inboxBase(port: number): string {
   return `http://127.0.0.1:${port}`;
@@ -169,7 +169,7 @@ export function meshInboxStatusLine(
   h: Record<string, unknown> | null,
 ): string {
   const port = meshInboxPort(loaded);
-  const ok = Boolean(h && h.engine === "seat-mesh-daemon");
+  const ok = Boolean(h && h.engine === "@seat-mesh/daemon");
   const watch = watchEnabled(loaded) ? " watch" : "";
   if (!ok) return `inbox: down :${port} session=${loaded.sessionName}${watch}`;
   return (
@@ -182,7 +182,7 @@ export function meshInboxStatusLine(
 export function printInboxStatus(loaded: LoadedProfile): boolean {
   const port = meshInboxPort(loaded);
   const h = inboxHealth(port);
-  const ok = Boolean(h && h.engine === "seat-mesh-daemon");
+  const ok = Boolean(h && h.engine === "@seat-mesh/daemon");
   console.log(meshInboxStatusLine(loaded, h));
   if (ok && h?.stateDir) {
     console.log(`  state: ${String(h.stateDir)}`);
@@ -200,13 +200,13 @@ export function ensureMeshInbox(
   if (!autoStartEnabled(loaded)) return false;
   const port = meshInboxPort(loaded);
   const existing = inboxHealth(port);
-  if (existing?.engine === "seat-mesh-daemon") return true;
+  if (existing?.engine === "@seat-mesh/daemon") return true;
 
   const meta = readMeshInboxMeta(loaded);
   if (pidAlive(meta?.supervisorPid)) {
     for (let i = 0; i < 40; i++) {
       const h = inboxHealth(port);
-      if (h?.engine === "seat-mesh-daemon") return true;
+      if (h?.engine === "@seat-mesh/daemon") return true;
       spawnSync("sleep", ["0.25"]);
     }
   }
@@ -214,7 +214,7 @@ export function ensureMeshInbox(
   if (existing) {
     if (!opts.quiet) {
       throw new Error(
-        `port :${port} answered but not seat-mesh-daemon (engine=${String(existing.engine ?? "?")})`,
+        `port :${port} answered but not @seat-mesh/daemon (engine=${String(existing.engine ?? "?")})`,
       );
     }
     return false;
@@ -236,7 +236,7 @@ export function startMeshInbox(
   const useWatch = watchEnabled(loaded);
 
   const existing = inboxHealth(port);
-  if (existing?.engine === "seat-mesh-daemon") {
+  if (existing?.engine === "@seat-mesh/daemon") {
     if (!opts.quiet) {
       console.log(`mesh-inbox already up session=${String(existing.session ?? loaded.sessionName)}`);
     }
@@ -250,7 +250,7 @@ export function startMeshInbox(
     }
     for (let i = 0; i < 40; i++) {
       const h = inboxHealth(port);
-      if (h?.engine === "seat-mesh-daemon") {
+      if (h?.engine === "@seat-mesh/daemon") {
         if (opts.quiet) console.log(meshInboxStatusLine(loaded, h));
         return;
       }
@@ -260,7 +260,7 @@ export function startMeshInbox(
 
   if (existing) {
     throw new Error(
-      `port :${port} answered but not seat-mesh-daemon (engine=${String(existing.engine ?? "?")}) — pick another daemon.port / portScope`,
+      `port :${port} answered but not @seat-mesh/daemon (engine=${String(existing.engine ?? "?")}) — pick another daemon.port / portScope`,
     );
   }
 
@@ -292,7 +292,7 @@ export function startMeshInbox(
 
   for (let i = 0; i < 40; i++) {
     const h = inboxHealth(port);
-    if (h?.engine === "seat-mesh-daemon") {
+    if (h?.engine === "@seat-mesh/daemon") {
       if (!opts.quiet) {
         const label = useWatch ? "mesh-inbox (supervised)" : "mesh-inbox";
         console.log(`OK: ${label} on :${port} session=${loaded.sessionName}`);
@@ -329,7 +329,7 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
 
   spawnSync("sleep", ["0.5"]);
   const h = inboxHealth(port);
-  if (h?.engine === "seat-mesh-daemon") {
+  if (h?.engine === "@seat-mesh/daemon") {
     console.log(`WARN: mesh-inbox still answering /health — retry stop or kill listener on :${port}`);
     killPortListener(port);
   }
@@ -354,7 +354,7 @@ export function printMeshInboxStatus(
 ): boolean {
   const port = meshInboxPort(loaded);
   const h = inboxHealth(port);
-  const ok = Boolean(h && h.engine === "seat-mesh-daemon");
+  const ok = Boolean(h && h.engine === "@seat-mesh/daemon");
   if (opts.json) {
     console.log(
       JSON.stringify(

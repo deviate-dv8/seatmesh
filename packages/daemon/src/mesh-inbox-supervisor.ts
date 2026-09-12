@@ -8,7 +8,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadProfile, meshRuntimePaths, resolveDaemonPort, seatMeshPackageRoot } from "seat-mesh-core";
+import { loadProfile, meshRuntimePaths, resolveDaemonPort, seatMeshPackageRoot } from "@seat-mesh/core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -64,7 +64,7 @@ async function waitForHealth(port: number, timeoutMs: number): Promise<Record<st
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     const h = await fetchHealth(port);
-    if (h?.engine === "seat-mesh-daemon" && h.ok === true) return h;
+    if (h?.engine === "@seat-mesh/daemon" && h.ok === true) return h;
     await sleepMs(200);
   }
   return null;

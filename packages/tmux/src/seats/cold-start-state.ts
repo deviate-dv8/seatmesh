@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { meshRuntimePaths, type LoadedProfile } from "seat-mesh-core";
+import { meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
 
 interface ColdStartPaneRow {
   fingerprint: string;

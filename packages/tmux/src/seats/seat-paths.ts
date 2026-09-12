@@ -1,5 +1,5 @@
 import path from "node:path";
-import { buildResolvedPaths, meshRuntimePaths, type LoadedProfile } from "seat-mesh-core";
+import { buildResolvedPaths, meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
 
 export interface SeatTarget {
   role: string;

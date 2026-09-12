@@ -1,6 +1,6 @@
 {
-  "name": "seatmesh",
-  "version": "0.1.1",
+  "name": "@seat-mesh/cli",
+  "version": "0.1.2",
   "type": "module",
   "files": [
     "dist"
@@ -20,10 +20,10 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "seat-mesh-connectivity": "0.1.1",
-    "seat-mesh-core": "0.1.1",
-    "seat-mesh-providers": "0.1.1",
-    "seat-mesh-tmux": "0.1.1",
+    "@seat-mesh/connectivity": "0.1.2",
+    "@seat-mesh/core": "0.1.2",
+    "@seat-mesh/providers": "0.1.2",
+    "@seat-mesh/tmux": "0.1.2",
     "commander": "^15.0.0"
   }
 }

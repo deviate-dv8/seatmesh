@@ -1,5 +1,5 @@
-import type { ComposerState, ProviderRegistry } from "seat-mesh-core";
-import { formatToSlotReplyCmd } from "seat-mesh-core";
+import type { ComposerState, ProviderRegistry } from "@seat-mesh/core";
+import { formatToSlotReplyCmd } from "@seat-mesh/core";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { injectToPane } from "./inject.js";
 import { resolvePaneTarget, type ResolvePaneContext } from "../lib/resolve-pane.js";

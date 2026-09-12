@@ -4,7 +4,7 @@ import {
   listOpenCodeSessions,
   normalizeOpenCodeSessionId,
   scrapeOpenCodeSessionFromCapture,
-} from "seat-mesh-providers";
+} from "@seat-mesh/providers";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { tmux } from "../lib/tmux-run.js";
 

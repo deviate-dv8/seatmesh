@@ -79,7 +79,7 @@ Handlers enqueue work; daemon workers execute. Handlers never call tmux directly
 
 ## Connectivity
 
-`seat-mesh-connectivity` is a library. Recovery policies enqueue jobs; the profile
+`@seat-mesh/connectivity` is a library. Recovery policies enqueue jobs; the profile
 names the driver and hooks (`connectivity.driver`, `hooks.*`, `policy.*`).
 
 ## Profile-driven everything

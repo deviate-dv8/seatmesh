@@ -1,5 +1,5 @@
-import type { LoadedProfile, PaneOpRow } from "seat-mesh-core";
-import { createRegistryForProfile } from "seat-mesh-providers";
+import type { LoadedProfile, PaneOpRow } from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { launchSession, printLaunchResults } from "../agents/launch.js";
 import { assertRelayoutSafe, printRelayoutPlan } from "../session/layout-guard.js";
 import {

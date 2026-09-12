@@ -10,8 +10,8 @@ import {
   type LoadedProfile,
   type ProviderRegistry,
   type ResolvedUxConfig,
-} from "seat-mesh-core";
-import { capturePaneSnapshot, listMeshMonitorPanes } from "seat-mesh-tmux";
+} from "@seat-mesh/core";
+import { capturePaneSnapshot, listMeshMonitorPanes } from "@seat-mesh/tmux";
 import { notifyConnectivityStatus, type ResumeWaveMeta } from "./oc-resume.js";
 
 const PROXY_UP_COOLDOWN_MS = 60_000;

@@ -1,4 +1,4 @@
-import type { BaseColumn, LoadedProfile } from "seat-mesh-core";
+import type { BaseColumn, LoadedProfile } from "@seat-mesh/core";
 import { stampBaseColumn } from "./labels.js";
 import { tmux } from "../lib/tmux-run.js";
 import {

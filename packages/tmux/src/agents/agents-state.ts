@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { MeshAgentsSchema, type MeshAgents } from "seat-mesh-core";
+import { MeshAgentsSchema, type MeshAgents } from "@seat-mesh/core";
 import { buildAgentLaunchCmd } from "./agent-builder.js";
 
 // ---------------------------------------------------------------------------

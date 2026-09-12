@@ -1,4 +1,4 @@
-import type { AgentProvider, Detection, InjectPlan, PaneSnapshot } from "seat-mesh-core";
+import type { AgentProvider, Detection, InjectPlan, PaneSnapshot } from "@seat-mesh/core";
 import {
   cmdlines,
   composerFromCapture,

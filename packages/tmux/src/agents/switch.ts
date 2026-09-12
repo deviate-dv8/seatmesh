@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile, ProviderRegistry } from "seat-mesh-core";
-import { portsForSlot } from "seat-mesh-core";
+import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { portsForSlot } from "@seat-mesh/core";
 import { buildLaunchCmd } from "./agents-state.js";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { pasteLaunchCmd } from "./launch.js";

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "seat-mesh-core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import {
   resolveLiveTmuxSession,
   sessionWorkspaceId,

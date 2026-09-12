@@ -5,7 +5,7 @@ import {
   renderRoleIndex,
   portsForSlot,
   type LoadedProfile,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { buildWhoamiContextLines } from "./whoami-context.js";
 import { printColdStart } from "../seats/cold-start.js";

@@ -10,7 +10,7 @@ import {
   runtimePathHint,
   unseenSummaryForAgent,
   type LoadedProfile,
-} from "seat-mesh-core";
+} from "@seat-mesh/core";
 import type { WhoamiResult } from "./whoami.js";
 
 interface CheckbackRow {

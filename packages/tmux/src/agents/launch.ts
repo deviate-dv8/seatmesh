@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "seat-mesh-core";
-import { extractOpenCodeSession, normalizeOpenCodeSessionId } from "seat-mesh-providers";
+import type { LoadedProfile } from "@seat-mesh/core";
+import { extractOpenCodeSession, normalizeOpenCodeSessionId } from "@seat-mesh/providers";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { buildAgentLaunchCmd } from "./agent-builder.js";

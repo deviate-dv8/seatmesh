@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { LoadedProfile } from "seat-mesh-core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import type { PaneRow } from "../lib/resolve-pane.js";
 import { seatFile } from "../seats/seat-paths.js";
 

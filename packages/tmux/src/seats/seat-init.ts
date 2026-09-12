@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { buildResolvedPaths, type LoadedProfile } from "seat-mesh-core";
+import { buildResolvedPaths, type LoadedProfile } from "@seat-mesh/core";
 import { gateQueuePath } from "./seat-paths.js";
 
 const GATE_QUEUE_TEMPLATE = `# serial gate queue (canonical — fresh agents start here)

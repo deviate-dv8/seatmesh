@@ -1,7 +1,7 @@
 /**
  * Inbox orchestrator — sole pane writer path (see mesh-orchestrator.ts).
  */
-import type { QueueDrainPolicy, InjectJob, ProviderRegistry } from "seat-mesh-core";
+import type { QueueDrainPolicy, InjectJob, ProviderRegistry } from "@seat-mesh/core";
 import {
   orchestratorDrainTick,
   type MeshOrchestratorCtx,

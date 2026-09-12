@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { meshRuntimePaths, type LoadedProfile, type ProviderRegistry } from "seat-mesh-core";
+import { meshRuntimePaths, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
 import {
   loadAgentsState,
   loadMeshAgents,

@@ -1,5 +1,5 @@
-import type { ComposerState } from "seat-mesh-core";
-import { coordComposerDraft } from "seat-mesh-providers";
+import type { ComposerState } from "@seat-mesh/core";
+import { coordComposerDraft } from "@seat-mesh/providers";
 
 /** Post-generate / empty-composer settle (manager + secretary only). */
 export const COORD_IDLE_SETTLE_MS = Number(process.env.MESH_INBOX_IDLE_SETTLE_MS ?? 5000);
