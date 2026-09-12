@@ -46,7 +46,7 @@ export async function printDiscoveryReport(
 
   const tmuxOk = which("tmux");
   const curlOk = which("curl");
-  const npmOk = which("npm");
+  const gitOk = which("git");
 
   const report: DiscoveryReport = {
     ok: hasProject || (tmuxOk && curlOk),
@@ -60,7 +60,7 @@ export async function printDiscoveryReport(
       JSON.stringify(
         {
           ...report,
-          prereqs: { node: process.version, tmux: tmuxOk, curl: curlOk, npm: npmOk },
+          prereqs: { tmux: tmuxOk, curl: curlOk, git: gitOk },
           commands: COMMANDS,
         },
         null,
@@ -84,23 +84,11 @@ export async function printDiscoveryReport(
   }
 
   console.log("\n## Prerequisites");
-  console.log(`PASS  node: ${process.version}`);
-  console.log(`${npmOk ? "PASS" : "WARN"}  npm: ${npmOk ? "ok" : "missing (needed for init cold-start)"}`);
   console.log(
-    `${tmuxOk ? "PASS" : "FAIL"}  tmux: ${tmuxOk ? (tmuxVersion() ?? "ok") : "not in PATH (required for sessions)"}`,
+    `${tmuxOk ? "PASS" : "FAIL"}  tmux: ${tmuxOk ? (tmuxVersion() ?? "ok") : "not in PATH"}`,
   );
-  console.log(`${curlOk ? "PASS" : "FAIL"}  curl: ${curlOk ? "ok" : "missing (inbox health checks)"}`);
-  console.log(`${which("git") ? "PASS" : "WARN"}  git: ${which("git") ? "ok" : "optional"}`);
-
-  for (const [label, bin] of [
-    ["cursor-agent", "agent"],
-    ["claude", "claude"],
-    ["kiro", "kiro"],
-    ["opencode", "opencode"],
-  ] as const) {
-    const ok = which(bin);
-    console.log(`${ok ? "PASS" : "WARN"}  cli:${label}: ${ok ? "in PATH" : "not found"}`);
-  }
+  console.log(`${curlOk ? "PASS" : "FAIL"}  curl: ${curlOk ? "ok" : "missing"}`);
+  console.log(`${gitOk ? "PASS" : "WARN"}  git: ${gitOk ? "ok" : "not found"}`);
 
   console.log("\n## Commands (after init)");
   for (const { cmd, note } of COMMANDS) {

@@ -41,44 +41,9 @@ function checkPrereqs(loaded: LoadedProfile): PrereqRow[] {
     rows.push({ name, required, ok, detail });
   };
 
-  add("node", true, true, process.version);
-  add("npm", false, which("npm"), which("npm") ? "ok" : "missing (cold-start build needs npm)");
   add("tmux", true, which("tmux"), tmuxVersion() ?? "not in PATH");
-  add("curl", true, which("curl"), which("curl") ? "ok (inbox /health)" : "missing");
-  add("git", false, which("git"), which("git") ? "ok" : "optional");
-
-  const profilePath = loaded.profilePath;
-  add(
-    "profile",
-    true,
-    fs.existsSync(profilePath),
-    fs.existsSync(profilePath) ? profilePath : "config not found",
-  );
-
-  const smDir = loaded.profileDir.includes(`${path.sep}.sm${path.sep}`) ||
-    loaded.profileDir.endsWith(`${path.sep}.sm`)
-    ? loaded.profileDir
-    : fs.existsSync(path.join(loaded.workspace, ".sm", "mesh.config.yaml"))
-      ? path.join(loaded.workspace, ".sm")
-      : loaded.profileDir;
-  add(
-    "dotdir",
-    false,
-    fs.existsSync(smDir),
-    fs.existsSync(smDir) ? smDir : "run: npx seatmesh init",
-  );
-
-  const providerBins: Record<string, string> = {
-    "cursor-agent": "agent",
-    claude: "claude",
-    kiro: "kiro",
-    opencode: "opencode",
-  };
-  for (const p of loaded.profile.providers ?? []) {
-    if (p === "empty") continue;
-    const bin = providerBins[p] ?? p;
-    add(`cli:${p}`, false, which(bin), which(bin) ? "in PATH" : "not found (launch may fail)");
-  }
+  add("curl", true, which("curl"), which("curl") ? "ok" : "missing");
+  add("git", false, which("git"), which("git") ? "ok" : "not found");
 
   return rows;
 }
