@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 
 export const SENT_TOKEN_RE = /\[sent:([a-z0-9]+)\]/i;
@@ -100,13 +101,35 @@ export function waitPromptSent(
     timeoutMs?: number;
   },
 ): PromptSentProof {
-  const timeoutMs = opts.timeoutMs ?? 10_000;
+  // Short default: busy targets should QUEUED fast; settle inject still has ~1.5s.
+  const timeoutMs = opts.timeoutMs ?? 4_000;
   const start = Date.now();
   let last = "pending";
+  const registry = createRegistryForProfile(loaded.profile);
   while (Date.now() - start < timeoutMs) {
-    const tail = capturePaneSnapshot(opts.paneId)?.captureTail ?? "";
+    const snap = capturePaneSnapshot(opts.paneId);
+    const tail = snap?.captureTail ?? "";
     if (tail.includes(`[sent:${opts.token}]`) || tail.includes(opts.token)) {
       return { ok: true, token: opts.token, paneId: opts.paneId, via: "scrollback" };
+    }
+    // Target not deliverable — do not burn the full timeout (overdelayed CLI).
+    if (snap && Date.now() - start >= 800) {
+      const prov = registry.detect(snap);
+      const phase = prov?.composerState(snap).phase ?? "plain_shell";
+      if (
+        phase === "busy" ||
+        phase === "plain_shell" ||
+        phase === "limit" ||
+        phase === "typing"
+      ) {
+        return {
+          ok: true,
+          token: opts.token,
+          paneId: opts.paneId,
+          via: "queued",
+          last: `held:${phase}`,
+        };
+      }
     }
     const row = findPeerRow(loaded, opts);
     if (row) {
@@ -130,12 +153,36 @@ export function waitPromptSent(
       if (peerRowSentProof(row, opts.paneId)) {
         return { ok: true, token: opts.token, paneId: opts.paneId, via: "pane-row" };
       }
-      // Still attempting inject (settle / follow-up steer). Keep waiting for
-      // scrollback or pane-row proof — do not declare QUEUED at 1.5s or lead
-      // peers always print QUEUED-only while daemon injects a few seconds later.
-      last = `pending deliverPane=${row.deliverPane ?? "-"}`;
+      const hold = row.holdReason ?? "";
+      const elapsed = Date.now() - start;
+      if (
+        elapsed >= 800 &&
+        /held:(busy|plain_shell|limit|no_provider|coord:wait-busy|coord:wait-typing)/.test(
+          hold,
+        )
+      ) {
+        return {
+          ok: true,
+          token: opts.token,
+          paneId: opts.paneId,
+          via: "queued",
+          last: hold || "held until pane idle",
+        };
+      }
+      // After settle window with no pane/scrollback proof — QUEUED (daemon still
+      // injecting). Avoids 4–10s CLI stalls while lead peers wait for SENT.
+      if (elapsed >= 1600 && !peerRowSentProof(row, opts.paneId)) {
+        return {
+          ok: true,
+          token: opts.token,
+          paneId: opts.paneId,
+          via: "queued",
+          last: hold || last || "pending inject",
+        };
+      }
+      last = `pending deliverPane=${row.deliverPane ?? "-"} hold=${hold || "-"}`;
     }
-    sleepMs(250);
+    sleepMs(200);
   }
   // Timeout: durable queue is success (not FAIL). Prefer QUEUED only when we
   // never saw inject proof — caller prints QUEUED vs SENT from via.

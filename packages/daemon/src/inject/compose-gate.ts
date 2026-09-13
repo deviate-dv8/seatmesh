@@ -2,7 +2,7 @@ import type { ComposerState } from "@seat-mesh/core";
 import { coordComposerDraft } from "@seat-mesh/providers";
 
 /** Post-generate / empty-composer settle (manager + secretary only). */
-export const COORD_IDLE_SETTLE_MS = Number(process.env.MESH_INBOX_IDLE_SETTLE_MS ?? 5000);
+export const COORD_IDLE_SETTLE_MS = Number(process.env.MESH_INBOX_IDLE_SETTLE_MS ?? 1500);
 
 let profileSkipTypingGate = false;
 
@@ -59,9 +59,26 @@ function composerIdleReady(state: ComposerState, captureTail: string, providerId
   if (state.phase === "plain_shell" || state.phase === "limit") return false;
   if (state.phase === "busy" || state.phase === "typing") return false;
   const draft =
-    state.draftFingerprint?.trim() || coordComposerDraft(captureTail, providerId);
+    state.draftFingerprint?.trim() ||
+    coordComposerDraft(stripMeshForDraft(captureTail), providerId);
   if (draft) return false;
   return state.phase === "empty" || state.phase === "afk";
+}
+
+/** Drop mesh-owned chrome before draft sniff (checkback box uses → [mesh-inbox]). */
+function stripMeshForDraft(captureTail: string): string {
+  return captureTail
+    .split("\n")
+    .filter((line) => {
+      const t = line.trim();
+      if (!t) return true;
+      if (/\[mesh-inbox/i.test(t)) return false;
+      if (/^intent=/i.test(t)) return false;
+      if (/^Check:/i.test(t)) return false;
+      if (/\bOC-LIMIT:/i.test(t)) return false;
+      return true;
+    })
+    .join("\n");
 }
 
 /**
@@ -98,7 +115,7 @@ export function classifyCoordDelivery(
 
   const draftFp =
     state.draftFingerprint?.trim() ||
-    coordComposerDraft(captureTail, providerId) ||
+    coordComposerDraft(stripMeshForDraft(captureTail), providerId) ||
     undefined;
   const holdTyping =
     !inboxSkipTypingGate() && (state.phase === "typing" || Boolean(draftFp));

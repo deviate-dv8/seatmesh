@@ -36,8 +36,12 @@ function scanText(tail: string, when: UxWhen): string {
 }
 
 function testWhen(text: string, when: UxWhen): RegExpMatchArray | null {
+  // Whole-capture empty only. `/im` + ^\s*$ would match ANY blank line and
+  // wedge live CLIs as plain_shell (peer held forever / overdelayed).
+  if (when.match === "^\\s*$") {
+    return text.trim() === "" ? [""] : null;
+  }
   if (!text.trim() && when.scan?.full !== true) {
-    if (when.match === "^\\s*$") return [""];
     return null;
   }
   const re = new RegExp(when.match, "im");
@@ -88,7 +92,12 @@ function cursorAgentIdleOverride(
   if (/Working|Running|Thinking|enter steer|ctrl\+c to stop/i.test(bottom)) {
     return null;
   }
-  if (/Add a follow-up|Composer \d|· \d+\.\d+%|files edited/.test(bottom)) {
+  // Cursor footer variants: "Composer 2.5 …" and "Compose· 89 ·105 … Run Everything"
+  if (
+    /Add a follow-up|Composer \d|Compose[·.]|Run Everything|· \d+\.\d+%|files?\s+edited/i.test(
+      bottom,
+    )
+  ) {
     return { phase: "empty" };
   }
   return null;

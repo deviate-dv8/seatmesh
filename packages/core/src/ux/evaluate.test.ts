@@ -40,6 +40,30 @@ describe("evaluateUxRules", () => {
     expect(hit?.state.phase).toBe("empty");
   });
 
+  it("blank lines in capture do not classify as plain_shell", () => {
+    const tail = [
+      "assistant reply",
+      "",
+      "more text",
+      "",
+      "  Compose\u00b7 89 \u00b7105      Run Everything",
+      "  ~/Desktop/Work/zsign",
+    ].join("\n");
+    const hit = evaluateUxRules(
+      { ...snap(tail, "agent"), currentCommand: "agent" },
+      "cursor-agent",
+      config,
+    );
+    expect(hit?.state.phase).not.toBe("plain_shell");
+    expect(hit?.state.phase).toBe("empty");
+  });
+
+  it("truly empty capture is plain_shell", () => {
+    const hit = evaluateUxRules(snap("   \n  \n"), "cursor-agent", config);
+    expect(hit?.ruleId).toBe("plain-empty");
+    expect(hit?.state.phase).toBe("plain_shell");
+  });
+
   it("composer idle wins over stale limit text", () => {
     const tail = [
       "old rate limit line",

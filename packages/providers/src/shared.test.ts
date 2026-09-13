@@ -123,6 +123,19 @@ describe("agentInputDraft (cursor ghost-text / placeholders)", () => {
       "  \u2192 fix inbox draft \x1b[38;5;245mPlan, search, build anything\x1b[39m";
     expect(agentInputDraft(tail, ansi)).toBe("fix inbox draft");
   });
+
+  it("checkback mesh-inbox arrow chrome is not a human draft", () => {
+    const tail =
+      "  \u2192 [mesh-inbox]\n" +
+      "    intent=checkback-verify manager |\n" +
+      "    Check: peer:mini-1 reply —\n" +
+      "  Compose\u00b7 89 \u00b7105      Run Everything\n";
+    expect(agentInputDraft(tail)).toBe("");
+    const pane = { captureTail: tail, currentCommand: "agent" } as Parameters<
+      typeof composerFromCapture
+    >[0];
+    expect(composerFromCapture(pane, "cursor-agent").phase).toBe("empty");
+  });
 });
 
 describe("coordComposerDraft dispatch", () => {

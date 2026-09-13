@@ -1,6 +1,6 @@
 {
   "name": "seatmesh",
-  "version": "0.1.27",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Typed tmux agent coordination: profiles, role index, inbox daemon, connectivity recovery.",
@@ -24,5 +24,6 @@
   },
   "allowScripts": {
     "better-sqlite3@11.10.0": true
-  }
+  },
+  "dependencies": null
 }

@@ -189,6 +189,10 @@ function agentArrowLineDraft(plainLine: string, ansiLine?: string): string {
   if (CURSOR_COMPOSER_PLACEHOLDER_RE.test(after)) return "";
   if (/^[\u258e\u2502]/.test(after)) return "";
   if (/ctrl\+r to review/i.test(after)) return "";
+  // Checkback / mesh-inbox chrome uses the same arrow marker — never a human draft.
+  if (/^\[mesh-inbox/i.test(after)) return "";
+  if (/^intent=/i.test(after)) return "";
+  if (/^Check:/i.test(after)) return "";
   return after;
 }
 
@@ -292,6 +296,11 @@ export function composerFromCapture(
 ): ComposerState {
   const tail = stripMeshOwnedLines(pane.captureTail);
   if (!tail.trim()) {
+    // Brief blank redraw while CLI is still live — do not wedge as plain_shell.
+    const cmd = (pane.currentCommand ?? "").trim();
+    if (/^(agent|cursor-agent|claude|opencode|node)$/i.test(cmd)) {
+      return { phase: "empty" };
+    }
     return { phase: "plain_shell" };
   }
 
@@ -343,8 +352,13 @@ export function composerFromCapture(
     if (agentDraft) {
       return { phase: "typing", draftFingerprint: agentDraft.slice(0, 80) };
     }
-    // Idle post-turn chrome (follow-up box / composer footer) — inbox may inject (injectCursorAgent).
-    if (/Add a follow-up|Composer \d|· \d+\.\d+%|files edited/.test(bottom)) {
+    // Idle post-turn chrome (follow-up box / composer footer) — inbox may inject.
+    // Cursor often paints "Compose·" (no "Composer N") in the footer.
+    if (
+      /Add a follow-up|Composer \d|Compose[·.]|· \d+\.\d+%|files edited|Run Everything/i.test(
+        bottom,
+      )
+    ) {
       return { phase: "empty" };
     }
   }
