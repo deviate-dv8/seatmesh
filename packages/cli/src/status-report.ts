@@ -9,9 +9,12 @@ import {
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import {
-  inboxHealth,
+  ensureMeshInbox,
+  inboxHealthRelaxed,
+  killWedgedInboxListener,
   meshInboxPort,
   meshInboxStatusLine,
+  probeInbox,
   printVerify,
   tmuxHasSession,
   verifyMeshSession,
@@ -97,9 +100,20 @@ function printSession(loaded: LoadedProfile): boolean {
 function printInbox(loaded: LoadedProfile): { ok: boolean; health: Record<string, unknown> | null } {
   printSection("Inbox daemon");
   const port = meshInboxPort(loaded);
-  const h = inboxHealth(port);
+  let probe = probeInbox(port);
+  if (probe === "wedged") {
+    killWedgedInboxListener(port);
+    ensureMeshInbox(loaded, { quiet: true });
+    probe = probeInbox(port);
+  }
+  const h = inboxHealthRelaxed(port);
   let ok = Boolean(h && h.engine === "@seat-mesh/daemon");
-  console.log(meshInboxStatusLine(loaded, h));
+  if (!ok && probe === "wedged") {
+    console.log(`inbox: wedged :${port} (port open, /health hung) session=${loaded.sessionName}`);
+    console.log(`  fix: seatmesh inbox restart --profile ${loaded.profileDir}`);
+  } else {
+    console.log(meshInboxStatusLine(loaded, h));
+  }
   if (ok && h) {
     const daemonSession = String(h.session ?? "");
     if (daemonSession && daemonSession !== loaded.sessionName) {
@@ -181,7 +195,7 @@ export async function printStatusReport(
   const prereqOk = prereqs.filter((r) => r.required).every((r) => r.ok);
   const sessionOk = tmuxHasSession(loaded.sessionName);
   const port = meshInboxPort(loaded);
-  const h0 = inboxHealth(port);
+  const h0 = inboxHealthRelaxed(port);
   const inboxOk =
     Boolean(h0 && h0.engine === "@seat-mesh/daemon") &&
     String(h0?.session ?? loaded.sessionName) === loaded.sessionName;

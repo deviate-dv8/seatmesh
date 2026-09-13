@@ -73,8 +73,8 @@ export function meshInboxPort(loaded: LoadedProfile): number {
   return resolveDaemonPort(loaded.profile, loaded.workspace);
 }
 
-export function inboxHealth(port: number): Record<string, unknown> | null {
-  const r = spawnSync("curl", ["-sS", "-m", "2", `${inboxBase(port)}/health`], {
+export function inboxHealth(port: number, timeoutSec = 2): Record<string, unknown> | null {
+  const r = spawnSync("curl", ["-sS", "-m", String(timeoutSec), `${inboxBase(port)}/health`], {
     encoding: "utf8",
   });
   if (r.status !== 0 || !r.stdout?.trim()) return null;
@@ -83,6 +83,22 @@ export function inboxHealth(port: number): Record<string, unknown> | null {
   } catch {
     return { raw: r.stdout.trim() };
   }
+}
+
+/** Report/CLI: daemon may miss a 2s probe while draining — retry before claiming down. */
+export function inboxHealthRelaxed(
+  port: number,
+  opts: { timeoutSec?: number; retries?: number; pauseMs?: number } = {},
+): Record<string, unknown> | null {
+  const timeoutSec = opts.timeoutSec ?? 5;
+  const retries = opts.retries ?? 4;
+  const pauseMs = opts.pauseMs ?? 350;
+  for (let i = 0; i < retries; i++) {
+    const h = inboxHealth(port, timeoutSec);
+    if (h?.engine === "@seat-mesh/daemon") return h;
+    if (i + 1 < retries) spawnSync("sleep", [String(pauseMs / 1000)]);
+  }
+  return inboxHealth(port, timeoutSec);
 }
 
 export type InboxProbe = "healthy" | "down" | "wedged";
