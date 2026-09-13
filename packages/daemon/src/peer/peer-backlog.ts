@@ -12,9 +12,15 @@ export interface PeerBacklogRow extends PeerRow {
 
 const BUSY_HOLD = /^held:(busy|typing)/;
 
-/** Lightweight mail class (FYI/ACK). Still backlogged while busy — do not steer-paste. */
+/** Lightweight mail class (FYI/ACK). May follow-up-steer on cursor while generating. */
 export function isAckClassPeer(msg: string): boolean {
-  const body = msg.replace(/^\[[^\]]+\]\s*/, "").trim();
+  // Strip every leading [mesh-inbox] / [from:x to:y] / [agent-…] stamp.
+  let body = msg.trim();
+  for (let i = 0; i < 8; i++) {
+    const next = body.replace(/^\[[^\]]+\]\s*/, "").trim();
+    if (next === body) break;
+    body = next;
+  }
   return /^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?)\b/i.test(body);
 }
 
@@ -64,15 +70,28 @@ function paneStatusMark(paneId: string): string {
   );
 }
 
+function cursorFollowUpOpen(paneId: string, registry: ProviderRegistry): boolean {
+  const snap = capturePaneSnapshot(paneId);
+  if (!snap) return false;
+  const prov = registry.detect(snap);
+  if (!prov) return false;
+  if (prov.id !== "cursor-agent" && prov.id !== "agent") return false;
+  const st = prov.composerState(snap);
+  return (
+    st.busyLabel === "follow-up" || /Add a follow-up|ctrl\+c to stop/.test(snap.captureTail)
+  );
+}
+
 function paneIdleForPromote(paneId: string, registry: ProviderRegistry): boolean {
   const mark = paneStatusMark(paneId);
-  if (/\bBUSY\b/i.test(mark)) return false;
+  if (/\bBUSY\b/i.test(mark) && !cursorFollowUpOpen(paneId, registry)) return false;
   const snap = capturePaneSnapshot(paneId);
   if (!snap) return false;
   const prov = registry.detect(snap);
   if (!prov) return false;
   const st = prov.composerState(snap);
-  return st.phase === "empty" || st.phase === "afk";
+  if (st.phase === "empty" || st.phase === "afk") return true;
+  return cursorFollowUpOpen(paneId, registry);
 }
 
 /** Rows marked backlog on PEER.jsonl but missing from PEER-BACKLOG.jsonl (inbox restart, etc.). */
@@ -122,11 +141,23 @@ export function promotePeerBacklog(
   for (const [, rows] of byPane) {
     rows.sort((a, b) => a.backlogAt.localeCompare(b.backlogAt));
     const paneId = rows[0]!.targetPane;
+    const followUpOnly = cursorFollowUpOpen(paneId, registry);
     if (!paneIdleForPromote(paneId, registry)) {
       kept.push(...rows);
       continue;
     }
-    const [first, ...rest] = rows;
+    // Follow-up steer: only ACK/FYI — never paste substance mid-turn.
+    const eligible = followUpOnly
+      ? rows.filter((r) => isAckClassPeer(r.msg))
+      : rows;
+    if (!eligible.length) {
+      kept.push(...rows);
+      continue;
+    }
+    const restParked = followUpOnly
+      ? rows.filter((r) => !isAckClassPeer(r.msg))
+      : [];
+    const [first, ...restAck] = eligible;
     const revived: PeerRow = {
       id: first.id,
       at: first.at,
@@ -142,8 +173,8 @@ export function promotePeerBacklog(
     };
     peer.push(revived);
     promoted++;
-    log(`PEER backlog promote id=${first.id} -> ${first.targetLabel}`);
-    kept.push(...rest);
+    log(`PEER backlog promote id=${first.id} -> ${first.targetLabel}${followUpOnly ? " (ack-follow-up)" : ""}`);
+    kept.push(...restAck, ...restParked);
   }
 
   if (promoted) store.writePeer(peer);

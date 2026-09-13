@@ -18,6 +18,7 @@ import {
   paneMetaForPane,
 } from "@seat-mesh/tmux";
 import { classifyCoordDelivery, inboxSkipTypingGate } from "./compose-gate.js";
+import { isAckClassPeer } from "../peer/peer-backlog.js";
 
 function sleepMs(ms: number): void {
   if (ms <= 0) return;
@@ -145,14 +146,20 @@ export function deliverToPane(
   const coord = isCoordPane(paneId);
   const coTyped = coord && isHumanCoTypedPane(paneId, opts.loaded);
 
-  // Hard floor: busy/typing never gets an inbox paste. Cursor follow-up
-  // steer was the leak — the inject became the next user turn and the
-  // in-flight instruction was dropped. Queue/backlog instead.
-  // PRIORITY / STOP other work may paste except on humanCoTyped panes.
+  // Hard floor: busy/typing never gets a substance paste. ACK/FYI may land in
+  // Cursor follow-up (same rule as peer --direct) so secretary sees ACKs while
+  // generating — backlog alone looked like "never sent".
   const typingHold =
     state.phase === "typing" && !inboxSkipTypingGate();
   const busyHold = state.phase === "busy";
-  if (busyHold || typingHold) {
+  const followUpOpen =
+    state.busyLabel === "follow-up" ||
+    /Add a follow-up|ctrl\+c to stop/.test(snap.captureTail);
+  const ackFollowUp =
+    isAckClassPeer(message) &&
+    followUpOpen &&
+    (prov.id === "cursor-agent" || prov.id === "agent");
+  if ((busyHold || typingHold) && !ackFollowUp) {
     if (coTyped || !isExplicitHubOverride(message)) {
       const phase = busyHold ? "busy" : "typing";
       return {
@@ -165,8 +172,9 @@ export function deliverToPane(
   // Co-typed panes never get the thin-room-ping bypass either — a "status" ping
   // pasted mid-keystroke is exactly the tty-interleaving bug this gate stops.
   const roomPingBypass = opts.roomPing === true && !coTyped;
+  const ackFollowUpBypass = ackFollowUp && !coTyped;
 
-  if (!opts.force && coord && !roomPingBypass) {
+  if (!opts.force && coord && !roomPingBypass && !ackFollowUpBypass) {
     const gate = classifyCoordDelivery(paneId, state, snap.captureTail, prov.id);
     if (!gate.canDeliver) {
       const extra =
@@ -181,12 +189,13 @@ export function deliverToPane(
     !opts.force &&
     !opts.lightweight &&
     !roomPingBypass &&
+    !ackFollowUpBypass &&
     !canDeliverNow(state, snap.captureTail, prov.id)
   ) {
     return { ok: false, reason: `held:${state.phase}${state.busyLabel ? `:${state.busyLabel}` : ""}` };
   }
 
-  const steer = false;
+  const steer = ackFollowUp;
 
   const plan = {
     ...prov.injectPlan(snap),
@@ -195,8 +204,8 @@ export function deliverToPane(
   injectToPane(paneId, message, plan, prov.id, snap.captureTail, snap.captureTailAnsi);
   const mode = steer ? "steer" : "idle";
   // OpenCode TUI often hides pasted prompt in capture-pane tail (verify false negative).
-  // Claude: same — footer/redraw can hide paste briefly. Cursor-agent MUST verify:
-  // skipVerify used to mask the withPaneInjectLock -d bug (send-keys dropped).
+  // Claude: same — footer/redraw can hide paste briefly. Cursor-agent MUST verify
+  // except follow-up steer (paste sits under follow-ups; scrollback may lag).
   const verified =
     opts.skipVerify ||
     prov.id === "opencode" ||
