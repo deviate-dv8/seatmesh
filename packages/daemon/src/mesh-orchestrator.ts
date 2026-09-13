@@ -68,10 +68,12 @@ import {
 import {
   markPeerRowSkipped,
   shouldSkipDeliveredColdStart,
+  shouldSkipDuplicateColdStartResummon,
   shouldSkipGlobalWorkerRoomPing,
   shouldSkipManagerStatusRoomPing,
 } from "./peer-skip.js";
 import { deliveryHoldForPane } from "./delivery-hold.js";
+import { refreshPeerTargetPane } from "./peer-target-resolve.js";
 import { evaluateInboxOverload } from "./inbox-overload.js";
 import { markColdStartDelivered } from "@seat-mesh/tmux";
 
@@ -99,7 +101,11 @@ function borderConnectivity(ctx: MeshOrchestratorCtx): BorderPaintConnectivity {
 function gateDelivery(
   ctx: MeshOrchestratorCtx,
   paneId: string,
-  opts: { isColdStart?: boolean; skipOverload?: boolean } = {},
+  opts: {
+    isColdStart?: boolean;
+    skipOverload?: boolean;
+    allowCheckbackComms?: boolean;
+  } = {},
 ): { blocked: boolean; reason?: string } {
   const hold = deliveryHoldForPane(ctx, paneId, opts);
   if (hold.hold) return { blocked: true, reason: hold.reason };
@@ -113,6 +119,7 @@ function gateDelivery(
       force: true,
       skipVerify: true,
       loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
     });
   }
   if (ov.hold) {
@@ -162,7 +169,8 @@ function drainInboxLaneOnce(
     ctx.log(`INBOX held id=${row.id} lane=${lane} reason=${gate.reason}`);
     return { attempted: 1, delivered: 0, held: 1 };
   }
-  const result = deliverToPane(targetPane, payload, ctx.registry, { loaded: ctx.loaded });
+  const result = deliverToPane(targetPane, payload, ctx.registry, { loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace });
   if (!result.ok) {
     ctx.log(`INBOX held id=${row.id} lane=${lane} reason=${result.reason}`);
     return { attempted: 1, delivered: 0, held: 1 };
@@ -230,9 +238,34 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
       row.sent = false;
     }
 
+    const { paneId: livePane, rerouted } = refreshPeerTargetPane(ctx.loaded, row);
+    if (rerouted) {
+      ctx.log(
+        `PEER reroute id=${row.id.slice(0, 8)} ${row.targetLabel} ${row.targetPane}->${livePane}`,
+      );
+      row.targetPane = livePane;
+      const all = ctx.store.readPeer();
+      const ri = all.findIndex((r) => r.id === row.id);
+      if (ri >= 0) {
+        all[ri]!.targetPane = livePane;
+        ctx.store.writePeer(all);
+      }
+    }
+
     if (shouldSkipDeliveredColdStart(row)) {
       markPeerRowSkipped(ctx.store, row);
+      if (row.fromSlot === "mesh-cold-start") {
+        markColdStartDelivered(ctx.loaded, row.targetPane);
+      }
       ctx.log(`PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=cold-start-already-delivered`);
+      continue;
+    }
+
+    if (shouldSkipDuplicateColdStartResummon(row, ctx.loaded)) {
+      markPeerRowSkipped(ctx.store, row);
+      ctx.log(
+        `PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=cold-start-resummon-dup`,
+      );
       continue;
     }
 
@@ -280,6 +313,7 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
       // except humanCoTyped panes (profile layout.base.humanCoTyped), which never get that bypass.
       roomPing: thinRoomPing || (roomPing && !toManager),
       loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
     });
     if (!result.ok) {
       if (PEER_SKIP_REASONS.has(result.reason)) {
@@ -291,6 +325,9 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
           rows[i]!.deliverPane = "skipped";
           rows[i]!.deliverMode = "idle";
           ctx.store.writePeer(rows);
+        }
+        if (isColdStart) {
+          markColdStartDelivered(ctx.loaded, row.targetPane);
         }
         ctx.log(`PEER skip id=${row.id} -> ${row.targetLabel} reason=${result.reason}`);
         continue;
@@ -331,8 +368,8 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
   return { attempted, delivered, held };
 }
 
-/** Due checkbacks per drain tick — supervise lane + one comms peer. */
-const CHECKBACK_FIRE_BUDGET = 2;
+/** Due checkbacks per drain tick — supervise lane + comms (raise when many armed). */
+const CHECKBACK_FIRE_BUDGET = 6;
 
 /** Cancel legacy per-pane STATUS checkbacks (they spammed manager with Check: injects). */
 function cancelSuperviseStatusCheckbacks(ctx: MeshOrchestratorCtx): void {
@@ -361,6 +398,7 @@ function deliverSecretarySuperviseTick(ctx: MeshOrchestratorCtx, _secPane: strin
         skipVerify: true,
         intent: "continue",
         loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
       });
       ctx.log(`supervise-continue ${role} ${r.ok ? "ok" : r.reason} pane=${leadPane}`);
       return r.ok;
@@ -382,6 +420,7 @@ function deliverBalanceLeadTick(ctx: MeshOrchestratorCtx, leadPane: string): boo
     force: true,
     intent: "status",
     loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
   });
   const material =
     tick.wroteLedger &&
@@ -422,7 +461,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
     if (!pane) continue;
 
     if (row.kind !== "manager-nudge") {
-      const cbGate = gateDelivery(ctx, pane);
+      const cbGate = gateDelivery(ctx, pane, { allowCheckbackComms: true });
       if (cbGate.blocked) {
         ctx.log(`checkback held id=${row.id} kind=${row.kind} pane=${pane} reason=${cbGate.reason}`);
         deferFailedFire(ctx, row, now, cbGate.reason ?? "overload");
@@ -441,14 +480,16 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       const mgrPane = meshManagerPane(ctx.session, ctx.baseWindow);
       const digestBlock = meshInboxDigestBlock(digest.text);
       if (mgrPane) {
-        deliverToPane(mgrPane, digestBlock, ctx.registry, { skipVerify: true, loaded: ctx.loaded });
+        deliverToPane(mgrPane, digestBlock, ctx.registry, { skipVerify: true, loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace });
       }
       const secMsg = `${formatCompactSeat({ role: "secretary" })} | ${meshInboxDigestIncomplete({
         done: digest.done,
         total: digest.total,
         openIds: digest.openIds,
       })}`;
-      deliverToPane(pane, secMsg, ctx.registry, { skipVerify: true, loaded: ctx.loaded });
+      deliverToPane(pane, secMsg, ctx.registry, { skipVerify: true, loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace });
       ctx.log(`mesh-watch digest done=${digest.done}/${digest.total} open=${digest.openIds.join(",") || "none"}`);
     } else if (row.kind === "manager-nudge") {
       row.status = "cancelled";
@@ -488,6 +529,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
             skipVerify: true,
             intent: "continue",
             loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
           });
           ctx.log(`${row.kind} ${r.ok ? "delivered" : r.reason} pane=${leadPane}`);
           // Transient gate hold (e.g. wait-settle) — retry on the next drain tick
@@ -534,6 +576,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         skipVerify: true,
         intent: "limit-retry",
         loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
       });
       if (!r.ok) {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");
@@ -560,6 +603,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         skipVerify: true,
         intent: "checkback-verify",
         loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
       });
       if (!r.ok) deferFailedFire(ctx, row, now, r.reason ?? "deliver");
       ctx.log(`coord-expect ${outcome.retried ? "retry" : "hold"} ${outcome.reason}`);
@@ -596,6 +640,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         skipVerify: true,
         intent: "checkback-verify",
         loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
       });
       if (!r.ok) {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");
@@ -642,6 +687,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         skipVerify: true,
         intent: "checkback-verify",
         loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
       });
       if (!r.ok) {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");
@@ -664,6 +710,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         skipVerify: true,
         intent: "checkback-verify",
         loaded: ctx.loaded,
+      workspace: ctx.loaded.workspace,
       });
       if (!r.ok) {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");

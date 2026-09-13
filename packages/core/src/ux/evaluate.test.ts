@@ -32,6 +32,14 @@ describe("evaluateUxRules", () => {
     expect(hit?.border).toBe("PROXY-DOWN");
   });
 
+  it("cursor idle follow-up chrome is empty (inbox deliverable)", () => {
+    const tail =
+      "assistant text\n \u2192 Add a follow-up\n Composer 2.5 Fast \u00b7 37.4% \u00b7 1 file edited\n ~/proj\n";
+    const hit = evaluateUxRules(snap(tail, "cursor-agent"), "cursor-agent", config);
+    expect(hit?.ruleId).toBe("cursor-idle-chrome");
+    expect(hit?.state.phase).toBe("empty");
+  });
+
   it("composer idle wins over stale limit text", () => {
     const tail = [
       "old rate limit line",

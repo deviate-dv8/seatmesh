@@ -71,11 +71,16 @@ function restoreComposerDraft(paneId: string, draft: string): void {
 }
 
 /** Cursor-agent paste with bracketed-paste guard. */
-function injectCursorAgent(paneId: string, message: string, captureTail: string): void {
+function injectCursorAgent(
+  paneId: string,
+  message: string,
+  captureTail: string,
+  captureTailAnsi?: string,
+): void {
   const bottom = captureTail.split("\n").slice(-14).join("\n");
   const generating = /Working|Running|Thinking|enter steer/.test(bottom);
   const followUp = /Add a follow-up/.test(bottom);
-  const saved = humanDraftToPreserve(captureTail, "cursor-agent", message);
+  const saved = humanDraftToPreserve(captureTail, "cursor-agent", message, captureTailAnsi);
 
   if (saved) clearComposerDraft(paneId, "cursor-agent", generating);
   else if (!generating && /→/.test(bottom) && !followUp) {
@@ -116,13 +121,15 @@ function injectClaude(paneId: string, message: string, plan: InjectPlan, capture
     sleepMs(80);
   }
   pasteMessage(paneId, message);
-  sleepMs(plan.enterDelayMs ?? 200);
-  tmux(["send-keys", "-t", paneId, "Enter"]);
-  sleepMs(400);
-  const after = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-6"]).out ?? "";
-  if (/Press up to edit queued messages/i.test(after)) {
+  if (!plan.skipSubmit) {
+    sleepMs(plan.enterDelayMs ?? 200);
     tmux(["send-keys", "-t", paneId, "Enter"]);
-    sleepMs(300);
+    sleepMs(400);
+    const after = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-6"]).out ?? "";
+    if (/Press up to edit queued messages/i.test(after)) {
+      tmux(["send-keys", "-t", paneId, "Enter"]);
+      sleepMs(300);
+    }
   }
   if (saved) {
     sleepMs(150);
@@ -137,10 +144,11 @@ export function injectToPane(
   plan: InjectPlan,
   providerId?: string,
   captureTail = "",
+  captureTailAnsi?: string,
 ): void {
   withPaneInputEnabled(paneId, () => {
     if (providerId === "cursor-agent" || providerId === "agent") {
-      injectCursorAgent(paneId, message, captureTail);
+      injectCursorAgent(paneId, message, captureTail, captureTailAnsi);
       return;
     }
 
@@ -149,7 +157,7 @@ export function injectToPane(
       return;
     }
 
-    const saved = humanDraftToPreserve(captureTail, providerId ?? "", message);
+    const saved = humanDraftToPreserve(captureTail, providerId ?? "", message, captureTailAnsi);
     if (saved) clearComposerDraft(paneId, providerId ?? "", false);
     else if (plan.flushEscFirst) {
       tmux(["send-keys", "-t", paneId, "Escape"]);

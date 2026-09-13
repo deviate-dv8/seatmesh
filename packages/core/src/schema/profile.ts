@@ -5,10 +5,12 @@ import { UxSchema } from "./ux.js";
 const ConnectivityPolicySchema = z.object({
   rebootWifiBounce: z.boolean().default(false),
   smartRestart: z.boolean().default(false),
-  rotateMaxAttempts: z.number().int().min(0).default(3),
+  rotateMaxAttempts: z.number().int().min(0).default(15),
   cooldownMs: z.number().int().min(0).default(1_800_000),
   /** Consecutive ipify probe failures before PROXY-DOWN recovery (wifi-probe / cpe-proxy-up). */
-  ipifyFailBeforeRecovery: z.number().int().min(1).default(3),
+  ipifyFailBeforeRecovery: z.number().int().min(1).default(15),
+  /** Consecutive oc-connect observations on a pane before it counts toward PROXY-DOWN (debounce stale scrollback). */
+  connectFailBeforeRecovery: z.number().int().min(1).default(15),
 });
 
 const ConnectivityDriversSchema = z
@@ -131,6 +133,8 @@ export const MeshProfileSchema = z.object({
       hmrPollMs: z.number().int().default(2000),
       pollMs: z.number().int().default(4000),
       idleSettleSec: z.number().int().default(5),
+      /** TEMP: do not hold PEER/INBOX on composer typing (still hold busy/settle). */
+      skipTypingGate: z.boolean().default(false),
       managerPromptPrefix: z
         .string()
         .default("[agent-manager-kiro-cursor-claude]"),

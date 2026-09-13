@@ -33,7 +33,7 @@ export function waitForOpenCodeLaunch(
   if (!live) {
     return { ok: false, reason: "opencode not live (plain_shell or composer not ready)" };
   }
-  syncOpenCodePaneSession(paneId, { waitMs: 1500, retries: 3 });
+  syncOpenCodePaneSession(paneId, { waitMs: 1500, retries: 14 });
   return { ok: true, providerId: live.providerId };
 }
 

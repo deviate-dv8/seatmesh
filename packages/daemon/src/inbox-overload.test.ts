@@ -19,12 +19,12 @@ function mockStore(peer: unknown[], checkbacks: unknown[]): QueueStore {
 describe("inbox overload", () => {
   beforeEach(() => resetInboxOverloadStateForTests());
 
-  it("counts unsent peer + active checkbacks on pane", () => {
+  it("counts unsent peer only (not armed checkbacks)", () => {
     const store = mockStore(
       [{ targetPane: "%1", sent: false }],
       [{ status: "active", ownerPane: "%1" }],
     );
-    expect(countInboxTriggersForPane(store, "%1")).toBe(2);
+    expect(countInboxTriggersForPane(store, "%1")).toBe(1);
   });
 
   it("starts cooldown and warns at threshold", () => {

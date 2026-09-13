@@ -54,8 +54,9 @@ export function humanDraftToPreserve(
   captureTail: string,
   providerId: string,
   injectBody: string,
+  captureTailAnsi?: string,
 ): string {
-  let draft = coordComposerDraft(captureTail, providerId).trim();
+  let draft = coordComposerDraft(captureTail, providerId, captureTailAnsi).trim();
   if (!draft && providerId === "claude") draft = claudeComposerDraft(captureTail);
   if (!draft) return "";
   if (isSmInjectText(draft)) return "";

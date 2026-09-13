@@ -21,6 +21,8 @@ import {
 } from "@seat-mesh/providers";
 import { guessSecretaryOpenCodeSession } from "@seat-mesh/providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
+import { pasteLaunchCmd } from "../agents/launch.js";
+import { cliForBaseColumn } from "../session/base-layout.js";
 import {
   loadLaunchState,
   loadMeshAgentsForProfile,
@@ -34,11 +36,12 @@ import type { MiniCampaignDigest } from "./minis.js";
 import { submitPaneOp } from "../ops/pane-ops-client.js";
 import { buildMiniCampaignDigest, miniPrompt, miniSpawnAll } from "./minis.js";
 import { injectPromptDirect, enqueuePrompt } from "../inject/prompt.js";
-import { injectAfterLaunch } from "../seats/cold-start-inject.js";
+import { enqueueColdStart, injectAfterLaunch } from "../seats/cold-start-inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { selectPaneUnfocused, withActivePanePreserved } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 import { applyMeshBorderFormat } from "../session/borders.js";
+import { runSuperviseTick } from "../supervise/supervise-tick.js";
 
 const MESH_WATCH_ID = "mesh-watch-secretary";
 const MANAGER_NUDGE_ID = "mesh-manager-nudge";
@@ -126,7 +129,15 @@ function clearSecretaryResumeOnDisk(loaded: LoadedProfile): void {
   });
 }
 
-function resolveSecretaryLaunchCmd(
+function claudeResumeId(id: string | null | undefined): string | null {
+  if (!id?.trim()) return null;
+  if (/^ses_/i.test(id.trim())) return null;
+  if (/^[0-9a-f-]{36}$/i.test(id.trim())) return id.trim();
+  return null;
+}
+
+/** Launch one-liner for secretary (claude --permission-mode auto, opencode-cpe, resume hygiene). */
+export function resolveSecretaryLaunchCmd(
   loaded: LoadedProfile,
   typ: string,
   paneId?: string,
@@ -134,10 +145,21 @@ function resolveSecretaryLaunchCmd(
 ): string | null {
   const state = loadLaunchState(loaded);
   const harnessType = typ === "cursor-agent" ? "agent" : typ;
+  const savedType = state.secretary?.type;
+  const typeChanged = Boolean(savedType && savedType !== harnessType);
   let resumeId: string | null = null;
-  if (!fresh) {
+  let resumeCmd: string | null = null;
+  if (!fresh && !typeChanged) {
     resumeId = state.secretary?.resume_id ?? null;
-    if (!resumeId && paneId) {
+    resumeCmd = state.secretary?.resume_cmd ?? null;
+    if (harnessType === "claude") {
+      resumeId = claudeResumeId(resumeId);
+      if (resumeCmd && /ses_|opencode-cpe/i.test(resumeCmd)) {
+        resumeCmd = null;
+        resumeId = null;
+      }
+    }
+    if (!resumeId && paneId && harnessType === "opencode") {
       const stored = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_oc_session}"]).out;
       if (stored) resumeId = stored;
     }
@@ -146,11 +168,14 @@ function resolveSecretaryLaunchCmd(
     }
   } else if (paneId) {
     tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", ""]);
+    if (typeChanged || fresh) {
+      clearSecretaryResumeOnDisk(loaded);
+    }
   }
   const secEntry = {
     type: harnessType,
     resume_id: resumeId,
-    resume_cmd: fresh ? null : (state.secretary?.resume_cmd ?? null),
+    resume_cmd: fresh || typeChanged ? null : resumeCmd,
   };
   const cmd =
     resolveLaunchCmd(secEntry, loaded.workspace) ??
@@ -186,6 +211,7 @@ export function secretaryRestart(
   const state = loadLaunchState(loaded);
   let typ =
     typArg ??
+    cliForBaseColumn(loaded, "secretary") ??
     state.secretary?.type ??
     state.conventions?.secretary_default_cli ??
     "opencode";
@@ -224,11 +250,11 @@ export function secretaryRestart(
     tmux(["select-pane", "-e", "-t", paneId]);
   });
 
-  tmux(["send-keys", "-t", paneId, cmd, "Enter"]);
-  sleepMs(300);
-  tmux(["send-keys", "-t", paneId, "Enter"]);
+  withActivePanePreserved(paneId, () => pasteLaunchCmd(paneId, cmd));
 
-  const live = waitForCli(reg, paneId, capturePaneSnapshot);
+  const cliWait =
+    typ === "claude" ? { maxTries: 80, pollMs: 500 } : { maxTries: 50, pollMs: 400 };
+  const live = waitForCli(reg, paneId, capturePaneSnapshot, cliWait);
   if (!live) {
     tmux(["set-option", "-p", "-t", paneId, "@mesh_status", "restart-fail"]);
     throw new Error(`secretary restart failed: no live CLI on ${paneId}`);
@@ -256,11 +282,37 @@ export function secretaryRestart(
     console.log(`OK: secretary POV ${pov.detail}`);
   } else {
     console.error(`WARN: secretary POV: ${pov.detail}`);
+    try {
+      const enq = enqueueColdStart(loaded, "secretary");
+      if (!enq.skipped) {
+        console.log(
+          "OK: secretary cold-start queued — inbox will inject FRESH SUMMON/whoami when composer idle",
+        );
+      }
+    } catch (e) {
+      console.error(`WARN: secretary cold-start enqueue: ${(e as Error).message}`);
+    }
   }
 
   tmux(["set-option", "-p", "-t", paneId, "@mesh_status", ""]);
   // Do NOT lock pane input here — the operator must still be able to type into
   // secretary directly after a restart (operator-reported: was left stuck locked).
+
+  const harnessSaved = typ === "cursor-agent" ? "agent" : typ;
+  const mesh = loadMeshAgentsForProfile(loaded);
+  if (mesh?.secretary) {
+    saveMeshAgentsFile(meshAgentsJsonPath(loaded), {
+      ...mesh,
+      secretary: {
+        ...mesh.secretary,
+        type: harnessSaved as "agent" | "claude" | "kiro" | "opencode" | "empty",
+        wanted: mesh.secretary.wanted ?? true,
+        resumeId: harnessSaved === "claude" ? null : mesh.secretary.resumeId,
+        resumeCmd: cmd,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+  }
 
   console.log(`OK: restarted secretary pane=${paneId} (${providerId}): respawn + POV`);
 }
@@ -406,13 +458,36 @@ function cancelPatience(loaded: LoadedProfile, id: string): void {
 export function secretarySupervise(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
-  sub: "on" | "off" | "status",
+  sub: "on" | "off" | "status" | "run",
   interval = "10m",
+  runOpts?: { dryRun?: boolean; postStatus?: boolean },
 ): void {
   const workspace = loaded.workspace;
   const session = loaded.sessionName;
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
+
+  if (sub === "run") {
+    const tick = runSuperviseTick(loaded, {
+      session,
+      baseWindow: layout.base.window,
+      registry,
+      dryRun: runOpts?.dryRun,
+      postStatus: runOpts?.postStatus,
+    });
+    console.log(`STATUS: ${tick.statusLine}`);
+    for (const lead of tick.leads) {
+      const delta =
+        lead.prior === null ? "new" : lead.prior === lead.now ? "same" : `${lead.prior} -> ${lead.now}`;
+      console.log(`  ${lead.id}: mark=${lead.mark} open=${lead.open} (${delta})`);
+    }
+    if (tick.materialChange) console.log("diff: material change detected");
+    else if (tick.priorText.trim()) console.log("diff: unchanged since last tick");
+    if (tick.wroteLedger) console.log(`OK: SUPERVISE-LAST written -> ${tick.lastPath}`);
+    if (tick.roomStatusPosted) console.log("OK: room STATUS posted (managers, kind=status)");
+    else if (!tick.wroteLedger) console.log("dry-run: no SUPERVISE-LAST write, no room post");
+    return;
+  }
 
   const mgrIds = managerColumnIds(layout);
   const secIds = secretaryColumnIds(layout);

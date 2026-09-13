@@ -221,7 +221,14 @@ export function injectPromptDirect(
 
   const stamped = stampSentToken(buildPromptBody(loaded, text, opts));
   const plan = provider.injectPlan(snap);
-  injectToPane(resolved.paneId, stamped.body, plan, provider.id, snap.captureTail);
+  injectToPane(
+    resolved.paneId,
+    stamped.body,
+    plan,
+    provider.id,
+    snap.captureTail,
+    snap.captureTailAnsi,
+  );
   if (opts.confirmSent === false) {
     return {
       paneId: resolved.paneId,

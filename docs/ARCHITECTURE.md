@@ -114,6 +114,8 @@ Delivery is **not** chat — it is PEER/CHECKBACK inject when policy allows.
 | Symptom | Likely cause | Check |
 |---------|--------------|--------|
 | CLI `FAIL: prompt not sent … last=queued` | Target composer **busy/typing** (common on cursor-agent) | `./sm.sh peer verify <target>` |
+| CC blank composer stuck **typing** (border + held:typing) | False draft on rule-only `❯ ───` row; or need TEMP bypass | Fix in `@seat-mesh/providers`; `daemon.skipTypingGate: true` or `MESH_INBOX_SKIP_TYPING_GATE=1` then inbox restart |
+| Secretary **Bun crashed** / `illegal hardware instruction` on `opencode-cpe.sh` | Stale `mesh-agents.json` secretary=opencode while profile `layout.base.cli.secretary=claude` | Fix: coord sync uses profile CLI first; `seatmesh secretary restart`; OC relaunch only when profile says opencode |
 | `peerUnsent` high in `/health` | Backlog of not-yet-delivered rows; many targets busy at once | Wait for idle + settle; reduce concurrent peer spam |
 | Room line saved, `fan-out sent=0` | Same busy gate; line still in `.sm/chat-rooms/.../ROOM.jsonl` | `./sm.sh room tail -r managers` |
 | Truly no daemon | `/health` not ok | `./sm.sh inbox restart` |

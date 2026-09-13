@@ -57,18 +57,14 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     onRise: "limits.cc-limit",
   },
   {
-    id: "cursor-follow-up",
+    id: "cursor-generating",
     for: ["cursor-agent"],
     priority: 70,
-    when: { scan: { full: true }, match: "Add a follow-up|ctrl\\+c to stop" },
-    set: { phase: "busy", busyLabel: "follow-up", border: "follow-up" },
-  },
-  {
-    id: "cursor-composer",
-    for: ["cursor-agent"],
-    priority: 69,
-    when: { scan: { full: true }, match: "Composer \\d|· \\d+\\.\\d+%|files edited" },
-    set: { phase: "busy", busyLabel: "composer", border: "composer" },
+    when: {
+      scan: { bottomLines: 14 },
+      match: "(Working|Running|Thinking)|ctrl\\+c to stop",
+    },
+    set: { phase: "busy", capture: 1, busyLabel: "BUSY", border: "{kind}" },
   },
   {
     id: "busy-generic",

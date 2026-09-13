@@ -280,7 +280,7 @@ async function main(): Promise<void> {
     sessionUp(loaded);
     console.log(`OK: session '${loaded.sessionName}' up`);
     printMeshInboxStatus(loaded);
-    console.log(`  next: npx seatmesh session attach`);
+    sessionAttach(loaded);
     return;
   }
 
@@ -757,11 +757,56 @@ async function main(): Promise<void> {
       secretaryLaunch(loaded);
       return;
     }
-    if (sub === "restart") {
+    if (sub === "restart" || sub === "switch") {
       const reg = createRegistryForProfile(loaded.profile);
-      const fresh = rest.includes("--fresh") || tail.includes("--fresh");
+      const keepResume =
+        rest.includes("--keep-resume") ||
+        tail.includes("--keep-resume") ||
+        rest.includes("--no-fresh") ||
+        tail.includes("--no-fresh");
+      const fresh = keepResume ? false : true;
       const typeFlagIdx = tail.indexOf("--type");
-      const typeArg = typeFlagIdx >= 0 ? tail[typeFlagIdx + 1] : undefined;
+      const cliTypes = new Set([
+        "agent",
+        "claude",
+        "kiro",
+        "opencode",
+        "cursor-agent",
+        "oc",
+        "cursor",
+        "cc",
+      ]);
+      let typeArg = typeFlagIdx >= 0 ? tail[typeFlagIdx + 1] : undefined;
+      if (!typeArg) {
+        const positional = tail.find(
+          (t) =>
+            !t.startsWith("--") &&
+            t !== "--fresh" &&
+            t !== "--keep-resume" &&
+            t !== "--no-fresh",
+        );
+        if (positional && cliTypes.has(positional)) {
+          typeArg =
+            positional === "oc"
+              ? "opencode"
+              : positional === "cursor"
+                ? "agent"
+                : positional === "cc"
+                  ? "claude"
+                  : positional;
+        }
+      }
+      if (sub === "switch") {
+        if (!typeArg) {
+          console.error(
+            "usage: secretary switch claude|agent|opencode|kiro [--keep-resume]  (alias: switch secretary <type>)",
+          );
+          process.exit(2);
+        }
+        runSwitch(loaded, reg, "secretary", typeArg, { fresh });
+        saveMeshSession(loaded, reg);
+        return;
+      }
       secretaryRestart(loaded, reg, typeArg, fresh);
       saveMeshSession(loaded, reg);
       return;
@@ -806,11 +851,19 @@ async function main(): Promise<void> {
         secretarySupervise(loaded, reg, "off");
         return;
       }
+      if (action === "run") {
+        const flags = tail.slice(1);
+        secretarySupervise(loaded, reg, "run", undefined, {
+          dryRun: flags.includes("--dry-run"),
+          postStatus: flags.includes("--status"),
+        });
+        return;
+      }
       secretarySupervise(loaded, reg, "status");
       return;
     }
     console.error(
-      "usage: secretary start|restart [--fresh]|status|supervise on [10m]|supervise off|watch on [5m]|watch off",
+      "usage: secretary start|switch|restart [claude|cc|agent|cursor|oc|opencode|kiro] [--fresh]|status|supervise on [10m]|supervise run [--status|--dry-run]|supervise off|watch on [5m]|watch off",
     );
     process.exit(2);
   }
@@ -1083,35 +1136,47 @@ async function main(): Promise<void> {
     const args = [sub, ...tail].filter(Boolean);
     if (args.length < 2) {
       console.error(
-        "usage: switch <target> <agent|kiro|claude|opencode|empty> [--fresh|--resume ID] [reason...]",
+        "usage: switch <target> <agent|cursor|claude|cc|kiro|oc|opencode|empty> [--keep-resume] [--resume ID] [--queue] [reason...]",
+      );
+      console.error(
+        "  targets: secretary|sec, manager|mgr, slot-N, mini-N, here|self (this pane's role)",
       );
       process.exit(2);
     }
     const target = args[0]!;
     const newType = args[1]!;
-    let fresh = false;
+    let fresh: boolean | undefined;
+    let queue = false;
     let resumeId: string | undefined;
     const reasonParts: string[] = [];
     for (let i = 2; i < args.length; i++) {
       const a = args[i]!;
       if (a === "--fresh") fresh = true;
+      else if (a === "--keep-resume" || a === "--no-fresh") fresh = false;
+      else if (a === "--queue") queue = true;
       else if (a === "--resume" && args[i + 1]) resumeId = args[++i];
       else if (a.startsWith("--resume=")) resumeId = a.slice("--resume=".length);
       else reasonParts.push(a);
     }
     const reason = reasonParts.join(" ") || undefined;
-    submitPaneOp(
-      loaded,
-      "switch",
-      { target, newType, fresh, resumeId, reason },
-      `switch ${target} -> ${newType}`,
-      () =>
-        runSwitch(loaded, reg, target, newType, {
-          fresh,
-          resumeId,
-          reason,
-        }),
-    );
+    const run = () =>
+      runSwitch(loaded, reg, target, newType, {
+        fresh,
+        resumeId,
+        reason,
+      });
+    if (queue) {
+      submitPaneOp(
+        loaded,
+        "switch",
+        { target, newType, fresh, resumeId, reason },
+        `switch ${target} -> ${newType}`,
+        run,
+      );
+    } else {
+      run();
+      saveMeshSession(loaded, reg);
+    }
     return;
   }
 

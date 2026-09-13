@@ -61,6 +61,8 @@ export function capturePaneSnapshot(paneId: string): PaneSnapshot | null {
 
   const capture =
     tmux(["capture-pane", "-t", paneId, "-p", "-S", "-80"]) ?? "";
+  const captureAnsi =
+    tmux(["capture-pane", "-e", "-t", paneId, "-p", "-S", "-80"]) ?? "";
 
   return {
     paneId,
@@ -69,6 +71,7 @@ export function capturePaneSnapshot(paneId: string): PaneSnapshot | null {
     currentCommand:
       tmux(["display-message", "-t", paneId, "-p", "#{pane_current_command}"]) ?? "",
     captureTail: capture,
+    captureTailAnsi: captureAnsi || undefined,
     options: opts,
   };
 }

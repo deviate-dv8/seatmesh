@@ -4,6 +4,19 @@ import { coordComposerDraft } from "@seat-mesh/providers";
 /** Post-generate / empty-composer settle (manager + secretary only). */
 export const COORD_IDLE_SETTLE_MS = Number(process.env.MESH_INBOX_IDLE_SETTLE_MS ?? 5000);
 
+let profileSkipTypingGate = false;
+
+/** TEMP bypass: profile daemon.skipTypingGate or MESH_INBOX_SKIP_TYPING_GATE=1 */
+export function configureInboxTypingGate(opts: { skip?: boolean }): void {
+  profileSkipTypingGate = opts.skip === true;
+}
+
+export function inboxSkipTypingGate(): boolean {
+  if (profileSkipTypingGate) return true;
+  const v = process.env.MESH_INBOX_SKIP_TYPING_GATE;
+  return v === "1" || v === "true";
+}
+
 export type CoordGatePhase =
   | "idle"
   | "wait-busy"
@@ -87,7 +100,9 @@ export function classifyCoordDelivery(
     state.draftFingerprint?.trim() ||
     coordComposerDraft(captureTail, providerId) ||
     undefined;
-  if (state.phase === "typing" || draftFp) {
+  const holdTyping =
+    !inboxSkipTypingGate() && (state.phase === "typing" || Boolean(draftFp));
+  if (holdTyping) {
     st.idleReadySince = 0;
     return { phase: "wait-typing", canDeliver: false, draftFp };
   }

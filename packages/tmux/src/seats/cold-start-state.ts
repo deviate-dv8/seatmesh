@@ -48,28 +48,52 @@ export function seatHubFingerprint(loaded: LoadedProfile, filePaths: (string | n
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
 }
 
-export function hasPendingColdStartPeer(loaded: LoadedProfile, targetPane: string): boolean {
+type ColdStartPeerRow = {
+  sent?: boolean;
+  sentAt?: string;
+  targetPane?: string;
+  fromSlot?: string;
+  deliverPane?: string;
+};
+
+function coldStartPeerRows(loaded: LoadedProfile, targetPane: string): ColdStartPeerRow[] {
   const peer = meshRuntimePaths(loaded).peerJsonl;
-  if (!fs.existsSync(peer)) return false;
+  if (!fs.existsSync(peer)) return [];
+  const out: ColdStartPeerRow[] = [];
   for (const line of fs.readFileSync(peer, "utf8").split("\n")) {
     const t = line.trim();
     if (!t) continue;
     try {
-      const row = JSON.parse(t) as {
-        sent?: boolean;
-        targetPane?: string;
-        fromSlot?: string;
-      };
-      if (
-        row.targetPane === targetPane &&
-        row.fromSlot === "mesh-cold-start" &&
-        row.sent !== true
-      ) {
-        return true;
+      const row = JSON.parse(t) as ColdStartPeerRow;
+      if (row.targetPane === targetPane && row.fromSlot === "mesh-cold-start") {
+        out.push(row);
       }
     } catch {
       /* skip bad line */
     }
+  }
+  return out;
+}
+
+/** Cold-start reached the pane at least once (not backlog/skipped-only). */
+export function hasDeliveredColdStartPeer(
+  loaded: LoadedProfile,
+  targetPane: string,
+): boolean {
+  const state = readState(loaded);
+  if (state.panes[targetPane]?.delivered === true) return true;
+  for (const row of coldStartPeerRows(loaded, targetPane)) {
+    if (row.sent !== true || !row.sentAt) continue;
+    const dp = row.deliverPane ?? "";
+    if (dp === "skipped" || dp === "backlog") continue;
+    return true;
+  }
+  return false;
+}
+
+export function hasPendingColdStartPeer(loaded: LoadedProfile, targetPane: string): boolean {
+  for (const row of coldStartPeerRows(loaded, targetPane)) {
+    if (row.sent !== true) return true;
   }
   return false;
 }
@@ -138,7 +162,11 @@ export function isPaneContextReady(loaded: LoadedProfile, targetPane: string): b
   if (hasPendingColdStartPeer(loaded, targetPane)) return false;
   const state = readState(loaded);
   const prev = state.panes[targetPane];
-  if (prev && prev.delivered === false) return false;
+  if (prev && prev.delivered === false) {
+    // No unsent cold-start row (checked above) — stale delivered:false must not wedge PEER/INBOX.
+    prev.delivered = true;
+    writeState(loaded, state);
+  }
   return true;
 }
 

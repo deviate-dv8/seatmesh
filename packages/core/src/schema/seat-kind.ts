@@ -21,6 +21,8 @@ export function expandColumnAlias(raw: string): string[] {
   if (!t) return [];
   const out = new Set<string>([t]);
   if (t === "master") out.add("manager");
+  if (t === "mgr") out.add("manager");
+  if (t === "sec") out.add("secretary");
   const compact = t.match(/^([a-z]+)(\d+)$/);
   if (compact) out.add(`${compact[1]}-${compact[2]}`);
   const hyphen = t.match(/^([a-z]+)-(\d+)$/);

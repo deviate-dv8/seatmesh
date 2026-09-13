@@ -10,6 +10,7 @@ import {
   shouldNotifyProxyDownStuck,
   smartRestartCooldownLeftSec,
   updateIpifyProbeStreak,
+  updatePaneConnectStreak,
   updateRateLimitEpisode,
 } from "./connectivity-recovery.js";
 
@@ -38,6 +39,32 @@ describe("updateIpifyProbeStreak (debounce shallow ipify failures)", () => {
     const r = updateIpifyProbeStreak(state, false, 3);
     expect(r.confirmedDown).toBe(false);
     expect(r.streak).toBe(1);
+  });
+});
+
+describe("updatePaneConnectStreak (PROXY-DOWN scrollback debounce)", () => {
+  it("does not confirm connect on first observation", () => {
+    const m = new Map<string, number>();
+    const r = updatePaneConnectStreak(m, "%1", true, 15);
+    expect(r.confirmed).toBe(false);
+    expect(r.streak).toBe(1);
+  });
+
+  it("confirms only after threshold consecutive observations", () => {
+    const m = new Map<string, number>();
+    for (let i = 0; i < 14; i++) {
+      updatePaneConnectStreak(m, "%1", true, 15);
+    }
+    const r = updatePaneConnectStreak(m, "%1", true, 15);
+    expect(r.confirmed).toBe(true);
+    expect(r.streak).toBe(15);
+  });
+
+  it("resets when the pane no longer shows connect errors", () => {
+    const m = new Map<string, number>();
+    updatePaneConnectStreak(m, "%1", true, 15);
+    updatePaneConnectStreak(m, "%1", false, 15);
+    expect(m.has("%1")).toBe(false);
   });
 });
 

@@ -21,7 +21,9 @@ import {
   resolveLiveTmuxSession,
   saveMeshSession,
 } from "@seat-mesh/tmux";
+import { configureInboxTypingGate } from "./compose-gate.js";
 import { createQueueStore } from "./create-queue-store.js";
+import { countPeerPendingGlobal } from "./peer-pending.js";
 import { findDupInbox, findDupPeer, type CheckbackRow } from "./jsonl-store.js";
 import {
   orchestratorDrainTickAsync,
@@ -51,7 +53,13 @@ import {
   queueAheadCount,
   type PaneOpsDrainCtx,
 } from "./pane-ops-drain.js";
-import type { PaneOpKind } from "@seat-mesh/core";
+import type { NotifyActRegisterAction, PaneOpKind } from "@seat-mesh/core";
+import {
+  createNotifyActRegistry,
+  executeNotifyAct,
+  htmlActPage,
+} from "./notify-act.js";
+import { htmlDemoYesNoPage, htmlUiHome } from "./notify-act-ui.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,6 +77,11 @@ function json(res: http.ServerResponse, code: number, body: unknown): void {
   res.end(JSON.stringify(body, null, 2) + "\n");
 }
 
+function html(res: http.ServerResponse, code: number, body: string): void {
+  res.writeHead(code, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(body);
+}
+
 function readBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -82,6 +95,7 @@ async function main(): Promise<void> {
   const { profilePath } = parseArgs();
   const loaded = loadProfile(profilePath);
   const profile = loaded.profile;
+  configureInboxTypingGate({ skip: profile.daemon?.skipTypingGate === true });
   const meshLayout = profile.layout;
   if (!meshLayout) {
     console.error("mesh-inbox: profile missing layout");
@@ -109,6 +123,7 @@ async function main(): Promise<void> {
   }
 
   const store = createQueueStore(loaded, log);
+  const actRegistry = createNotifyActRegistry();
   const registry = createRegistryForProfile(profile);
   const uxResolved = profile.ux !== undefined ? resolveUxConfig(profile.ux) : null;
   const connectivity = newConnectivityRecoveryState();
@@ -145,7 +160,7 @@ async function main(): Promise<void> {
     queueSnap = {
       checkbackActive: store.readCheckbacks().filter((r) => r.status === "active").length,
       inboxUnresolved: store.readInbox().filter((r) => !r.resolved).length,
-      peerUnsent: store.readPeer().filter((r) => !r.sent).length,
+      peerUnsent: countPeerPendingGlobal(store),
       paneOpsPending: store.countPaneOpsPending(),
       updatedAt: Date.now(),
     };
@@ -527,6 +542,72 @@ async function main(): Promise<void> {
         log(`ROOM-FANOUT from=${body.fromSlot ?? "?"} targets=${rows.length}`);
         scheduleDrain();
         return json(res, 200, { ok: true, enqueued: rows.length });
+      }
+
+      if (req.method === "GET" && url.pathname === "/ui") {
+        return html(res, 200, htmlUiHome(port));
+      }
+
+      if (req.method === "GET" && url.pathname === "/ui/demo-yesno") {
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const links = actRegistry.register(
+          [
+            {
+              label: "Yes",
+              type: "peer",
+              params: {
+                target: "manager-3",
+                msg: "YES: mesh UI / notify-act demo link",
+                kind: "prompt",
+              },
+            },
+            { label: "No", type: "ping", params: {} },
+          ],
+          3600,
+          baseUrl,
+        );
+        log(`NOTIFY-ACT ui demo-yesno n=${links.length}`);
+        return html(res, 200, htmlDemoYesNoPage(links, port));
+      }
+
+      if (req.method === "POST" && url.pathname === "/act/register") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          actions?: NotifyActRegisterAction[];
+          ttlSec?: number;
+        };
+        const actions = Array.isArray(body.actions) ? body.actions : [];
+        if (!actions.length) {
+          return json(res, 400, { ok: false, error: "actions required" });
+        }
+        const ttlSec = Number(body.ttlSec ?? 3600);
+        const baseUrl = `http://127.0.0.1:${port}`;
+        const links = actRegistry.register(actions, ttlSec, baseUrl);
+        log(`NOTIFY-ACT register n=${links.length}`);
+        return json(res, 200, { ok: true, links });
+      }
+
+      const actMatch = /^\/act\/v1\/([^/]+)$/.exec(url.pathname);
+      if (req.method === "GET" && actMatch) {
+        const token = actMatch[1]!;
+        const row = actRegistry.take(token);
+        if (!row) {
+          return html(
+            res,
+            404,
+            htmlActPage("Expired or used", "This link was already used or has expired.", false),
+          );
+        }
+        const result = await executeNotifyAct(row, {
+          loaded,
+          store,
+          log,
+          onPeerEnqueued: async (peerRow) => {
+            await enqueueAfterAppend("peer", peerRow.id);
+          },
+        });
+        const title = result.ok ? row.label : "Action failed";
+        return html(res, result.ok ? 200 : 500, htmlActPage(title, result.summary, result.ok));
       }
 
       if (req.method === "GET" && url.pathname === "/inbox") {

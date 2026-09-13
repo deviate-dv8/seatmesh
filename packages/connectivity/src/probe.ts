@@ -45,11 +45,11 @@ export async function snapshotConnectivity(
   const policy = conn?.policy ?? {
     rebootWifiBounce: false,
     smartRestart: false,
-    rotateMaxAttempts: 3,
+    rotateMaxAttempts: 15,
     cooldownMs: 1_800_000,
-    ipifyFailBeforeRecovery: 3,
+    ipifyFailBeforeRecovery: 15,
   };
-  const ipifyAttempts = policy.ipifyFailBeforeRecovery ?? 3;
+  const ipifyAttempts = policy.ipifyFailBeforeRecovery ?? 15;
 
   const listen = enabled ? await proxyListenOkAsync(port) : false;
   let carrierIp: string | null = null;

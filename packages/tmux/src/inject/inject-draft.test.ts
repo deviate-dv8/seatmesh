@@ -24,6 +24,11 @@ describe("isSmInjectText", () => {
 });
 
 describe("humanDraftToPreserve", () => {
+  it("does not preserve Cursor placeholder ghost as draft", () => {
+    const tail = "  \u2192 Plan, search, build anything\n  Add a follow-up";
+    expect(humanDraftToPreserve(tail, "cursor-agent", "INJECT")).toBe("");
+  });
+
   it("keeps a cursor human draft and skips sm / inject body", () => {
     const tail = "  \u2192 fix the banner overflow\n  Add a follow-up";
     expect(humanDraftToPreserve(tail, "cursor-agent", "INJECT")).toBe("fix the banner overflow");

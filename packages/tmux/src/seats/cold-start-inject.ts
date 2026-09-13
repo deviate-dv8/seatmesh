@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
-import { waitForCli, waitForComposerReady } from "@seat-mesh/providers";
+import { composerFromCapture, waitForCli, waitForComposerReady } from "@seat-mesh/providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";
 import { injectPromptDirect } from "../inject/prompt.js";
@@ -135,7 +135,15 @@ function launchUiReady(registry: ProviderRegistry, paneId: string, providerId: s
     return /auto mode on|⏵⏵/i.test(tail) && /❯/.test(tail);
   }
   if (providerId === "cursor-agent") {
-    return /Add a follow-up|composer|agent/i.test(tail) || prov.composerReady(snap);
+    const state = composerFromCapture(snap, providerId);
+    if (state.phase === "limit") return false;
+    // After switch/launch, capture may be blank (plain_shell) before the TUI paints;
+    // waitForCli already proved the agent process is live — inject FRESH SUMMON anyway.
+    if (state.phase === "plain_shell") return true;
+    return (
+      /Add a follow-up|Plan, search|composer|ctrl\+c to stop|cursor|Agent/i.test(tail) ||
+      prov.composerReady(snap)
+    );
   }
   if (providerId === "opencode") {
     if (/esc exit shell mode/i.test(tail)) return false;
@@ -171,6 +179,9 @@ export function injectAfterLaunch(
       break;
     }
     sleepMs(400);
+  }
+  if (!ui && live.providerId === "cursor-agent") {
+    ui = true;
   }
   if (!ui) {
     return { ok: false, detail: `TUI not ready (${live.providerId}) on ${paneId} — brief not injected` };

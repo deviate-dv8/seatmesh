@@ -11,13 +11,18 @@ import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { selectPaneUnfocused } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
+import { isSecretaryKind, seatKindFromId } from "@seat-mesh/core";
+import { resolveSecretaryLaunchCmd } from "../roles/secretary.js";
+import { enqueueColdStart } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
 
 const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "empty"]);
 
 function normalizeType(t: string): string {
   const x = t.trim().toLowerCase();
-  if (x === "cursor-agent") return "agent";
+  if (x === "cursor-agent" || x === "cursor") return "agent";
+  if (x === "oc") return "opencode";
+  if (x === "cc") return "claude";
   return x;
 }
 
@@ -31,6 +36,7 @@ function sleepMs(ms: number): void {
 }
 
 export interface SwitchOptions {
+  /** Default true — switch always starts clean unless --keep-resume or --resume ID. */
   fresh?: boolean;
   resumeId?: string;
   reason?: string;
@@ -49,14 +55,24 @@ export function runSwitch(
     throw new Error(`bad type: ${newTypeRaw} (want agent|kiro|claude|opencode|empty)`);
   }
 
-  if (target === "here") {
-    const pane = process.env.TMUX_PANE;
-    if (!pane) throw new Error("switch here: not in tmux");
-    const role = tmux(["display-message", "-t", pane, "-p", "#{@mesh_role}"]).out;
-    if (role !== "manager") {
-      throw new Error("switch here: only on manager pane (or pass manager|slot)");
+  if (target === "here" || target === "self") {
+    const resolvedHere = resolvePaneTarget("here", loaded);
+    if ("error" in resolvedHere) throw new Error(resolvedHere.error);
+    const role = resolvedHere.row.role;
+    const kind = seatKindFromId(role, loaded.profile.layout?.base.kinds);
+    if (kind === "manager") {
+      target = role || "manager";
+    } else if (kind === "secretary") {
+      target = role || "secretary";
+    } else if (resolvedHere.row.slot) {
+      target = `slot-${resolvedHere.row.slot}`;
+    } else if (resolvedHere.row.mini) {
+      target = `mini-${resolvedHere.row.mini}`;
+    } else {
+      throw new Error(
+        `switch here: unsupported role ${role || "?"} — pass secretary|manager|slot-N|mini-N`,
+      );
     }
-    target = "manager";
   }
 
   if (target === "manager" && newType === "empty") {
@@ -71,11 +87,12 @@ export function runSwitch(
   const oldProv = snapBefore ? registry.detect(snapBefore) : null;
   const oldType = oldProv ? providerIdToHarnessType(oldProv.id) : "empty";
   const oldDet = oldProv && snapBefore ? oldProv.detect(snapBefore) : null;
+  const fresh = opts.fresh ?? true;
 
   let keepRid: string | null = null;
   if (opts.resumeId) {
     keepRid = opts.resumeId;
-  } else if (!opts.fresh && newType !== "empty" && (newType === oldType || oldType === "empty")) {
+  } else if (!fresh && newType !== "empty" && (newType === oldType || oldType === "empty")) {
     keepRid = oldDet?.resumeId ?? null;
   }
 
@@ -117,7 +134,13 @@ export function runSwitch(
     return;
   }
 
-  const cmd = buildLaunchCmd(newType, loaded.workspace, keepRid);
+  const isSecretaryPane =
+    row.role === "secretary" ||
+    isSecretaryKind(row.role, loaded.profile.layout?.base.kinds);
+  const typeChanged = oldType !== newType && oldType !== "empty";
+  const cmd = isSecretaryPane
+    ? resolveSecretaryLaunchCmd(loaded, newType, paneId, fresh || typeChanged || !keepRid)
+    : buildLaunchCmd(newType, loaded.workspace, keepRid);
   if (!cmd) throw new Error(`no launch command for type ${newType}`);
   pasteLaunchCmd(paneId, cmd);
   if (isOpenCodeLaunch(newType, cmd)) {
@@ -127,6 +150,8 @@ export function runSwitch(
     if (!verified.ok) {
       throw new Error(`switch ${target}: ${verified.reason}`);
     }
+  } else if (newType === "agent") {
+    sleepMs(2800);
   } else {
     sleepMs(1500);
   }
@@ -137,17 +162,33 @@ export function runSwitch(
       : row.role === "worker" && row.slot
         ? `slot-${row.slot}`
         : row.role === "manager"
-            ? "manager"
-            : row.role === "secretary"
-              ? "secretary"
-              : target;
+          ? "manager"
+          : isSecretaryPane
+            ? row.role || "secretary"
+            : row.role && row.role !== "worker"
+              ? row.role
+              : row.slot
+                ? `slot-${row.slot}`
+                : target === "self" || target === "here"
+                  ? "here"
+                  : target;
 
   invalidatePaneContext(loaded, paneId, targetLabel);
-  const brief = injectAfterLaunch(loaded, registry, target, paneId);
+  const brief = injectAfterLaunch(loaded, registry, targetLabel, paneId);
   if (!brief.ok) {
-    console.error(`WARN: fresh-summon whoami prompt ${target}: ${brief.detail}`);
+    console.error(`WARN: fresh-summon whoami prompt ${targetLabel}: ${brief.detail}`);
+    try {
+      const enq = enqueueColdStart(loaded, targetLabel, { force: true });
+      if (!enq.skipped) {
+        console.log("OK: cold-start queued for inbox FRESH SUMMON / whoami when idle");
+      } else {
+        console.log("OK: cold-start already queued for this hub (inbox will inject when idle)");
+      }
+    } catch (e) {
+      console.error(`WARN: cold-start enqueue failed: ${(e as Error).message}`);
+    }
   } else {
-    console.log(`OK: fresh-summon whoami prompt ${target} ${brief.detail}`);
+    console.log(`OK: fresh-summon whoami prompt ${targetLabel} ${brief.detail}`);
   }
 
   if (row.role && row.role !== "worker" && row.role !== "manager-mini") {

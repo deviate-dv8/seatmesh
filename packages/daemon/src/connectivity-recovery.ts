@@ -15,6 +15,8 @@ import { capturePaneSnapshot, listMeshMonitorPanes } from "@seat-mesh/tmux";
 import { notifyConnectivityStatus, type ResumeWaveMeta } from "./oc-resume.js";
 
 const PROXY_UP_COOLDOWN_MS = 60_000;
+/** After an episode clears, ignore stale oc-connect re-arm unless streak re-confirms. */
+const PROXY_DOWN_REARM_COOLDOWN_MS = 90_000;
 const ROTATE_COOLDOWN_MS = 180_000;
 const IPIFY_POLL_MS = 30_000;
 /** During PROXY-DOWN episode, still cap sync ipify curls so /health stays responsive. */
@@ -130,7 +132,27 @@ let paneScanOffset = 0;
 /** Last carrier IP actually observed while up — a live fetch during an outage always fails. */
 let lastKnownGoodIp: string | null = null;
 const paneLimitCache = new Map<string, { connect: boolean; rate: boolean }>();
+/** Per-pane consecutive oc-connect observations (batch scan), not scrollback one-shots. */
+const paneConnectStreak = new Map<string, number>();
 const paneCcLimitSeen = new Set<string>();
+let lastProxyDownClearAt = 0;
+
+/** Exported for unit tests. */
+export function updatePaneConnectStreak(
+  streakMap: Map<string, number>,
+  paneId: string,
+  sawConnect: boolean,
+  threshold: number,
+): { confirmed: boolean; streak: number } {
+  const need = Math.max(1, threshold);
+  if (!sawConnect) {
+    streakMap.delete(paneId);
+    return { confirmed: false, streak: 0 };
+  }
+  const streak = (streakMap.get(paneId) ?? 0) + 1;
+  streakMap.set(paneId, streak);
+  return { confirmed: streak >= need, streak };
+}
 
 function anyRateLimitInCache(): boolean {
   for (const flags of paneLimitCache.values()) {
@@ -149,6 +171,7 @@ export function clearOcLimitBannerForPane(
     state.ocLimited.has(paneId) ||
     state.connectPanes.has(paneId);
   paneLimitCache.delete(paneId);
+  paneConnectStreak.delete(paneId);
   state.ocLimited.delete(paneId);
   state.connectPanes.delete(paneId);
   return had;
@@ -271,6 +294,7 @@ function runScriptAsync(
   log: (line: string) => void,
   label: string,
   onDone: (code: number) => void,
+  extraEnv: Record<string, string> = {},
 ): boolean {
   if (!fs.existsSync(scriptPath)) {
     log(`${label}: missing ${scriptPath}`);
@@ -280,7 +304,7 @@ function runScriptAsync(
     cwd: workspace,
     stdio: "ignore",
     detached: false,
-    env: { ...process.env, CPE_SKIP_DESKTOP_NOTIFY: "1" },
+    env: { ...process.env, CPE_SKIP_DESKTOP_NOTIFY: "1", ...extraEnv },
   });
   child.on("error", (e) => {
     log(`${label}: spawn error ${(e as Error).message}`);
@@ -330,9 +354,17 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
   for (const id of paneLimitCache.keys()) {
     if (!liveIds.has(id)) paneLimitCache.delete(id);
   }
+  for (const id of paneConnectStreak.keys()) {
+    if (!liveIds.has(id)) paneConnectStreak.delete(id);
+  }
   for (const id of paneCcLimitSeen) {
     if (!liveIds.has(id)) paneCcLimitSeen.delete(id);
   }
+
+  const connectThreshold =
+    conn.policy?.connectFailBeforeRecovery ??
+    conn.policy?.ipifyFailBeforeRecovery ??
+    15;
 
   const prevConnect = new Set(state.connectPanes);
   const prevLimited = new Set(state.ocLimited);
@@ -377,19 +409,44 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
     }
     if (st.phase !== "limit" || !st.limitKind) {
       paneLimitCache.delete(paneId);
+      paneConnectStreak.delete(paneId);
       paneCcLimitSeen.delete(paneId);
       continue;
     }
-    const connect = proxyDownKinds.has(st.limitKind);
+    const sawConnect = proxyDownKinds.has(st.limitKind);
     const rate = rateLimitKinds.has(st.limitKind);
-    if (!connect && !rate) {
+    if (!sawConnect && !rate) {
       paneLimitCache.delete(paneId);
+      paneConnectStreak.delete(paneId);
       continue;
     }
-    paneLimitCache.set(paneId, { connect, rate });
-    if (connect && !prevConnect.has(paneId)) {
-      log(`PROXY-DOWN rising ${label} ${paneId} kind=${st.limitKind}`);
-    } else if (rate && !prevLimited.has(paneId)) {
+    let connect = false;
+    if (sawConnect) {
+      const { confirmed, streak } = updatePaneConnectStreak(
+        paneConnectStreak,
+        paneId,
+        true,
+        connectThreshold,
+      );
+      connect = confirmed;
+      if (!confirmed) {
+        if (streak === 1) {
+          log(
+            `PROXY-DOWN defer ${label} ${paneId} (need ${connectThreshold} connect observations — stale scrollback filter)`,
+          );
+        }
+      } else if (!prevConnect.has(paneId)) {
+        log(`PROXY-DOWN rising ${label} ${paneId} kind=${st.limitKind} streak=${streak}`);
+      }
+    } else {
+      updatePaneConnectStreak(paneConnectStreak, paneId, false, connectThreshold);
+    }
+    if (connect || rate) {
+      paneLimitCache.set(paneId, { connect, rate });
+    } else {
+      paneLimitCache.delete(paneId);
+    }
+    if (rate && !prevLimited.has(paneId)) {
       log(`OC-LIMIT rising ${label} ${paneId} kind=${st.limitKind}`);
     }
   }
@@ -420,7 +477,7 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
   }
 
   const carrierOk = ipifyUp(workspace, proxyPort, anyConnect || state.proxyDownActive);
-  const ipifyThreshold = conn.policy?.ipifyFailBeforeRecovery ?? 3;
+  const ipifyThreshold = conn.policy?.ipifyFailBeforeRecovery ?? 15;
   const { confirmedDown: ipifyConfirmedDown, streak: ipifyStreak } = updateIpifyProbeStreak(
     state,
     carrierOk,
@@ -431,8 +488,25 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
       `ipify probe fail streak ${ipifyStreak}/${ipifyThreshold} — defer PROXY-DOWN recovery`,
     );
   }
-  const proxyDownNow = anyConnect || ipifyConfirmedDown;
+  // Ipify blips alone must not start PROXY-DOWN / cpe-proxy-up — need OC connect errors and/or
+  // an active rate-limit episode before treating carrier ipify as down for recovery.
+  const ipifyDownForRecovery =
+    ipifyConfirmedDown && (anyRateLimit || state.rateLimitEpisodeActive);
+  let proxyDownNow = anyConnect || ipifyDownForRecovery;
   const wasDown = state.proxyDownActive;
+  const rearmBlocked =
+    !wasDown &&
+    proxyDownNow &&
+    anyConnect &&
+    !ipifyDownForRecovery &&
+    carrierOk &&
+    Date.now() - lastProxyDownClearAt < PROXY_DOWN_REARM_COOLDOWN_MS;
+  if (rearmBlocked) {
+    log(
+      `PROXY-DOWN re-arm suppressed (episode cooldown ${PROXY_DOWN_REARM_COOLDOWN_MS / 1000}s, ipify up, connect debounced)`,
+    );
+    proxyDownNow = false;
+  }
   state.proxyDownActive = proxyDownNow;
 
   if (proxyDownNow && !wasDown) {
@@ -458,6 +532,8 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
     state.proxyDownEpisodeStartAt = 0;
     state.proxyDownStuckNotified = false;
     state.ipifyFailStreak = 0;
+    lastProxyDownClearAt = Date.now();
+    paneConnectStreak.clear();
     // Keep rate-limit cache entries — clearing all panes made OC-LIMIT episodes re-arm proxy restart.
     for (const [paneId, flags] of [...paneLimitCache.entries()]) {
       if (flags.rate) {
@@ -492,7 +568,17 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
         "Wait for resume-sent then complete toasts. Ack is automatic when limit screens clear.",
         "starting",
       );
-      maybeRunOcLimitRecovery(hooks, workspace, proxyPort, fromIp, state, log, resumeOpenCodePanes);
+      const rotateMax = conn.policy?.rotateMaxAttempts ?? 15;
+      maybeRunOcLimitRecovery(
+        hooks,
+        workspace,
+        proxyPort,
+        fromIp,
+        state,
+        log,
+        resumeOpenCodePanes,
+        rotateMax,
+      );
     } else {
       log("OC-LIMIT episode active — recovery already ran this episode (skip proxy restart)");
     }
@@ -541,6 +627,7 @@ function maybeRunOcLimitRecovery(
   state: ConnectivityRecoveryState,
   log: (line: string) => void,
   resumeOpenCodePanes: ConnectivityPollInput["resumeOpenCodePanes"],
+  rotateMaxAttempts = 15,
 ): void {
   const now = Date.now();
   if (state.recoveryRunning) return;
@@ -571,12 +658,20 @@ function maybeRunOcLimitRecovery(
       state.recoveryRunning = false;
       return;
     }
-    log(`OC-LIMIT -> async ${path.basename(script)} (${reason})`);
-    const started = runScriptAsync(workspace, script, log, "rotate-until", (code) => {
-      log(`rotate-until exit=${code}`);
-      scheduleIpifyProbe(workspace, proxyPort);
-      finish(carrierIpCached(), "rotate-until");
-    });
+    log(`OC-LIMIT -> async ${path.basename(script)} (${reason}) max=${rotateMaxAttempts}`);
+    const rotateEnv = { CPE_ROTATE_MAX_ATTEMPTS: String(rotateMaxAttempts) };
+    const started = runScriptAsync(
+      workspace,
+      script,
+      log,
+      "rotate-until",
+      (code) => {
+        log(`rotate-until exit=${code}`);
+        scheduleIpifyProbe(workspace, proxyPort);
+        finish(carrierIpCached(), "rotate-until");
+      },
+      rotateEnv,
+    );
     if (!started) state.recoveryRunning = false;
   };
 

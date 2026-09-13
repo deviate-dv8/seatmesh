@@ -4,7 +4,7 @@ import { runMeshNotify } from "@seat-mesh/tmux";
 
 export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
   const notify = new Command("notify").description(
-    "Desktop toast for operator (seat from TMUX pane; wraps workspace notify.sh)",
+    "Desktop toast for operator (seat from TMUX pane; node-notifier native)",
   );
 
   notify

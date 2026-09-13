@@ -85,18 +85,12 @@ function savedCoordEntry(
   return undefined;
 }
 
+/** Profile `layout.base.cli` wins over stale mesh-agents secretary type (2026-09-13 OC crash). */
 function profileCliForRole(
   loaded: LoadedProfile,
-  state: AgentsStateFile,
+  _state: AgentsStateFile,
   role: BaseColumn,
 ): string {
-  if (role === "secretary") {
-    return (
-      state.conventions?.secretary_default_cli ??
-      state.secretary?.type ??
-      cliForBaseColumn(loaded, "secretary")
-    );
-  }
   return cliForBaseColumn(loaded, role);
 }
 

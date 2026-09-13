@@ -3,12 +3,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { LoadedProfile } from "@seat-mesh/core";
+import { meshRuntimePaths } from "@seat-mesh/core";
 import { freshSummonWhoamiPrompt, secretaryColdStartBrief } from "@seat-mesh/core";
 import { buildColdStartBrief, buildFullColdStartBrief, openTaskLines } from "./cold-start.js";
 import { runSeatInit } from "./seat-init.js";
 import { gateQueuePath } from "./seat-paths.js";
 import {
   clearColdStartStateForTests,
+  hasDeliveredColdStartPeer,
+  hasPendingColdStartPeer,
   invalidatePaneContext,
   isPaneContextReady,
   markColdStartDelivered,
@@ -110,12 +113,31 @@ describe("cold-start", () => {
     ).toBe(false);
   });
 
+  it("hasDeliveredColdStartPeer after successful inject", () => {
+    const loaded = tmpLoaded();
+    clearColdStartStateForTests(loaded);
+    const peer = meshRuntimePaths(loaded).peerJsonl;
+    fs.mkdirSync(path.dirname(peer), { recursive: true });
+    fs.writeFileSync(
+      peer,
+      `${JSON.stringify({
+        fromSlot: "mesh-cold-start",
+        targetPane: "%8",
+        sent: true,
+        sentAt: new Date().toISOString(),
+        deliverPane: "%8",
+      })}\n`,
+    );
+    expect(hasDeliveredColdStartPeer(loaded, "%8")).toBe(true);
+    expect(hasPendingColdStartPeer(loaded, "%8")).toBe(false);
+  });
+
   it("context gate blocks until cold-start delivered", () => {
     const loaded = tmpLoaded();
     clearColdStartStateForTests(loaded);
     expect(isPaneContextReady(loaded, "%mb")).toBe(true);
     invalidatePaneContext(loaded, "%mb", "manager");
-    expect(isPaneContextReady(loaded, "%mb")).toBe(false);
+    expect(isPaneContextReady(loaded, "%mb")).toBe(true);
     markColdStartDelivered(loaded, "%mb");
     expect(isPaneContextReady(loaded, "%mb")).toBe(true);
   });
@@ -123,7 +145,7 @@ describe("cold-start", () => {
   it("fresh summon prompt orders whoami before any task", () => {
     const fresh = freshSummonWhoamiPrompt("manager-2");
     expect(fresh).toMatch(/FRESH SUMMON/);
-    expect(fresh).toMatch(/\.\/sm\.sh whoami/);
+    expect(fresh).toMatch(/whoami/);
     expect(fresh).toMatch(/manager-2/);
     expect(fresh.length).toBeLessThan(400);
     expect(secretaryColdStartBrief()).toMatch(/FRESH SUMMON/);

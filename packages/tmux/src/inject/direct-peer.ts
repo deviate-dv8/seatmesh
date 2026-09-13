@@ -53,7 +53,14 @@ export function tryDirectPeerInject(
     state.phase === "busy" ||
     (state.phase === "typing" && /Add a follow-up/.test(snap.captureTail));
   const plan = prov.injectPlan(snap);
-  injectToPane(resolved.paneId, message, plan, prov.id, snap.captureTail);
+  injectToPane(
+    resolved.paneId,
+    message,
+    plan,
+    prov.id,
+    snap.captureTail,
+    snap.captureTailAnsi,
+  );
   return {
     ok: true,
     paneId: resolved.paneId,

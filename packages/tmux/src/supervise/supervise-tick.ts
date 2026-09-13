@@ -13,6 +13,14 @@ import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { coordPaneForRole } from "../lib/pane-meta.js";
 import { readSeatSnapshot } from "../seats/seat-update.js";
 
+export interface SuperviseLeadInfo {
+  id: string;
+  mark: string;
+  open: number;
+  prior: string | null;
+  now: string;
+}
+
 export interface SuperviseTickResult {
   statusLine: string;
   lastPath: string;
@@ -20,6 +28,9 @@ export interface SuperviseTickResult {
   roomStatusPosted: boolean;
   nudged: string[];
   wroteLedger: boolean;
+  priorText: string;
+  tableLines: string[];
+  leads: SuperviseLeadInfo[];
 }
 
 function superviseLastPath(loaded: LoadedProfile): string {
@@ -30,10 +41,10 @@ function superviseLastPath(loaded: LoadedProfile): string {
 
 function parsePriorLine(lastText: string, key: string): string | null {
   const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`\\|\\s*${esc}\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\w+)\\s*\\|`);
+  const re = new RegExp(`\\|\\s*${esc}\\s*\\|\\s*(\\d+)\\s*\\|\\s*([^|]+?)\\s*\\|`);
   const m = lastText.match(re);
   if (!m) return null;
-  return `${m[2]}:${m[1]}`;
+  return `${m[2].trim()}:${m[1]}`;
 }
 
 function leadIdle(registry: ProviderRegistry, paneId: string): boolean {
@@ -56,6 +67,8 @@ export interface SuperviseTickOpts {
   /** Deliver CONTINUE to idle lead with open TASKS (intent=continue). Return whether paste ok. */
   deliverContinue?: (role: string, paneId: string) => boolean;
   dryRun?: boolean;
+  /** CLI `--status`: post room STATUS even when no material change (default: only on material change). */
+  postStatus?: boolean;
 }
 
 /** Daemon-native supervise — writes SUPERVISE-LAST, optional managers room STATUS, lead nudges. */
@@ -109,7 +122,7 @@ export function runSuperviseTick(
   }
 
   let roomStatusPosted = false;
-  if (materialChange && !hubLockActive(loaded.workspace) && !opts.dryRun) {
+  if ((materialChange || opts.postStatus) && !hubLockActive(loaded.workspace) && !opts.dryRun) {
     try {
       const cfg = chatRoomConfigForLoaded(loaded);
       sayInRoomSync(loaded.workspace, cfg, "managers", "secretary", statusLine, {
@@ -140,5 +153,17 @@ export function runSuperviseTick(
     roomStatusPosted,
     nudged,
     wroteLedger,
+    priorText,
+    tableLines,
+    leads: leads.map((l) => {
+      const now = nowById.get(l.id) ?? `${l.mark}:${l.open}`;
+      return {
+        id: l.id,
+        mark: l.mark,
+        open: l.open,
+        prior: parsePriorLine(priorText, l.id),
+        now,
+      };
+    }),
   };
 }

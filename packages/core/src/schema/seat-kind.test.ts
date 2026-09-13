@@ -56,6 +56,8 @@ describe("seat kinds vs open column ids", () => {
     expect(expandColumnAlias("secretary-2")).toEqual(
       expect.arrayContaining(["secretary-2", "secretary2"]),
     );
+    expect(expandColumnAlias("sec")).toContain("secretary");
+    expect(expandColumnAlias("mgr")).toContain("manager");
   });
 });
 

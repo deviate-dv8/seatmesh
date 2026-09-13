@@ -6,9 +6,10 @@ import {
   primarySecretaryColumn,
   type LoadedProfile,
 } from "@seat-mesh/core";
-import { extractOpenCodeSession, normalizeOpenCodeSessionId } from "@seat-mesh/providers";
+import { extractOpenCodeSession, normalizeOpenCodeSessionId, waitForCli } from "@seat-mesh/providers";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
+import { syncOpenCodePaneSession } from "./oc-session-sync.js";
 import { buildAgentLaunchCmd } from "./agent-builder.js";
 import {
   isOpenCodeLaunch,
@@ -41,6 +42,7 @@ export interface LaunchResult {
   status: "launched" | "skipped" | "failed";
   cmd?: string;
   reason?: string;
+  detail?: string;
 }
 
 function sleepMs(ms: number): void {
@@ -121,6 +123,29 @@ export function tryLaunchPane(
     const snap = capturePaneSnapshot(paneId);
     const liveProv = snap ? registry.detect(snap) : null;
     const liveType = liveProv ? providerIdToHarnessType(liveProv.id) : "empty";
+    if (liveType !== "empty" && liveType === type) {
+      // Fast path: pane already runs the same harness type. Ask the provider
+      // whether it is actually live+ready instead of trusting a type match.
+      const live = waitForCli(registry, paneId, capturePaneSnapshot, {
+        maxTries: 4,
+        pollMs: 250,
+        requireComposerReady: true,
+      });
+      if (live) {
+        if (isOpenCodeLaunch(type, cmd)) {
+          syncOpenCodePaneSession(paneId, { waitMs: 1500, retries: 1 });
+        }
+        const brief = injectAfterLaunch(loaded, registry, label, paneId);
+        if (!brief.ok) {
+          console.error(`WARN: post-launch brief ${label}: ${brief.detail}`);
+        } else {
+          console.log(`OK: post-launch brief ${label} ${brief.detail}`);
+        }
+        return { paneId, label, status: "launched", cmd, detail: "already-live" };
+      }
+      // Fall through: same type but not live/ready (crash residue) -> relaunch.
+      console.log(`relaunch ${label}: ${type} present but not ready, re-pasting`);
+    }
     withPaneInputEnabled(paneId, () => {
       if (liveType !== "empty" && liveType !== type) {
         stopLiveCli(paneId, liveType);
@@ -237,6 +262,7 @@ export function launchSession(
     const pane = meshSecretaryPane(session, layout.base.window) ?? basePanes[1];
     if (pane) {
       const secType =
+        cliForBaseColumn(loaded, "secretary") ??
         state.conventions?.secretary_default_cli ??
         state.secretary?.type ??
         "opencode";

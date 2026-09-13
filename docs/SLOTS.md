@@ -10,8 +10,8 @@ separate inject code paths.
 |---------|------|-------|------|
 | `manager` | base col 0 | `manager` | coordination, spawn minis |
 | `secretary` | base col 1 | `secretary` | inbox transform, digest |
-| `worker-1` .. `worker-6` | workers 3×2 | profile formula | delivery / product seat |
-| `mini-1` .. `mini-8` | minis grid | `mini-N` | parallel jobs for manager |
+| `worker-1` .. `worker-6` | workers 3×2 | profile formula | external codebase delivery (zsign product or named user/sibling project) |
+| `mini-1` .. `mini-8` | minis grid | `mini-N` | internal scope (seat-mesh, .agent framework, FRAMEWORK-QUEUE, pane-meta, workspace scripts) |
 
 Slot count and port pattern come from `session.workerCount` and `ports.worker`
 in the profile.

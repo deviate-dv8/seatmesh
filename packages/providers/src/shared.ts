@@ -131,19 +131,79 @@ export function opencodeInputDraft(captureTail: string): string {
   return draft;
 }
 
+/** Cursor idle composer placeholders / gray ghost suggestions (not human drafts). */
+const CURSOR_COMPOSER_PLACEHOLDER_RE =
+  /^(?:Add a follow-up|Plan,\s*search,\s*build anything|Ask anything|Describe what you want|Build anything|What would you like to (?:do|build)\??)$/i;
+
+/**
+ * Strip dim/gray ANSI runs from a capture line (Cursor ghost-text ahead-of-cursor).
+ * Ported from scripts/inbox-server.mjs stripAnsiGraySegments.
+ */
+export function stripAnsiGraySegments(raw: string): string {
+  const parts = raw.split(/(\x1b\[[0-9;]*m)/);
+  let curColor: number | "dim" | null = null;
+  let out = "";
+  for (const part of parts) {
+    if (/^\x1b\[/.test(part)) {
+      const m256 = /^\x1b\[38;5;(\d+)m$/.exec(part);
+      if (m256) {
+        curColor = Number(m256[1]);
+        continue;
+      }
+      if (/^\x1b\[(0|39)m$/.test(part)) {
+        curColor = null;
+        continue;
+      }
+      if (/^\x1b\[2m$/.test(part)) {
+        curColor = "dim";
+        continue;
+      }
+      if (/^\x1b\[22m$/.test(part)) {
+        if (curColor === "dim") curColor = null;
+        continue;
+      }
+      continue;
+    }
+    const isGray =
+      curColor === "dim" ||
+      (typeof curColor === "number" && curColor >= 238 && curColor <= 250);
+    if (!isGray) out += part;
+  }
+  return out;
+}
+
+function agentArrowLineDraft(plainLine: string, ansiLine?: string): string {
+  if (!/^\s*\u2192(?:\s|$)/.test(plainLine)) return "";
+  let after = plainLine.replace(/^\s*\u2192\s*/, "").trim();
+  after = after.replace(/\s{2,}ctrl\+c to stop.*$/i, "").trim();
+  if (ansiLine && /\u2192/.test(ansiLine)) {
+    const stripped = stripAnsiGraySegments(ansiLine);
+    const m = stripped.match(/^\s*\u2192\s*(.*)$/);
+    if (m) {
+      after = (m[1] ?? "")
+        .replace(/\s{2,}ctrl\+c to stop.*$/i, "")
+        .trim();
+    }
+  }
+  if (!after) return "";
+  if (CURSOR_COMPOSER_PLACEHOLDER_RE.test(after)) return "";
+  if (/^[\u258e\u2502]/.test(after)) return "";
+  if (/ctrl\+r to review/i.test(after)) return "";
+  return after;
+}
+
 /** Cursor agent composer draft (leading arrow row only). */
-export function agentInputDraft(captureTail: string): string {
+export function agentInputDraft(captureTail: string, captureTailAnsi?: string): string {
   const b = bottomLines(captureTail, 14);
+  const bAnsi = captureTailAnsi ? bottomLines(captureTailAnsi, 14) : "";
+  const plainLines = b.split("\n");
+  const ansiLines = bAnsi ? bAnsi.split("\n") : [];
   const drafts: string[] = [];
-  for (const line of b.split("\n")) {
-    if (!/^\s*\u2192(?:\s|$)/.test(line)) continue;
-    const after = line.replace(/^\s*\u2192\s*/, "").trim();
-    const cleaned = after.replace(/\s{2,}ctrl\+c to stop.*$/i, "").trim();
-    if (!cleaned) continue;
-    if (/^Add a follow-up$/i.test(cleaned)) continue;
-    if (/^[\u258e\u2502]/.test(cleaned)) continue;
-    if (/ctrl\+r to review/i.test(cleaned)) continue;
-    drafts.push(cleaned);
+  for (let i = 0; i < plainLines.length; i++) {
+    const line = plainLines[i]!;
+    const ansiLine = ansiLines[i];
+    const cleaned = agentArrowLineDraft(line, ansiLine);
+    if (cleaned) drafts.push(cleaned);
   }
   return drafts.join("\n");
 }
@@ -164,6 +224,7 @@ export function claudeInputDraft(captureTail: string): string {
     if (!m) continue;
     if (isDecorativeChromeNeighbor(lines[i - 1] ?? "", lines[i + 1] ?? "")) continue;
     const first = (m[1] ?? "").trim();
+    if (isPlaceholderPromptContent(first)) return "";
     if (CLAUDE_NON_DRAFT_HINT_RE.test(first)) return "";
     const parts = [first];
     for (let j = i + 1; j < lines.length; j++) {
@@ -178,9 +239,13 @@ export function claudeInputDraft(captureTail: string): string {
 }
 
 /** Live unsent composer text for coord-pane settle gate. */
-export function coordComposerDraft(captureTail: string, providerId: string): string {
+export function coordComposerDraft(
+  captureTail: string,
+  providerId: string,
+  captureTailAnsi?: string,
+): string {
   if (providerId === "opencode") return opencodeInputDraft(captureTail);
-  if (providerId === "cursor-agent") return agentInputDraft(captureTail);
+  if (providerId === "cursor-agent") return agentInputDraft(captureTail, captureTailAnsi);
   if (providerId === "claude") return claudeInputDraft(captureTail);
   return "";
 }
@@ -212,6 +277,15 @@ export function isDecorativeChromeNeighbor(prevLine: string, nextLine: string): 
   return RULE_LINE_RE.test(prevLine.trim()) || RULE_LINE_RE.test(nextLine.trim());
 }
 
+/** Claude/Cursor prompt row with only rules/spaces — empty composer, not a human draft. */
+export function isPlaceholderPromptContent(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (RULE_LINE_RE.test(t)) return true;
+  if (/^[\s─━│┃┆┊╌╍┄┅╭╮╰╯┌┐└┘┏┓┗┛┣┫┳┻╋=_.\-]+$/.test(t)) return true;
+  return false;
+}
+
 export function composerFromCapture(
   pane: PaneSnapshot,
   providerId: string,
@@ -235,27 +309,43 @@ export function composerFromCapture(
         return { phase: "empty" };
       }
     }
+    // Prefer the live bottom band (same window as empty/busy) — bottom28 keeps stale connect errors forever.
+    const bottom8 = bottom;
     const bottom28 = tail.split("\n").slice(-28).join("\n");
-    if (OC_CONNECT_RE.test(bottom28) && !OC_LIMIT_RE.test(bottom28)) {
+    if (OC_CONNECT_RE.test(bottom8) && !OC_LIMIT_RE.test(bottom8)) {
       return { phase: "limit", limitKind: "oc-connect" };
     }
-    if (OC_LIMIT_RE.test(bottom28)) {
+    if (OC_LIMIT_RE.test(bottom8) || OC_LIMIT_RE.test(bottom28)) {
       return { phase: "limit", limitKind: "oc-limit" };
     }
   }
-  if (providerId === "claude" && OC_LIMIT_RE.test(tail)) {
-    return { phase: "limit", limitKind: "oc-limit" };
-  }
-  if (providerId === "claude" && CC_LIMIT_RE.test(tail)) {
-    return { phase: "limit", limitKind: "cc-limit" };
+  if (providerId === "claude") {
+    // CC before any generic OC_LIMIT_RE — shared phrases ("rate limit", "quota") match both;
+    // mis-tagging CC as oc-limit triggers OC proxy recovery and wrong borders.
+    if (CC_LIMIT_RE.test(tail)) {
+      return { phase: "limit", limitKind: "cc-limit" };
+    }
+    // Claude does not use CPE :18887 — ignore stale OC connect text in scrollback.
   }
 
   if (providerId === "cursor-agent") {
-    if (/Add a follow-up|ctrl\+c to stop/.test(tail)) {
-      return { phase: "busy", busyLabel: "follow-up" };
+    const bottom = tail.split("\n").slice(-14).join("\n");
+    const generating =
+      /Working|Running|Thinking|enter steer|ctrl\+c to stop/i.test(bottom);
+    if (generating) {
+      if (/Add a follow-up|ctrl\+c to stop/.test(bottom)) {
+        return { phase: "busy", busyLabel: "follow-up" };
+      }
+      const m = bottom.match(/(Working|Running|Thinking[^\n]*)/);
+      return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
     }
-    if (/Composer \d|· \d+\.\d+%|files edited/.test(tail)) {
-      return { phase: "busy", busyLabel: "composer" };
+    const agentDraft = agentInputDraft(tail, pane.captureTailAnsi);
+    if (agentDraft) {
+      return { phase: "typing", draftFingerprint: agentDraft.slice(0, 80) };
+    }
+    // Idle post-turn chrome (follow-up box / composer footer) — inbox may inject (injectCursorAgent).
+    if (/Add a follow-up|Composer \d|· \d+\.\d+%|files edited/.test(bottom)) {
+      return { phase: "empty" };
     }
   }
 
@@ -274,12 +364,11 @@ export function composerFromCapture(
   const last = lines.at(-1) ?? "";
   const lastRawIdx = rawLines.lastIndexOf(last);
   const promptMatch = last.match(/^[❯›>](.+)/);
-  if (
-    promptMatch &&
-    promptMatch[1]!.trim().length > 0 &&
-    !isDecorativeChromeNeighbor(rawLines[lastRawIdx - 1] ?? "", rawLines[lastRawIdx + 1] ?? "")
-  ) {
-    return { phase: "typing", draftFingerprint: promptMatch[1]!.trim().slice(0, 80) };
+  if (promptMatch && !isDecorativeChromeNeighbor(rawLines[lastRawIdx - 1] ?? "", rawLines[lastRawIdx + 1] ?? "")) {
+    const draft = promptMatch[1]!.trim();
+    if (!isPlaceholderPromptContent(draft)) {
+      return { phase: "typing", draftFingerprint: draft.slice(0, 80) };
+    }
   }
 
   return { phase: "empty" };

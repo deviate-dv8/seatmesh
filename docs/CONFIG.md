@@ -137,6 +137,13 @@ Declarative rules in `mesh.config.yaml` replace hardcoded OC-LIMIT / busy / AFK
 heuristics. The daemon reads pane capture text, paints `@mesh_status`, and fires
 connectivity triggers on rising edges.
 
+**Shared border vocabulary (all providers):** prefer `idle`, `empty`, `typing`, `AFK`,
+`BUSY`, or captured `Working` / `Running` / `Thinking` for generate — not
+Cursor-only strings like `follow-up` / `composer`. Limit/connect: `PROXY-DOWN`,
+`OC-LIMIT:*`, `CC-LIMIT`. Idle post-turn UI must paint `idle`, not a fake busy.
+Provider-specific rules should only differ in **when** they match capture text,
+not invent parallel status words (patterns.md: one path, collapse labels).
+
 ```yaml
 ux:
   useDefaults: true   # harness parity rules (OC-LIMIT, PROXY-DOWN, busy, typing, …)

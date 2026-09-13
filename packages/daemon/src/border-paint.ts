@@ -22,7 +22,8 @@ import {
 } from "@seat-mesh/tmux";
 import { classifyCoordDelivery } from "./compose-gate.js";
 import type { QueueStore } from "./create-queue-store.js";
-import { isInboxDelivered, isPeerDelivered } from "./create-queue-store.js";
+import { isInboxDelivered } from "./create-queue-store.js";
+import { countPeerPendingForPane, countPeerPendingGlobal } from "./peer-pending.js";
 import { PpaStateStore } from "./ppa-state.js";
 
 let ppaStore: PpaStateStore | null = null;
@@ -69,6 +70,7 @@ function borderFromState(
       if (uxHit?.border) return uxHit.border;
     }
     if (st.limitKind === "oc-connect") return "PROXY-DOWN";
+    if (st.limitKind === "cc-limit") return "CC-LIMIT";
     return `OC-LIMIT:${st.limitKind ?? "limit"}`;
   }
   if (ux) {
@@ -95,14 +97,6 @@ function inboxWaitSuffix(
   return "pending";
 }
 
-function pendingPeerForPane(store: QueueStore, paneId: string): number {
-  return store.readPeer().filter((r) => {
-    if (r.targetPane !== paneId) return false;
-    if (r.deliverPane === "backlog" || r.deliverPane === "skipped") return true;
-    return !isPeerDelivered(r);
-  }).length;
-}
-
 function paintOnePaneBorder(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
@@ -127,7 +121,7 @@ function paintOnePaneBorder(
   });
   tmuxSet(paneId, "@mesh_tasks", formatBannerTasks(seat?.tasks.open ?? 0));
 
-  let inboxN = pendingPeerForPane(store, paneId);
+  let inboxN = countPeerPendingForPane(store, paneId);
   let wait: string | undefined;
   if (coordInbox) {
     inboxN += counts.unsent + (counts.unsent === 0 ? counts.unresolved : 0);
@@ -152,13 +146,13 @@ function paintOnePaneBorder(
   }
   const st = prov.composerState(snap);
   let borderStatus = borderFromState(st, ux, snap, prov.id);
-  if (
-    st.phase !== "limit" &&
-    inheritGlobal &&
-    connectivity &&
-    (connectivity.proxyDownActive || connectivity.ocLimitedPaneIds.size > 0)
-  ) {
-    borderStatus = connectivity.proxyDownActive ? "PROXY-DOWN" : "OC-LIMIT:oc-limit";
+  if (st.phase !== "limit" && inheritGlobal && connectivity) {
+    // Global PROXY-DOWN is an OpenCode/CPE episode — do not paint it on Claude/agent/coord panes.
+    if (connectivity.proxyDownActive && prov.id === "opencode") {
+      borderStatus = "PROXY-DOWN";
+    } else if (connectivity.ocLimitedPaneIds.has(paneId)) {
+      borderStatus = "OC-LIMIT:oc-limit";
+    }
   }
   tmuxSet(paneId, "@mesh_status", borderStatus);
   if (ppa && label) {
@@ -282,7 +276,7 @@ export function paintMeshBorders(
 
   const targets = collectWorkerMiniTargets(session, workersWindow, minisWindow);
   if (targets.length) {
-    const batch = Math.min(BORDER_PAINT_BATCH, targets.length);
+    const batch = workerMiniPaintBatch(targets.length, store);
     for (let i = 0; i < batch; i++) {
       const t = targets[(borderPaintOffset + i) % targets.length]!;
       paintOne(t.paneId, false, t.label, false);
@@ -296,6 +290,13 @@ export function paintMeshBorders(
     const kinds = loaded.profile.layout?.base.kinds;
     paintOne(pane, isSecretaryKind(col, kinds), col, isManagerKind(col, kinds));
   }
+}
+
+/** When no live peer queue, refresh every worker/mini banner (clear stale backlog counts). */
+function workerMiniPaintBatch(targetLen: number, store: QueueStore): number {
+  if (targetLen <= 0) return 0;
+  if (countPeerPendingGlobal(store) === 0) return targetLen;
+  return Math.min(BORDER_PAINT_BATCH, targetLen);
 }
 
 /** Yield between panes so GET /health can answer mid-paint. */
@@ -336,7 +337,7 @@ export async function paintMeshBordersAsync(
 
   const targets = collectWorkerMiniTargets(session, workersWindow, minisWindow);
   if (targets.length) {
-    const batch = Math.min(BORDER_PAINT_BATCH, targets.length);
+    const batch = workerMiniPaintBatch(targets.length, store);
     for (let i = 0; i < batch; i++) {
       if (i > 0) await yieldEventLoop();
       const t = targets[(borderPaintOffset + i) % targets.length]!;

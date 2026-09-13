@@ -29,10 +29,11 @@ describe("isCursorFollowUpSteer", () => {
     ).toBe(false);
   });
 
-  it("follow-up UI is detected but canDeliverNow is false (no steal next turn)", () => {
+  it("active follow-up generate is not deliverable; idle follow-up is empty", () => {
     expect(
       canDeliverNow({ phase: "busy", busyLabel: "follow-up" }, "Add a follow-up", "cursor-agent"),
     ).toBe(false);
+    expect(canDeliverNow({ phase: "empty" }, "Add a follow-up", "cursor-agent")).toBe(true);
     expect(canDeliverNow({ phase: "busy" }, "ctrl+c to stop", "agent")).toBe(false);
     expect(shouldBacklogPeerHold("held:busy", "ASSIGN FQ6")).toBe(true);
     expect(shouldBacklogPeerHold("held:busy", "ACK NOTED")).toBe(true);

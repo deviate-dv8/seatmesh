@@ -66,6 +66,19 @@ orchestratorDrainTick()
 
 Wake: poll loop (`daemon.pollMs`); optional BullMQ nudge when Redis is up.
 
+## Notify-act (Yes / No links → browser → mesh)
+
+Plasma action buttons often fail; use **HTML links** in the toast body instead.
+
+| Step | What |
+|------|------|
+| Register | `POST http://127.0.0.1:<port>/act/register` |
+| Click | `GET /act/v1/<token>` (one-shot) |
+| FE test | `GET /ui` · `GET /ui/demo-yesno` (button-styled Yes/No) |
+
+CLI/library: `sendYesNoToast(loaded, title, body, yesMsg, yesTarget?)` or
+`yesNoNotifyActActions()` + `sendDesktopToastWithActLinks()`.
+
 ## Deep reference
 
 | Topic | Doc |

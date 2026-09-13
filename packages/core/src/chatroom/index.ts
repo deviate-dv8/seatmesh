@@ -10,3 +10,5 @@ export * from "./read-state.js";
 export * from "./mentions.js";
 export * from "./comms-checkback.js";
 export * from "./fanout-routing.js";
+export * from "./notify-act.js";
+export * from "./notify-act-client.js";

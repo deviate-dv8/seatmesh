@@ -37,7 +37,10 @@ export function executePaneOp(loaded: LoadedProfile, row: PaneOpRow): PaneOpExec
           String(row.payload.target ?? ""),
           String(row.payload.newType ?? ""),
           {
-            fresh: Boolean(row.payload.fresh),
+            fresh:
+              row.payload.fresh === undefined
+                ? undefined
+                : Boolean(row.payload.fresh),
             resumeId: row.payload.resumeId as string | undefined,
             reason: row.payload.reason as string | undefined,
           },

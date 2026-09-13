@@ -10,11 +10,11 @@ import { listWindowPaneIds } from "./window-panes.js";
 
 const CLI_CMD_RE =
   /\b(agent|opencode|claude|kiro|opencode-cpe|cursor-agent)\b/i;
-const BUSY_TAIL_RE = /Working|Running|Thinking|Add a follow-up|ctrl\+c to stop/;
+const BUSY_TAIL_RE = /Working|Running|Thinking|ctrl\+c to stop/;
 const LIMIT_TAIL_RE =
   /rate limit|usage limit|Cannot connect to API|unable to connect/i;
 const ACTIVE_STATUS_RE =
-  /\b(BUSY|BLOCKED|Working|Running|Thinking|typing|follow-up|OC-LIMIT)\b/i;
+  /\b(BUSY|BLOCKED|Working|Running|Thinking|typing|OC-LIMIT|CC-LIMIT|PROXY-DOWN)\b/i;
 
 export interface LayoutPaneRisk {
   label: string;
@@ -65,7 +65,7 @@ function activityReasons(loaded: LoadedProfile, meta: MeshPaneMeta): string[] {
     }
     const tail = snap.captureTail;
     if (BUSY_TAIL_RE.test(tail)) {
-      const m = tail.match(/(Working|Running|Thinking[^\n]*|Add a follow-up)/);
+      const m = tail.match(/(Working|Running|Thinking[^\n]*|ctrl\+c to stop)/);
       reasons.push(`CLI ${m?.[1] ?? "busy"}`);
     } else if (LIMIT_TAIL_RE.test(tail)) {
       reasons.push("CLI limit/connect");

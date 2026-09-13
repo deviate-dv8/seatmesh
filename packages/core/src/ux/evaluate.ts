@@ -78,6 +78,22 @@ function opencodeComposerOverride(
   return { phase: "empty" };
 }
 
+/** Cursor idle post-turn chrome (follow-up box + composer footer) is deliverable — not active generate. */
+function cursorAgentIdleOverride(
+  tail: string,
+  providerId: string,
+): ComposerState | null {
+  if (providerId !== "cursor-agent" && providerId !== "agent") return null;
+  const bottom = tail.split("\n").slice(-14).join("\n");
+  if (/Working|Running|Thinking|enter steer|ctrl\+c to stop/i.test(bottom)) {
+    return null;
+  }
+  if (/Add a follow-up|Composer \d|· \d+\.\d+%|files edited/.test(bottom)) {
+    return { phase: "empty" };
+  }
+  return null;
+}
+
 function statusFromRule(rule: UxRule, m: RegExpMatchArray): UxMatchResult {
   const { set } = rule;
   let kind = set.kind;
@@ -133,6 +149,11 @@ export function evaluateUxRules(
   const ocOverride = opencodeComposerOverride(tail, providerId);
   if (ocOverride) {
     return { ruleId: "oc-composer-idle", state: ocOverride, border: "idle" };
+  }
+
+  const cursorIdle = cursorAgentIdleOverride(tail, providerId);
+  if (cursorIdle) {
+    return { ruleId: "cursor-idle-chrome", state: cursorIdle, border: "idle" };
   }
 
   for (const rule of config.rules) {

@@ -8,6 +8,8 @@ export interface PaneSnapshot {
   cwd: string;
   currentCommand: string;
   captureTail: string;
+  /** Same region as captureTail with ANSI color preserved (`tmux capture-pane -e`). */
+  captureTailAnsi?: string;
   options: Record<string, string>;
 }
 
@@ -37,6 +39,8 @@ export interface InjectPlan {
   useBracketedPaste: boolean;
   enterDelayMs: number;
   flushEscFirst: boolean;
+  /** FQ co-typed pane: paste only — no Enter (avoids footer bleed). */
+  skipSubmit?: boolean;
 }
 
 export interface LimitContext {

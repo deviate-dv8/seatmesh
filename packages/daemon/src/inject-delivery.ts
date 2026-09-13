@@ -12,8 +12,13 @@ import {
   type MeshInboxIntent,
   stripReplyPeerFooter,
 } from "@seat-mesh/core";
-import { capturePaneSnapshot, injectToPane, paneMetaForPane } from "@seat-mesh/tmux";
-import { classifyCoordDelivery } from "./compose-gate.js";
+import {
+  capturePaneSnapshot,
+  injectToPane,
+  paneMetaForPane,
+  sendDesktopToastSync,
+} from "@seat-mesh/tmux";
+import { classifyCoordDelivery, inboxSkipTypingGate } from "./compose-gate.js";
 
 function sleepMs(ms: number): void {
   if (ms <= 0) return;
@@ -107,6 +112,8 @@ export interface DeliverOptions {
   intent?: MeshInboxIntent;
   /** Resolves layout.base.humanCoTyped for the co-typed-pane gate (FQ-inject-co-typed-pane). */
   loaded?: LoadedProfile;
+  /** Workspace root for co-typed notify-only toasts (FQ proposal). */
+  workspace?: string;
 }
 
 /** operator standing: every daemon paste is tagged so coord panes can filter (draft-preserve, STATUS). */
@@ -143,11 +150,23 @@ export function deliverToPane(
   // steer was the leak — the inject became the next user turn and the
   // in-flight instruction was dropped. Queue/backlog instead.
   // PRIORITY / STOP other work may paste except on humanCoTyped panes.
-  if (state.phase === "busy" || state.phase === "typing") {
+  const typingHold =
+    state.phase === "typing" && !inboxSkipTypingGate();
+  const busyHold = state.phase === "busy";
+  if (busyHold || typingHold) {
     if (coTyped || !isExplicitHubOverride(message)) {
+      const phase = busyHold ? "busy" : "typing";
+      if (coTyped && opts.workspace) {
+        const role = paneMetaForPane(paneId)?.role ?? "coord";
+        sendDesktopToastSync(
+          opts.workspace,
+          `mesh co-typed ${role}`,
+          message.trim().slice(0, 200),
+        );
+      }
       return {
         ok: false,
-        reason: coTyped ? `held:cotyped:${state.phase}` : `held:${state.phase}`,
+        reason: coTyped ? `held:cotyped:${phase}` : `held:${phase}`,
       };
     }
   }
@@ -178,8 +197,11 @@ export function deliverToPane(
 
   const steer = false;
 
-  const plan = prov.injectPlan(snap);
-  injectToPane(paneId, message, plan, prov.id, snap.captureTail);
+  const plan = {
+    ...prov.injectPlan(snap),
+    ...(coTyped ? { skipSubmit: true } : {}),
+  };
+  injectToPane(paneId, message, plan, prov.id, snap.captureTail, snap.captureTailAnsi);
   const mode = steer ? "steer" : "idle";
   // OpenCode TUI often hides pasted prompt in capture-pane tail (verify false negative).
   const verified =
@@ -187,6 +209,7 @@ export function deliverToPane(
     prov.id === "opencode" ||
     prov.id === "claude" ||
     prov.id === "agent" ||
+    prov.id === "cursor-agent" ||
     mode === "steer" ||
     verifyInjectVisible(paneId, message);
   if (!verified) {

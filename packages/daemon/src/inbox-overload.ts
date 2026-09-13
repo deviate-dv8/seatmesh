@@ -1,5 +1,5 @@
 import type { QueueStore } from "./create-queue-store.js";
-import { isPeerDelivered } from "./create-queue-store.js";
+import { countPeerPendingForPane } from "./peer-pending.js";
 
 /** Pending inject pressure (peer queue + armed checkbacks on this pane). */
 export const INBOX_OVERLOAD_THRESHOLD = 25;
@@ -13,11 +13,8 @@ export function resetInboxOverloadStateForTests(): void {
 }
 
 export function countInboxTriggersForPane(store: QueueStore, paneId: string): number {
-  const peer = store.readPeer().filter((r) => r.targetPane === paneId && !isPeerDelivered(r)).length;
-  const checkbacks = store
-    .readCheckbacks()
-    .filter((r) => r.status === "active" && r.ownerPane === paneId).length;
-  return peer + checkbacks;
+  // Checkbacks are scheduled polls — counting them caused overload self-lock (cb wedge).
+  return countPeerPendingForPane(store, paneId);
 }
 
 export function overloadCooldownRemainingMs(paneId: string, nowMs = Date.now()): number {

@@ -60,6 +60,6 @@ export const cursorAgentProvider: AgentProvider = {
   },
 
   humanDraft(pane: PaneSnapshot): string {
-    return agentInputDraft(pane.captureTail);
+    return agentInputDraft(pane.captureTail, pane.captureTailAnsi);
   },
 };

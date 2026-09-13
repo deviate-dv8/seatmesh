@@ -32,7 +32,12 @@ export function loadBalanceVendorContract(
   if (!fs.existsSync(p)) {
     throw new Error(`vendor contract missing: ${p}`);
   }
-  const raw = YAML.parse(fs.readFileSync(p, "utf8"));
+  const raw = YAML.parse(fs.readFileSync(p, "utf8")) as Record<string, unknown>;
+  const extendPath = path.join(contractsDir, `${contractId}.extend.yaml`);
+  if (fs.existsSync(extendPath)) {
+    const ext = YAML.parse(fs.readFileSync(extendPath, "utf8")) as Record<string, unknown>;
+    Object.assign(raw, ext);
+  }
   return BalanceContractSchema.parse(raw);
 }
 

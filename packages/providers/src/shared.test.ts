@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentInputDraft,
   claudeInputDraft,
   composerFromCapture,
   coordComposerDraft,
@@ -63,6 +64,64 @@ describe("composerFromCapture (border/typing status)", () => {
       phase: "typing",
       draftFingerprint: "fix the thing",
     });
+  });
+
+  it("claude provider rate limit is cc-limit (not oc-limit from shared OC_LIMIT_RE)", () => {
+    const tail =
+      "You've hit your rate limit.\nTry again in 2 hours.\n\n❯ \n  ⏭⏭ auto mode on\n";
+    const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
+    expect(composerFromCapture(pane, "claude")).toEqual({
+      phase: "limit",
+      limitKind: "cc-limit",
+    });
+  });
+
+  it("empty CC composer with rule-only prompt row is not typing (2026-09-13 wedge)", () => {
+    const tail =
+      "✻ Brewed for 0s · done\n" +
+      "──────────────────────────\n" +
+      "❯ ──────────────────────\n" +
+      "  ──── ⏵⏵ auto mode on\n";
+    const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
+    expect(composerFromCapture(pane, "claude")).toEqual({ phase: "empty" });
+    expect(claudeInputDraft(tail)).toBe("");
+  });
+});
+
+describe("agentInputDraft (cursor ghost-text / placeholders)", () => {
+  it("idle follow-up chrome is empty composer (secretary inbox wedge)", () => {
+    const tail =
+      "some assistant output\n" +
+      " \u2192 Add a follow-up\n" +
+      " Composer 2.5 Fast \u00b7 37.4% \u00b7 1 file edited      Run Everything\n" +
+      " ~/Desktop/Work/zsign\n";
+    const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
+    expect(composerFromCapture(pane, "cursor-agent")).toEqual({ phase: "empty" });
+  });
+
+  it("active generate + follow-up is busy", () => {
+    const tail =
+      " \u2192 Add a follow-up  ctrl+c to stop\n Working...\n";
+    const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
+    expect(composerFromCapture(pane, "cursor-agent").phase).toBe("busy");
+  });
+
+  it("treats Plan, search, build anything as empty (placeholder, not a draft)", () => {
+    const tail = "  \u2192 Plan, search, build anything\n  Add a follow-up";
+    expect(agentInputDraft(tail)).toBe("");
+  });
+
+  it("strips all-gray ghost suggestion via ANSI capture", () => {
+    const tail = "  \u2192 Plan, search, build anything";
+    const ansi = "  \x1b[2m\u2192 Plan, search, build anything\x1b[0m";
+    expect(agentInputDraft(tail, ansi)).toBe("");
+  });
+
+  it("keeps typed prefix when only the suffix is gray ghost text", () => {
+    const tail = "  \u2192 fix inbox draft Plan, search, build anything";
+    const ansi =
+      "  \u2192 fix inbox draft \x1b[38;5;245mPlan, search, build anything\x1b[39m";
+    expect(agentInputDraft(tail, ansi)).toBe("fix inbox draft");
   });
 });
 

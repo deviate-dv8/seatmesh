@@ -1,54 +1,21 @@
-import { spawnSync } from "node:child_process";
-import path from "node:path";
 import type { ProviderRegistry } from "@seat-mesh/core";
 import { formatOpenCodeResumeCommand } from "@seat-mesh/providers";
-import { capturePaneSnapshot, injectToPane, withPaneInputEnabled } from "@seat-mesh/tmux";
+import {
+  capturePaneSnapshot,
+  injectToPane,
+  withPaneInputEnabled,
+  INBOX_NOTIFY_SLOT,
+  runInboxDesktopNotifySync,
+  type InboxNotifyPhase,
+} from "@seat-mesh/tmux";
 
-/** Desktop toasts from mesh inbox daemon — not manager seat. */
-export const INBOX_NOTIFY_SLOT = "inbox";
+export { INBOX_NOTIFY_SLOT };
+export type { InboxNotifyPhase };
 
 /** Shown on resume-sent / ack toasts so operator knows ack is inbox-automatic, not a manual command. */
 export const RESUME_ACK_HOWTO =
   "Ack: automatic — when the OC composer is back (limit screen gone), inbox clears the OC-LIMIT border on that pane. " +
   "Complete toast = all borders cleared. Incomplete after 5m = eyeball stuck panes. Nothing for you to run.";
-
-export type InboxNotifyPhase = "starting" | "sent" | "complete" | "incomplete" | "escalating";
-
-function phaseLabel(phase: InboxNotifyPhase): string {
-  switch (phase) {
-    case "starting":
-      return "starting";
-    case "sent":
-      return "resume sent";
-    case "complete":
-      return "complete";
-    case "incomplete":
-      return "incomplete";
-    case "escalating":
-      return "escalating";
-  }
-}
-
-function notifyInbox(
-  workspace: string,
-  phase: InboxNotifyPhase,
-  topic: string,
-  sessionAbout: string,
-  check: string,
-): void {
-  const notifySh = path.join(workspace, "scripts/notify.sh");
-  const title = `${INBOX_NOTIFY_SLOT} · ${topic} (${phaseLabel(phase)})`;
-  let body = sessionAbout;
-  if (check) body += `\n\nCheck: ${check}`;
-  try {
-    spawnSync("bash", [notifySh, title, body], {
-      encoding: "utf8",
-      timeout: 5000,
-    });
-  } catch {
-    /* notify optional */
-  }
-}
 
 export function notifyConnectivityStatus(
   workspace: string,
@@ -57,7 +24,7 @@ export function notifyConnectivityStatus(
   check: string,
   phase: InboxNotifyPhase = "starting",
 ): void {
-  notifyInbox(workspace, phase, topic, sessionAbout, check);
+  runInboxDesktopNotifySync(workspace, { topic, phase, sessionAbout, check });
 }
 
 /** @deprecated Use resume wave notify with carrier meta instead. */
@@ -71,13 +38,12 @@ export function notifyProxyCarrierIp(
     fromIp && fromIp !== toIp
       ? `Proxy ${reason}: carrier ${fromIp} -> ${toIp}.`
       : `Proxy ${reason}: carrier ${toIp}.`;
-  notifyInbox(
-    workspace,
-    "sent",
-    "Proxy rotate",
+  runInboxDesktopNotifySync(workspace, {
+    phase: "sent",
+    topic: "Proxy rotate",
     sessionAbout,
-    "Waiting for OC panes to confirm resume...",
-  );
+    check: "Waiting for OC panes to confirm resume...",
+  });
 }
 
 export function resumeOneOpenCodePane(
@@ -93,7 +59,7 @@ export function resumeOneOpenCodePane(
   const plan = prov.injectPlan(snap);
   let ok = false;
   withPaneInputEnabled(paneId, () => {
-    injectToPane(paneId, cmd, plan, prov.id, snap.captureTail);
+    injectToPane(paneId, cmd, plan, prov.id, snap.captureTail, snap.captureTailAnsi);
     ok = true;
   });
   return ok ? { ok: true, cmd } : { ok: false, reason: "inject-failed" };
@@ -141,22 +107,20 @@ export function notifyResumeWave(
         ? `Carrier ${meta.toIp}. `
         : "";
   if (sent > 0) {
-    notifyInbox(
-      workspace,
-      "sent",
-      "OC resume",
-      `${ipLine}Resume pasted to ${sent}/${total} OpenCode panes (${reason}).`,
-      RESUME_ACK_HOWTO,
-    );
+    runInboxDesktopNotifySync(workspace, {
+      phase: "sent",
+      topic: "OC resume",
+      sessionAbout: `${ipLine}Resume pasted to ${sent}/${total} OpenCode panes (${reason}).`,
+      check: RESUME_ACK_HOWTO,
+    });
     return;
   }
   if (total > 0) {
-    notifyInbox(
-      workspace,
-      "incomplete",
-      "OC resume",
-      `${ipLine}Found ${total} OC panes but resume was not delivered (${reason}).`,
-      "Check OC panes manually — may be busy or keyboard-locked.",
-    );
+    runInboxDesktopNotifySync(workspace, {
+      phase: "incomplete",
+      topic: "OC resume",
+      sessionAbout: `${ipLine}Found ${total} OC panes but resume was not delivered (${reason}).`,
+      check: "Check OC panes manually — may be busy or keyboard-locked.",
+    });
   }
 }

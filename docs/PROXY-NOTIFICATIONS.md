@@ -4,7 +4,7 @@ How many Plasma toasts to expect when the CPE proxy rotates or OpenCode panes hi
 PROXY-DOWN / OC-LIMIT. All **mesh-owned** toasts use title prefix **`inbox ·`**
 (not `manager ·`).
 
-Canonical notifier: `services/seatmesh/packages/daemon/src/oc-resume.ts`
+Canonical notifier: `@seat-mesh/tmux` `runInboxDesktopNotifySync` (daemon `oc-resume.ts` calls it)
 (`INBOX_NOTIFY_SLOT = "inbox"`). Manual / standalone scripts use
 `scripts/notify-inbox.sh` (same title shape).
 
@@ -86,5 +86,5 @@ tail -5 tasks/agent-seats/manager/cpe-rotate-history.jsonl 2>/dev/null || true
 ## Related
 
 - `.agent/fix-attempts.md` hub `cpe-oc-resume`
-- `scripts/notify-inbox.sh` — shell parity with daemon titles
+- `scripts/notify-inbox.sh` — legacy shell parity (daemon uses TS library; script unchanged)
 - `connectivity-recovery.ts` — episode machine + `CPE_SKIP_DESKTOP_NOTIFY` on spawn
