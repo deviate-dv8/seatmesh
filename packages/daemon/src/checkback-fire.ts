@@ -7,6 +7,8 @@ export function checkbackFirePriority(kind: string | undefined): number {
       return 0;
     case "balance-lead-tick":
       return 1;
+    case "coord-expect":
+      return 2;
     case "cc-limit-retry":
       return 2;
     case "manager-2-nudge":

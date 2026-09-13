@@ -10,6 +10,7 @@ export const MESH_INBOX_INTENTS = [
   "assign",
   "continue",
   "limit-retry",
+  "status",
 ] as const;
 
 export type MeshInboxIntent = (typeof MESH_INBOX_INTENTS)[number];

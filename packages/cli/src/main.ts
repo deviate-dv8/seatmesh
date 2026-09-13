@@ -120,6 +120,7 @@ import { buildRoomCommands } from "./room-cli.js";
 import { runInit } from "./init.js";
 import { runAgentContextInit } from "./agent-context-init.js";
 import { runSeatCommand } from "./seat-cli.js";
+import { coordCommand } from "./coord-cli.js";
 
 function parseArgs(argv: string[]) {
   const profileFlag: string[] = [];
@@ -168,6 +169,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   secretary start|dispatch|collect|status|watch …
   mini list|spawn|prompt|done|dispatch-all
   checkback start|list|cancel|cancel-all|reset|ack  (alias: patience)
+  coord expect <target> <hub> <snippet...>   arm coord-expect on manager (verify + re-assign)
   notify <session> <check> [--url URL]   desktop toast (seat from TMUX pane)
   preview <file...> [--set days] [--notify]   publish markdown to mdview.io
   test                          smoke: layout, providers, inbox, proxy
@@ -1155,6 +1157,13 @@ async function main(): Promise<void> {
       cwd: loaded.workspace,
     });
     process.exit(r.status ?? 1);
+  }
+
+  if (cmd === "coord") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    coordCommand(loaded, reg, sub ?? "", tail);
+    return;
   }
 
   if (cmd === "balance") {

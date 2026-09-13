@@ -59,6 +59,8 @@ export * from "./seats/cold-start-state.js";
 export * from "./seats/seat-update.js";
 export * from "./seats/seat-assign.js";
 export * from "./balance/balance-tick.js";
+export * from "./balance/balance-actions.js";
 export * from "./balance/balance-lead.js";
+export * from "./coord/coord-expect.js";
 export * from "./supervise/supervise-tick.js";
 export * from "./agent/apply-bundle.js";

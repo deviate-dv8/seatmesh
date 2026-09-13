@@ -15,6 +15,7 @@ import {
 } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { enqueuePrompt } from "../inject/prompt.js";
+import { runBalanceAutoActions } from "./balance-actions.js";
 import { runBalanceTick } from "./balance-tick.js";
 
 interface CheckbackRowLocal {
@@ -127,9 +128,12 @@ export function balanceLeadCommand(
 
   if (sub === "run") {
     const r = runBalanceTick(loaded, { dryRun: runOpts?.dryRun });
+    const auto = runBalanceAutoActions(loaded, r, { dryRun: runOpts?.dryRun });
     console.log(r.statusLine);
     if (r.wroteLedger) console.log(`OK: ledger ${r.lastPath}`);
-    if (r.pullSuggested) console.log("hint: pull from main lead (spare capacity)");
+    if (auto.roomStatusPosted) console.log("OK: room STATUS posted (balance + managers)");
+    if (auto.autoPullAssigned) console.log(`OK: auto-assign -> ${doc.balance_lead}`);
+    if (auto.balanceeAssigned.length) console.log(`OK: auto-assign balancees: ${auto.balanceeAssigned.join(", ")}`);
     if (r.rebalanceHint) console.log("hint: rebalance skew across balancees");
     return;
   }
@@ -174,7 +178,8 @@ export function balanceLeadCommand(
     /* tick still fires via daemon */
   }
 
-  runBalanceTick(loaded);
+  const initial = runBalanceTick(loaded);
+  runBalanceAutoActions(loaded, initial);
 
   console.log(
     `OK: balance ON interval=${interval} lead=${leadResolved.paneId} balancees=${doc.balancees.join(",")}`,

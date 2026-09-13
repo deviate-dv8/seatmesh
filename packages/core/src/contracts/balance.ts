@@ -18,6 +18,8 @@ export const BalanceContractSchema = z.object({
   balancees: z.array(z.string()).min(1),
   interval: z.string().default("10m"),
   scope: z.string().optional(),
+  /** When true (default), daemon tick runs ./sm.sh-equivalent assign on pull (no manual peer). */
+  auto_assign: z.boolean().default(true),
 });
 
 export type BalanceContract = z.infer<typeof BalanceContractSchema>;

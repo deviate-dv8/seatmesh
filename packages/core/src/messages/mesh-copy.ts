@@ -92,16 +92,12 @@ export function meshInboxBalanceStatus(line: string): string {
   return `${MESH_INBOX_TAG} BALANCE-STATUS: ${line}`;
 }
 
-/** Balance lead tick inject — manager-2 pane only; manager still owns assign. */
+/** Balance lead tick inject — best-effort; daemon already posted room STATUS + auto-assign. */
 export function meshInboxBalanceLeadTick(): string {
   return (
-    `${MESH_INBOX_TAG} BALANCE: ./sm.sh contexts. Balance lead reads ` +
-    ".sm/seats/manager-2/BALANCE-LAST.md; compare TASKS/FOCUS vs contract balancees. " +
-    "Pull: if balancees have spare capacity and manager queue has work, one line to manager " +
-    "(room `--kind status` or `./sm.sh peer manager` — request assign, do not self-assign). " +
-    "Rebalance: idle balancee + open TASKS -> one CONTINUE; overloaded vs idle -> thin STATUS " +
-    "to managers room at most once per interval. Update BALANCE-LAST.md after tick. " +
-    "One-shot METHOD: `./sm.sh balance run`. No shell scripts."
+    `${MESH_INBOX_TAG} BALANCE: Daemon tick wrote BALANCE-LAST + room STATUS + auto-assign when pull applies. ` +
+    "Read .sm/seats/manager-2/BALANCE-LAST.md and managers/balance rooms; execute assigned TASK — no manual peer pull. " +
+    "One-shot METHOD: `./sm.sh balance run`. Off: `./sm.sh balance off`."
   );
 }
 
@@ -109,9 +105,8 @@ export function balanceLeadBrief(opts: { interval: string; balancees: string[] }
   const list = opts.balancees.join(", ") || "(none)";
   return (
     `BALANCE ON interval=${opts.interval} balancees=${list}. ` +
-    "Every tick: contexts + BALANCE-LAST; pull from manager when spare capacity; " +
-    "manager still ./sm.sh assign authority. `./sm.sh balance run` for one METHOD tick. " +
-    "Off: ./sm.sh balance off"
+    "Every tick: BALANCE-LAST + room STATUS + auto-assign on pull (daemon METHOD). " +
+    "`./sm.sh balance run` for one tick. Off: `./sm.sh balance off`"
   );
 }
 

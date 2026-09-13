@@ -27,6 +27,9 @@ import {
   meshSecretaryPane,
   paneMetaForPane,
   readSeatSnapshot,
+  handleCoordExpectDue,
+  parseCoordExpect,
+  runBalanceAutoActions,
   runBalanceTick,
   runSuperviseTick,
 } from "@seat-mesh/tmux";
@@ -370,24 +373,31 @@ function deliverSecretarySuperviseTick(ctx: MeshOrchestratorCtx, _secPane: strin
   return tick.wroteLedger;
 }
 
-/** Balance lead tick — manager-2 pane only; runBalanceTick writes BALANCE-LAST. */
+/** Balance lead tick — ledger + room STATUS + auto-assign; pane inject is best-effort only. */
 function deliverBalanceLeadTick(ctx: MeshOrchestratorCtx, leadPane: string): boolean {
   const tick = runBalanceTick(ctx.loaded);
+  const auto = runBalanceAutoActions(ctx.loaded, tick);
   const msg = `${meshInboxBalanceStatus(tick.statusLine)} ${meshInboxBalanceLeadTick().replace(/^\[mesh-inbox\] /, "")}`;
   const r = deliverToPane(leadPane, msg, ctx.registry, {
     skipVerify: true,
     force: true,
+    intent: "status",
     loaded: ctx.loaded,
   });
+  const material =
+    tick.wroteLedger &&
+    (auto.roomStatusPosted || auto.autoPullAssigned || auto.balanceeAssigned.length > 0 || r.ok);
   try {
     const doc = loadBalanceVendorContract(contractsDirFor(ctx.loaded));
     ctx.log(
-      `balance-lead-tick ${r.ok ? "delivered" : r.reason} pane=${leadPane} lead=${doc.balance_lead}`,
+      `balance-lead-tick material=${material} inject=${r.ok ? "ok" : r.reason} room=${auto.roomStatusPosted} pull=${auto.autoPullAssigned} balancees=${auto.balanceeAssigned.join(",") || "none"} lead=${doc.balance_lead}`,
     );
   } catch {
-    ctx.log(`balance-lead-tick ${r.ok ? "delivered" : r.reason} pane=${leadPane}`);
+    ctx.log(
+      `balance-lead-tick material=${material} inject=${r.ok ? "ok" : r.reason} pane=${leadPane}`,
+    );
   }
-  return r.ok;
+  return material;
 }
 
 function deferFailedFire(
@@ -527,6 +537,27 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       row.status = "cancelled";
       row.updatedAt = new Date().toISOString();
       ctx.log(`cc-limit-retry delivered pane=${pane}`);
+    } else if (row.kind === "coord-expect" && row.expect) {
+      const parsed = parseCoordExpect(row.expect);
+      const pane = row.ownerPane;
+      if (!pane) continue;
+      const outcome = handleCoordExpectDue(ctx.loaded, row.expect);
+      if (outcome.met) {
+        row.status = "cancelled";
+        row.updatedAt = new Date().toISOString();
+        ctx.log(`coord-expect met target=${parsed?.target ?? "?"} hub=${parsed?.hub ?? "?"}`);
+        continue;
+      }
+      const msg =
+        `[mesh-inbox] intent=checkback-verify manager | Check: ${row.expect.slice(0, 100)} — ` +
+        `${outcome.retried ? "re-assigned" : "stale"} (${outcome.reason}); nudge ${parsed?.target ?? "lead"}`;
+      const r = deliverToPane(pane, msg, ctx.registry, {
+        skipVerify: true,
+        intent: "checkback-verify",
+        loaded: ctx.loaded,
+      });
+      if (!r.ok) deferFailedFire(ctx, row, now, r.reason ?? "deliver");
+      ctx.log(`coord-expect ${outcome.retried ? "retry" : "hold"} ${outcome.reason}`);
     } else if (row.kind === "balance-lead-tick") {
       const role: "manager-2" = "manager-2";
       const leadPane = coordPaneForRole(ctx.session, ctx.baseWindow, role) || pane;
