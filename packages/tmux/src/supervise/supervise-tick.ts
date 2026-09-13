@@ -4,7 +4,7 @@ import {
   chatRoomConfigForLoaded,
   formatSuperviseStatusLine,
   hubLockActive,
-  managerColumnIds,
+  superviseLeadIds,
   sayInRoomSync,
   type LoadedProfile,
   type ProviderRegistry,
@@ -76,7 +76,7 @@ export function runSuperviseTick(
   loaded: LoadedProfile,
   opts: SuperviseTickOpts,
 ): SuperviseTickResult {
-  const mgrIds = managerColumnIds(loaded.profile.layout);
+  const mgrIds = superviseLeadIds(loaded);
   const leads = mgrIds.map((id) => {
     const snap = readSeatSnapshot(loaded, { role: id });
     return {

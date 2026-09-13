@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   isSuperviseContractOn,
   managerColumnIds,
+  superviseLeadIds,
   meshRuntimePaths,
   runtimePathHint,
   secretaryColumnIds,
@@ -489,7 +490,7 @@ export function secretarySupervise(
     return;
   }
 
-  const mgrIds = managerColumnIds(layout);
+  const mgrIds = superviseLeadIds(loaded);
   const secIds = secretaryColumnIds(layout);
   const secResolved = resolvePaneTarget(secIds[0] ?? "secretary", loaded);
   const mgrResolved = resolvePaneTarget(mgrIds[0] ?? "manager", loaded);

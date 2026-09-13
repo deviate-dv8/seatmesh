@@ -4,6 +4,7 @@ import YAML from "yaml";
 import { z } from "zod";
 import type { LoadedProfile } from "../profile.js";
 import { buildResolvedPaths } from "../paths-manifest.js";
+import { managerColumnIds } from "../schema/seat-kind.js";
 
 export const SuperviseContractSchema = z.object({
   id: z.string().min(1),
@@ -34,8 +35,24 @@ export function loadVendorContract(contractsDir: string, id: string): SuperviseC
   if (!fs.existsSync(p)) {
     throw new Error(`vendor contract missing: ${p}`);
   }
-  const raw = YAML.parse(fs.readFileSync(p, "utf8"));
+  const raw = YAML.parse(fs.readFileSync(p, "utf8")) as Record<string, unknown>;
+  const extendPath = path.join(contractsDir, `${id}.extend.yaml`);
+  if (fs.existsSync(extendPath)) {
+    const ext = YAML.parse(fs.readFileSync(extendPath, "utf8")) as Record<string, unknown>;
+    Object.assign(raw, ext);
+  }
   return SuperviseContractSchema.parse(raw);
+}
+
+/** Supervise tick / secretary nudge targets — contract `leads` when set, else all manager columns. */
+export function superviseLeadIds(loaded: LoadedProfile): string[] {
+  try {
+    const doc = loadVendorContract(contractsDirFor(loaded), "supervise");
+    if (doc.leads?.length) return [...doc.leads];
+  } catch {
+    /* fall through */
+  }
+  return managerColumnIds(loaded.profile.layout);
 }
 
 export function contractLockPath(
