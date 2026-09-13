@@ -1,28 +1,18 @@
 import { spawnSync } from "node:child_process";
 import type { InjectPlan } from "@seat-mesh/core";
-import { withActivePanePreserved } from "../lib/select-pane.js";
+import { coordComposerDraft } from "@seat-mesh/providers";
+import { withPaneInjectLock } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
-import { humanDraftToPreserve } from "./inject-draft.js";
+import { humanDraftToPreserve, isSmInjectText } from "./inject-draft.js";
 
 function sleepMs(ms: number): void {
   if (ms <= 0) return;
   spawnSync("sleep", [String(ms / 1000)]);
 }
 
+/** @deprecated use withPaneInjectLock — kept for callers outside inject path */
 export function withPaneInputEnabled(paneId: string, fn: () => void): void {
-  withActivePanePreserved(paneId, () => {
-    const off = tmux(["display-message", "-t", paneId, "-p", "#{pane_input_off}"]).out;
-    if (off === "1") {
-      tmux(["select-pane", "-e", "-t", paneId]);
-    }
-    try {
-      fn();
-    } finally {
-      if (off === "1") {
-        tmux(["select-pane", "-d", "-t", paneId]);
-      }
-    }
-  });
+  withPaneInjectLock(paneId, fn);
 }
 
 // Named buffer — never touch the default tmux paste buffer, which is the same one
@@ -53,10 +43,18 @@ function clearComposerDraft(paneId: string, providerId: string, generating: bool
     return;
   }
   if (providerId === "cursor-agent" || providerId === "agent") {
-    tmux(["send-keys", "-t", paneId, "Escape"]);
-    sleepMs(120);
-    tmux(["send-keys", "-t", paneId, "C-u"]);
-    sleepMs(60);
+    for (let pass = 0; pass < 10; pass++) {
+      tmux(["send-keys", "-t", paneId, "Escape"]);
+      sleepMs(90);
+      tmux(["send-keys", "-t", paneId, "C-u"]);
+      sleepMs(70);
+      tmux(["send-keys", "-t", paneId, "C-u"]);
+      sleepMs(70);
+      const tail = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-14"]).out ?? "";
+      const ansi = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-14", "-e"]).out;
+      const left = coordComposerDraft(tail, "cursor-agent", ansi).trim();
+      if (!left) break;
+    }
     return;
   }
   tmux(["send-keys", "-t", paneId, "C-u"]);
@@ -74,29 +72,44 @@ function restoreComposerDraft(paneId: string, draft: string): void {
 function injectCursorAgent(
   paneId: string,
   message: string,
+  plan: InjectPlan,
   captureTail: string,
   captureTailAnsi?: string,
 ): void {
-  const bottom = captureTail.split("\n").slice(-14).join("\n");
+  const liveTail =
+    tmux(["capture-pane", "-t", paneId, "-p", "-S", "-14"]).out ?? captureTail;
+  const liveAnsi =
+    tmux(["capture-pane", "-t", paneId, "-p", "-S", "-14", "-e"]).out ?? captureTailAnsi;
+  const bottom = liveTail.split("\n").slice(-14).join("\n");
   const generating = /Working|Running|Thinking|enter steer/.test(bottom);
   const followUp = /Add a follow-up/.test(bottom);
-  const saved = humanDraftToPreserve(captureTail, "cursor-agent", message, captureTailAnsi);
+  const rawDraft = coordComposerDraft(liveTail, "cursor-agent", liveAnsi).trim();
+  const meshInject = isSmInjectText(message);
+  const saved = meshInject
+    ? ""
+    : humanDraftToPreserve(liveTail, "cursor-agent", message, liveAnsi);
+  const staleInjectInComposer = rawDraft.length > 0 && isSmInjectText(rawDraft);
 
   if (saved) clearComposerDraft(paneId, "cursor-agent", generating);
-  else if (!generating && /→/.test(bottom) && !followUp) {
+  else if (meshInject || staleInjectInComposer) {
+    // Inbox paste must replace composer — do not splice onto chopped prior inject tail.
+    clearComposerDraft(paneId, "cursor-agent", generating);
+  } else if (!generating && /→/.test(bottom) && !followUp) {
     tmux(["send-keys", "-t", paneId, "Escape"]);
     sleepMs(250);
   }
 
   pasteMessage(paneId, message);
 
-  const delayMs = message.length > 400 ? 650 : 450;
-  sleepMs(delayMs);
-  tmux(["send-keys", "-t", paneId, "Enter"]);
-  sleepMs(350);
-  tmux(["send-keys", "-t", paneId, "Enter"]);
-  sleepMs(200);
-  tmux(["send-keys", "-t", paneId, "Enter"]);
+  if (!plan.skipSubmit) {
+    const delayMs = message.length > 400 ? 650 : 450;
+    sleepMs(delayMs);
+    tmux(["send-keys", "-t", paneId, "Enter"]);
+    sleepMs(350);
+    tmux(["send-keys", "-t", paneId, "Enter"]);
+    sleepMs(200);
+    tmux(["send-keys", "-t", paneId, "Enter"]);
+  }
   if (saved) {
     sleepMs(200);
     restoreComposerDraft(paneId, saved);
@@ -106,7 +119,10 @@ function injectCursorAgent(
 /** Claude Code: clear stuck composer draft before paste (else inject is invisible). */
 function injectClaude(paneId: string, message: string, plan: InjectPlan, captureTail = ""): void {
   const live = captureTail || tmux(["capture-pane", "-t", paneId, "-p", "-S", "-12"]).out || "";
-  const saved = humanDraftToPreserve(live, "claude", message);
+  const meshInject = isSmInjectText(message);
+  const saved = meshInject ? "" : humanDraftToPreserve(live, "claude", message);
+  const rawDraft = coordComposerDraft(live, "claude").trim();
+  const staleInjectInComposer = rawDraft.length > 0 && isSmInjectText(rawDraft);
   if (plan.flushEscFirst) {
     tmux(["send-keys", "-t", paneId, "Escape"]);
     sleepMs(120);
@@ -114,7 +130,13 @@ function injectClaude(paneId: string, message: string, plan: InjectPlan, capture
     sleepMs(150);
   }
   const bottom = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-8"]).out ?? "";
-  if (saved || /^❯\s/m.test(bottom) || /\n❯\s/m.test(bottom)) {
+  if (
+    saved ||
+    meshInject ||
+    staleInjectInComposer ||
+    /^❯\s/m.test(bottom) ||
+    /\n❯\s/m.test(bottom)
+  ) {
     tmux(["send-keys", "-t", paneId, "C-u"]);
     sleepMs(80);
     tmux(["send-keys", "-t", paneId, "C-u"]);
@@ -146,9 +168,10 @@ export function injectToPane(
   captureTail = "",
   captureTailAnsi?: string,
 ): void {
-  withPaneInputEnabled(paneId, () => {
+  withPaneInjectLock(paneId, () => {
+    sleepMs(150);
     if (providerId === "cursor-agent" || providerId === "agent") {
-      injectCursorAgent(paneId, message, captureTail, captureTailAnsi);
+      injectCursorAgent(paneId, message, plan, captureTail, captureTailAnsi);
       return;
     }
 
@@ -157,8 +180,11 @@ export function injectToPane(
       return;
     }
 
-    const saved = humanDraftToPreserve(captureTail, providerId ?? "", message, captureTailAnsi);
-    if (saved) clearComposerDraft(paneId, providerId ?? "", false);
+    const meshInject = isSmInjectText(message);
+    const saved = meshInject
+      ? ""
+      : humanDraftToPreserve(captureTail, providerId ?? "", message, captureTailAnsi);
+    if (saved || meshInject) clearComposerDraft(paneId, providerId ?? "", false);
     else if (plan.flushEscFirst) {
       tmux(["send-keys", "-t", paneId, "Escape"]);
       sleepMs(120);
@@ -178,7 +204,7 @@ export function injectToPane(
 
 /** Rescue Enter only — unstick Cursor composer / enter steer (harness flush). */
 export function flushToPane(paneId: string, providerId: string): void {
-  withPaneInputEnabled(paneId, () => {
+  withPaneInjectLock(paneId, () => {
     const bottom =
       tmux(["capture-pane", "-t", paneId, "-p", "-S", "-14"]).out ?? "";
     if (providerId === "cursor-agent" && /enter steer/i.test(bottom)) {

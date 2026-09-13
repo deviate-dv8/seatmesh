@@ -44,7 +44,7 @@ export function seatFocusTasksPath(role: CoordLeadRole): string {
 export function meshInboxContinueLead(role: CoordLeadRole): string {
   const seat = seatFocusTasksPath(role);
   return (
-    `${MESH_INBOX_TAG} CONTINUE: read ${seat}/FOCUS.md + ${seat}/TASKS.md + tasks/seat-mesh/TODO.md; ` +
+    `${MESH_INBOX_TAG} CONTINUE: read ${seat}/FOCUS.md + ${seat}/TASKS.md only (hub from assign — never hand-edit peer seats); ` +
     "work the next open TASK checkbox (no operator yes/continue); Mark OPEN only when session TASKS are clear"
   );
 }

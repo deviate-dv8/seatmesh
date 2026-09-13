@@ -7,7 +7,6 @@ import {
   formatMeshInboxStamp,
   isCoordKind,
   isHumanCoTypedColumn,
-  isSuperviseStatusBroadcast,
   MESH_INBOX_ROOM_TAG,
   MESH_INBOX_TAG,
   type MeshInboxIntent,
@@ -17,7 +16,6 @@ import {
   capturePaneSnapshot,
   injectToPane,
   paneMetaForPane,
-  sendDesktopToastSync,
 } from "@seat-mesh/tmux";
 import { classifyCoordDelivery, inboxSkipTypingGate } from "./compose-gate.js";
 
@@ -96,40 +94,6 @@ export function isExplicitHubOverride(message: string): boolean {
   return /\bPRIORITY\b|\bSTOP other work\b/i.test(message);
 }
 
-const coTypedToastLastByPane = new Map<string, number>();
-const COTYPED_TOAST_MIN_MS = 10 * 60 * 1000;
-
-/** Mechanical mesh traffic must not desktop-notify the operator (room tail is enough). */
-export function coTypedNotifyEligible(message: string): boolean {
-  if (isSuperviseStatusBroadcast(undefined, message)) return false;
-  const t = message.trim();
-  if (/^\[mesh-inbox\]\s*(SUPERVISE-STATUS|BALANCE-STATUS|BALANCE:|SUPERVISE:)/i.test(t)) {
-    return false;
-  }
-  if (/^\[mesh-inbox\]\s*Check:/i.test(t) || /^Check:\s/i.test(t)) return false;
-  if (/\[mesh-inbox-room\][^\n]*\|\s*status\b/i.test(t)) return false;
-  if (/\[mesh-inbox-room\][^\n]*\|\s*fyi\b/i.test(t)) return false;
-  if (/^FYI:\s*mini-\d+/i.test(t)) return false;
-  if (/^ACK managers tail/i.test(t)) return false;
-  if (/^Verify:\s*seatmesh.*room tail/i.test(t) && /SHELL \(required/i.test(t)) return false;
-  return true;
-}
-
-export function shouldSendCoTypedHoldToast(paneId: string, message: string): boolean {
-  if (process.env.MESH_COTYPED_NOTIFY === "0" || process.env.ZSIGN_SKIP_COTYPED_NOTIFY) {
-    return false;
-  }
-  if (!coTypedNotifyEligible(message)) return false;
-  if (/\b(PRIORITY|STOP other work|ASSIGN|PROPOSAL|Dan notify reply)\b/i.test(message)) {
-    return true;
-  }
-  const now = Date.now();
-  const last = coTypedToastLastByPane.get(paneId) ?? 0;
-  if (now - last < COTYPED_TOAST_MIN_MS) return false;
-  coTypedToastLastByPane.set(paneId, now);
-  return true;
-}
-
 export type DeliverResult =
   | { ok: true; providerId: string; mode: "idle" | "steer"; verified: boolean }
   | { ok: false; reason: string };
@@ -147,7 +111,7 @@ export interface DeliverOptions {
   intent?: MeshInboxIntent;
   /** Resolves layout.base.humanCoTyped for the co-typed-pane gate (FQ-inject-co-typed-pane). */
   loaded?: LoadedProfile;
-  /** Workspace root for co-typed notify-only toasts (FQ proposal). */
+  /** Workspace root (orchestrator context; no desktop toast on co-typed hold). */
   workspace?: string;
 }
 
@@ -191,14 +155,6 @@ export function deliverToPane(
   if (busyHold || typingHold) {
     if (coTyped || !isExplicitHubOverride(message)) {
       const phase = busyHold ? "busy" : "typing";
-      if (coTyped && opts.workspace && shouldSendCoTypedHoldToast(paneId, message)) {
-        const role = paneMetaForPane(paneId)?.role ?? "coord";
-        sendDesktopToastSync(
-          opts.workspace,
-          `mesh co-typed ${role}`,
-          message.trim().slice(0, 200),
-        );
-      }
       return {
         ok: false,
         reason: coTyped ? `held:cotyped:${phase}` : `held:${phase}`,
