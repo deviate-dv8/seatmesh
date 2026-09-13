@@ -195,12 +195,12 @@ export function deliverToPane(
   injectToPane(paneId, message, plan, prov.id, snap.captureTail, snap.captureTailAnsi);
   const mode = steer ? "steer" : "idle";
   // OpenCode TUI often hides pasted prompt in capture-pane tail (verify false negative).
+  // Claude: same — footer/redraw can hide paste briefly. Cursor-agent MUST verify:
+  // skipVerify used to mask the withPaneInjectLock -d bug (send-keys dropped).
   const verified =
     opts.skipVerify ||
     prov.id === "opencode" ||
     prov.id === "claude" ||
-    prov.id === "agent" ||
-    prov.id === "cursor-agent" ||
     mode === "steer" ||
     verifyInjectVisible(paneId, message);
   if (!verified) {

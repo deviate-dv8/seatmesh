@@ -61,9 +61,15 @@ export function selectPaneUnfocused(args: string[]): void {
 }
 
 /**
- * Disable operator keyboard on the target for the inject window (select-pane -d),
- * then restore prior lock state. Prevents human keystrokes interleaving with
- * send-keys clear/paste on humanCoTyped panes.
+ * Run inject with the target pane able to receive programmatic input.
+ *
+ * tmux `select-pane -d` (pane_input_off) blocks *all* input — including
+ * `send-keys` and `paste-buffer` from the daemon. So we must NOT disable
+ * input for the inject window. If the pane was already locked (minis),
+ * briefly unlock, inject, then restore the lock.
+ *
+ * Active-pane focus is preserved so inject does not steal the operator's
+ * cursor to the target.
  */
 export function withPaneInjectLock(paneId: string, fn: () => void): void {
   withActivePanePreserved(paneId, () => {
@@ -72,14 +78,11 @@ export function withPaneInjectLock(paneId: string, fn: () => void): void {
     if (wasInputOff) {
       selectPaneUnfocused(["-e", "-t", paneId]);
     }
-    selectPaneUnfocused(["-d", "-t", paneId]);
     try {
       fn();
     } finally {
       if (wasInputOff) {
         selectPaneUnfocused(["-d", "-t", paneId]);
-      } else {
-        selectPaneUnfocused(["-e", "-t", paneId]);
       }
     }
   });

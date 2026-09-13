@@ -130,6 +130,17 @@ export function waitPromptSent(
       if (peerRowSentProof(row, opts.paneId)) {
         return { ok: true, token: opts.token, paneId: opts.paneId, via: "pane-row" };
       }
+      // Row exists, not skipped, not yet injected (settle/busy hold) — that IS the queue.
+      // Do not wait out the full timeout then FAIL; inbox purpose is durable wait.
+      if (Date.now() - start >= 1500) {
+        return {
+          ok: true,
+          token: opts.token,
+          paneId: opts.paneId,
+          via: "queued",
+          last: `pending deliverPane=${row.deliverPane ?? "-"}`,
+        };
+      }
       last = `queued deliverPane=${row.deliverPane ?? "-"}`;
     }
     sleepMs(250);

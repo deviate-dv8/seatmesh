@@ -309,7 +309,8 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
     const lightweight = isAckClassPeer(row.msg) || roomPing;
     const result = deliverToPane(row.targetPane, row.msg, ctx.registry, {
       lightweight,
-      skipVerify: true,
+      // Verify cursor-agent pastes — skipVerify hid the pane_input_off inject drop.
+      // OpenCode/claude still skip inside deliverToPane when provider needs it.
       // Thin room ledger pings bypass coord idle-settle (manager/manager-b/secretary) —
       // except humanCoTyped panes (profile layout.base.humanCoTyped), which never get that bypass.
       roomPing: thinRoomPing || (roomPing && !toManager),
