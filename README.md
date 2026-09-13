@@ -62,7 +62,8 @@ cwd for `.sm/`.
 | [docs/CONFIG.md](docs/CONFIG.md) | `mesh.config.yaml` reference |
 | [docs/SLOTS.md](docs/SLOTS.md) | Slots, roles, seat files |
 | [docs/STATE.md](docs/STATE.md) | `mesh-agents.json` |
-| [docs/COMMS.md](docs/COMMS.md) | Inbox, peer, checkback flow |
+| [docs/COMMS.md](docs/COMMS.md) | Inbox, peer, checkback, **notify-act** (Yes/No toasts) |
+| (zsign agents) `.agent/seat-mesh-notify.md` | When to use `notify.sh` vs `seatmesh notify yesno` |
 | [docs/CHATROOM.md](docs/CHATROOM.md) | Room ledger and broadcast |
 | [docs/CHATFILE.md](docs/CHATFILE.md) | Shared chat files |
 | [docs/PORTABILITY.md](docs/PORTABILITY.md) | Connectivity hooks, data layout |
