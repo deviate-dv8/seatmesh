@@ -98,6 +98,7 @@ import {
 import { buildChatCommands } from "./chat-cli.js";
 import { buildCheckbackCommands } from "./checkback-cli.js";
 import { buildNotifyCommand } from "./notify-cli.js";
+import { buildPreviewCommand } from "./preview-cli.js";
 import { buildContractLockCommands } from "./contract-lock-cli.js";
 import { buildRoomCommands } from "./room-cli.js";
 import { runInit } from "./init.js";
@@ -148,6 +149,7 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   mini list|spawn|prompt|done|dispatch-all
   checkback start|list|cancel|cancel-all|reset|ack  (alias: patience)
   notify <session> <check> [--url URL]   desktop toast (seat from TMUX pane)
+  preview <file...> [--set days] [--notify]   publish markdown to mdview.io
   test                          smoke: layout, providers, inbox, proxy
   launch [--now] [targets…]
   prompt | remind | flush
@@ -1211,6 +1213,20 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
     const branch = buildNotifyCommand(getLoaded);
+    try {
+      await branch.parseAsync(rest.slice(1), { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
+    }
+    return;
+  }
+
+  if (cmd === "preview") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildPreviewCommand(getLoaded);
     try {
       await branch.parseAsync(rest.slice(1), { from: "user" });
     } catch (e) {

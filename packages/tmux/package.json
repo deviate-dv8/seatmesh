@@ -1,6 +1,6 @@
 {
   "name": "@seat-mesh/tmux",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@seat-mesh/core": "0.1.18",
-    "@seat-mesh/providers": "0.1.18"
+    "@seat-mesh/providers": "0.1.19"
   },
   "publishConfig": {
     "access": "public"
