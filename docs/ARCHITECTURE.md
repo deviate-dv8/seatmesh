@@ -44,10 +44,11 @@ are located at runtime by a hardcoded `packages/daemon/dist/<name>.js` path
 bin (`dist/main.js`). Moving them breaks resolution — they stay at `src/` root by design.
 
 **Convention (all packages):** no new production `.ts` at `src/` root except `index.ts`
-(barrel). Tests sit next to the module (`peer/peer-skip.test.ts`). Folder = domain, not layer.
-Build/tooling scripts under `packages/*/scripts/` are full TypeScript, run via Node
-type-stripping (`node scripts/bundle-profiles.ts`) — no `.mjs`. `@seat-mesh/core` still has
-loose root modules (profile/paths) queued for the same treatment (phase 3).
+(barrel) and the load-bearing entry files above. Tests sit next to the module
+(`peer/peer-skip.test.ts`). Folder = domain, not layer. Build/tooling scripts under
+`packages/*/scripts/` are full TypeScript, run via Node type-stripping
+(`node scripts/bundle-profiles.ts`) — no `.mjs`. `@seat-mesh/core` root is also
+barrel-only (`profile/` `paths/` `runtime/` plus existing domain folders).
 
 ## Tmux layout (default profile shape)
 
