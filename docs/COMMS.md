@@ -66,18 +66,40 @@ orchestratorDrainTick()
 
 Wake: poll loop (`daemon.pollMs`); optional BullMQ nudge when Redis is up.
 
-## Notify-act (Yes / No links → browser → mesh)
+## Notify-act (Yes / No in toast → browser → mesh)
 
-Plasma action buttons often fail; use **HTML links** in the toast body instead.
+**Canonical operator reply path.** Plasma `-A` action buttons are unreliable on Linux/KDE;
+use **HTML `<a href>` links** in the toast body instead. No duplicate plain `Yes: http://…`
+lines — only the anchor row (`Yes · No`).
 
 | Step | What |
 |------|------|
-| Register | `POST http://127.0.0.1:<port>/act/register` |
-| Click | `GET /act/v1/<token>` (one-shot) |
-| FE test | `GET /ui` · `GET /ui/demo-yesno` (button-styled Yes/No) |
+| Register | `POST http://127.0.0.1:<port>/act/register` (TTL default 3600s) |
+| Click | `GET /act/v1/<token>` → HTML result page; token is one-shot |
+| Side effect | Usually `peer` → enqueue inject to a seat (default **`secretary`**) |
+| Browser UI | `GET /ui` · `GET /ui/demo-yesno` (same URLs as toast; button styling) |
 
-CLI/library: `sendYesNoToast(loaded, title, body, yesMsg, yesTarget?)` or
+**Delivery:** `@seat-mesh/tmux` `sendDesktopToastSync` / `node-notifier` only for library
+toasts (no workspace `notify.sh`). Inbox/CPE recovery toasts stay plain text via
+`runInboxDesktopNotifySync`.
+
+**CLI (from repo with profile):**
+
+```bash
+seatmesh --profile .sm notify yesno "<title>" "<body>"
+seatmesh --profile .sm notify yesno "Reply to agent" "Approve the mesh change?" \
+  --yes-msg "Dan notify reply: YES" --target secretary
+```
+
+**Library:** `sendYesNoToast(loaded, title, body, yesMsg, yesTarget?)` — default target
+`secretary`; No peers `Dan notify reply: NO` to the same target. Custom actions:
 `yesNoNotifyActActions()` + `sendDesktopToastWithActLinks()`.
+
+**Action types** (`packages/core/src/chatroom/notify-act.ts`): `peer`, `inbox-resolve`,
+`checkback-ack`, `ping`. Registry + execute: `packages/daemon/src/notify-act.ts` on the
+inbox HTTP server (`mesh-inbox-server.ts`).
+
+Restart after daemon package changes: `seatmesh --profile .sm inbox restart`.
 
 ## Deep reference
 

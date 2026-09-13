@@ -88,3 +88,5 @@ tail -5 tasks/agent-seats/manager/cpe-rotate-history.jsonl 2>/dev/null || true
 - `.agent/fix-attempts.md` hub `cpe-oc-resume`
 - `scripts/notify-inbox.sh` — legacy shell parity (daemon uses TS library; script unchanged)
 - `connectivity-recovery.ts` — episode machine + `CPE_SKIP_DESKTOP_NOTIFY` on spawn
+- [COMMS.md](COMMS.md) **Notify-act** — Yes/No HTML links in toasts (not `-A` buttons);
+  recovery toasts here stay plain `inbox ·` text only

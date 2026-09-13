@@ -33,6 +33,11 @@ export function formatNotifyActLinksHtml(links: NotifyActLink[]): string {
     .join(" · ");
 }
 
+/** Clickable Yes/No (or other) anchors for the toast body — no duplicate plain URL lines. */
+export function formatNotifyActLinksForToast(links: NotifyActLink[]): string {
+  return formatNotifyActLinksHtml(links);
+}
+
 /** Standard Yes / No link pair for notifications (not notify-send -A buttons). */
 export function yesNoNotifyActActions(input: {
   yesMsg: string;
@@ -40,7 +45,7 @@ export function yesNoNotifyActActions(input: {
   noLabel?: string;
   yesLabel?: string;
 }): NotifyActRegisterAction[] {
-  const target = input.yesTarget ?? "manager";
+  const target = input.yesTarget ?? "secretary";
   return [
     {
       label: input.yesLabel ?? "Yes",
@@ -49,8 +54,12 @@ export function yesNoNotifyActActions(input: {
     },
     {
       label: input.noLabel ?? "No",
-      type: "ping",
-      params: {},
+      type: "peer",
+      params: {
+        target,
+        msg: "Dan notify reply: NO",
+        kind: "prompt",
+      },
     },
   ];
 }

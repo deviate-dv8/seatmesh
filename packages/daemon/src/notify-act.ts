@@ -141,7 +141,10 @@ export async function executeNotifyAct(
       ctx.store.appendPeer(peer);
       ctx.log(`NOTIFY-ACT peer -> ${peer.targetLabel} :: ${msg.slice(0, 80)}`);
       await ctx.onPeerEnqueued(peer);
-      return { ok: true, summary: `Queued peer to ${peer.targetLabel}.` };
+      return {
+        ok: true,
+        summary: `Queued peer to ${peer.targetLabel} (${target}): ${msg.slice(0, 120)}`,
+      };
     }
     default:
       return { ok: false, summary: `Unknown action type.` };

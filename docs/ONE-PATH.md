@@ -52,6 +52,8 @@ Use `./sm.sh agent` for scoped **can/cannot**; use forum **COLLAPSE/METHOD** row
 | Remind seats | `remind <slot\|all> [note]` |
 | Poll later | `checkback start 5m --renew 3m --expect "…" --here` |
 | Reset / ack intercept | `checkback reset <id> 5m` · `checkback ack <id> yes\|no` |
+| Operator toast (plain) | `notify <session> <check> [--url URL]` |
+| Dan Yes/No → agent | `notify yesno <title> <body> [--target secretary]` |
 
 **Multi-manager coordination:** `room say -r managers "SYNC: …"` (shared ledger).
 Use `peer manager` or `peer slot-N` when you need immediate inject to one pane.

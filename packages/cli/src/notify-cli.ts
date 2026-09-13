@@ -1,11 +1,36 @@
 import { Command } from "commander";
 import type { LoadedProfile } from "@seat-mesh/core";
-import { runMeshNotify } from "@seat-mesh/tmux";
+import { runMeshNotify, sendYesNoToast } from "@seat-mesh/tmux";
 
 export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
   const notify = new Command("notify").description(
-    "Desktop toast for operator (seat from TMUX pane; node-notifier native)",
+    "Desktop toast for operator (node-notifier; Yes/No via notify-act on inbox daemon)",
   );
+
+  notify
+    .command("yesno")
+    .description(
+      "Toast with clickable Yes/No links -> one-shot GET /act/v1 -> peer inject (default: secretary)",
+    )
+    .argument("<title>", "toast title")
+    .argument("<body>", "toast body (above the link line)")
+    .option("--yes-msg <text>", "peer message when Yes is clicked", "Dan notify reply: YES")
+    .option("--target <seat>", "peer target for Yes and No", "secretary")
+    .action(async (title: string, body: string, opts: { yesMsg: string; target: string }) => {
+      const loaded = getLoaded();
+      const ok = await sendYesNoToast(
+        loaded,
+        title.trim(),
+        body.trim(),
+        opts.yesMsg.trim(),
+        opts.target.trim(),
+      );
+      if (!ok) {
+        console.error("FAIL: toast not delivered (inbox down, muted, or act/register failed)");
+        process.exit(1);
+      }
+      console.log(`ok yesno toast -> ${opts.target.trim()} "${title.trim()}"`);
+    });
 
   notify
     .argument("<session>", "what this session is about (title body)")

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import notifier from "node-notifier";
 import {
-  formatNotifyActLinksHtml,
+  formatNotifyActLinksForToast,
   inboxBaseFromPort,
   isManagerKind,
   registerNotifyActLinks,
@@ -124,10 +124,10 @@ export async function sendDesktopToastWithActLinks(
 ): Promise<boolean> {
   const base = inboxBaseFromPort(meshInboxPort(loaded));
   const links = await registerNotifyActLinks(base, actions, ttlSec);
-  const htmlLinks = formatNotifyActLinksHtml(links);
+  const linkBlock = formatNotifyActLinksForToast(links);
   let fullBody = body;
-  if (htmlLinks) {
-    fullBody += fullBody ? `\n\n${htmlLinks}` : htmlLinks;
+  if (linkBlock) {
+    fullBody += fullBody ? `\n\n${linkBlock}` : linkBlock;
   }
   return sendDesktopToastSync(loaded.workspace, title, fullBody);
 }
@@ -138,7 +138,7 @@ export async function sendYesNoToast(
   title: string,
   body: string,
   yesMsg: string,
-  yesTarget = "manager",
+  yesTarget = "secretary",
 ): Promise<boolean> {
   return sendDesktopToastWithActLinks(
     loaded,

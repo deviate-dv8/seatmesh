@@ -198,6 +198,7 @@ Coordination / comms (pane to pane)
   coord expect <target> <hub> <snippet...>   arm coord-expect on manager (verify + re-assign)
   room | chat | index | proxy | providers | manager | stack | profile show
   notify <session> <check> [--url URL]   desktop toast (seat from TMUX pane)
+  notify yesno <title> <body> [--target secretary]   Yes/No links -> peer (notify-act)
   preview <file...> [--set days] [--notify]   publish markdown to mdview.io
   launch [--now] [targets…]
 

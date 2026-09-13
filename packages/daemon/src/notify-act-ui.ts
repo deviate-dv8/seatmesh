@@ -35,28 +35,28 @@ export function htmlButtonLinks(links: NotifyActLink[], variant: "yesno" | "plai
     .join("\n");
 }
 
-/** FE test page: Yes / No as plain link-buttons (same URLs as notification body). */
+/** Browser page: same one-shot Yes/No URLs as embedded in desktop toasts. */
 export function htmlDemoYesNoPage(links: NotifyActLink[], port: number): string {
   const buttons = htmlButtonLinks(links, "yesno");
   return htmlUiShell(
-    "seatmesh · Yes / No demo",
-    `<h1>Notify-act demo (localhost)</h1>
-<p>These are the same one-shot links you would embed in a desktop notification. Click once — token burns.</p>
+    "seatmesh · Yes / No",
+    `<h1>Yes / No (notify-act)</h1>
+<p>Same links as in a desktop notification. One click executes the action and burns the token.</p>
 <div class="row">${buttons}</div>
-<p><small>Register: POST /act/register · Daemon :${port} · <a href="/ui">/ui</a> · <a href="/health">/health</a></small></p>`,
+<p><small>POST /act/register · :${port} · <a href="/ui">/ui</a> · <a href="/health">/health</a></small></p>`,
   );
 }
 
 export function htmlUiHome(port: number): string {
   return htmlUiShell(
     "seatmesh ui",
-    `<h1>seatmesh browser (v0)</h1>
-<p>Local mesh control plane on <code>127.0.0.1:${port}</code>.</p>
+    `<h1>seatmesh browser</h1>
+<p>Local inbox control plane on <code>127.0.0.1:${port}</code>.</p>
 <div class="row">
-  <a class="btn btn-link" href="/ui/demo-yesno">Yes / No button links</a>
+  <a class="btn btn-link" href="/ui/demo-yesno">Yes / No (demo links)</a>
   <a class="btn btn-muted" href="/health">Health (JSON)</a>
 </div>
-<p><small>Notifications: register actions, paste HTML links in toast body (Plasma opens in browser).</small></p>`,
+<p><small>CLI: <code>notify yesno</code> · toast body uses HTML Yes/No anchors only.</small></p>`,
   );
 }
 

@@ -556,12 +556,20 @@ async function main(): Promise<void> {
               label: "Yes",
               type: "peer",
               params: {
-                target: "manager-3",
-                msg: "YES: mesh UI / notify-act demo link",
+                target: "secretary",
+                msg: "Dan notify reply: YES",
                 kind: "prompt",
               },
             },
-            { label: "No", type: "ping", params: {} },
+            {
+              label: "No",
+              type: "peer",
+              params: {
+                target: "secretary",
+                msg: "Dan notify reply: NO",
+                kind: "prompt",
+              },
+            },
           ],
           3600,
           baseUrl,
