@@ -35,10 +35,30 @@ Kind inference: `secretary-*` -> secretary; `mini-*` / `slot-*` -> mini/worker; 
 base column id -> manager. Override with `layout.base.kinds`.
 
 Workers = `layout.workers.slots`. Minis = `layout.minis.max`. Base coord count = `columns.length`
-(1..12).
+(1..128 — "100 managers" is a config array length, not a code change).
 
 Consumer profile may still list `[manager, manager-2, secretary]` — those are **names in yaml**,
 not schema variants. See `packages/core/src/schema/seat-kind.ts`.
+
+**Adding the Nth manager needs exactly one thing: its id in `layout.base.columns`.**
+`seats.dirs`, a `roles/columns/<id>.yaml` overlay, and a `layout.base.cli.<id>` entry are all
+*optional* customization, never a requirement — `seatDirSegment()` defaults an unmapped column
+id to itself, `loadRoleIndex()` falls back to the base `manager.yaml` when no overlay file
+exists, and `cliForBaseColumn()` falls back to `defaultCliForKind()`. Don't hand-author a
+trivial `extends: manager` yaml file or an identity `dirs: {manager-4: manager-4}` entry — they
+do nothing the fallback wasn't already doing, and they're exactly the cargo-cult pattern this
+architecture exists to avoid (see 2026-09-13 Cursor postmortem). Use:
+
+```bash
+seatmesh --profile .sm layout column add manager-4 [--cli claude] [--after manager-3] [--co-typed]
+seatmesh --profile .sm layout column list
+seatmesh --profile .sm layout column remove manager-4
+```
+
+(`packages/core/src/profile-edit.ts`) rather than hand-editing the yaml array — it validates the
+id, checks for duplicates, and preserves file comments. Seat dir + FOCUS/TASKS/REMINDER are then
+auto-created on the next `up`/`reload` by `runSeatInit`, which already iterates
+`layout.base.columns` generically.
 
 ### Human co-typed panes (`manager-2` inject hazard) — needs ACK + fix
 

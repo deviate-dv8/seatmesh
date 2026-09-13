@@ -1,4 +1,5 @@
 kind: mini
+extends: worker
 banner:
   - "cold_start=./sm.sh whoami --validate | mini POV — NOT a worker seat; no 30N0/30N1"
 read_first:

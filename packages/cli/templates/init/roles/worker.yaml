@@ -1,4 +1,5 @@
 kind: worker
+extends: common
 banner:
   - "cold_start=./sm.sh whoami --validate | seat FOCUS + TASKS every turn"
 read_first:

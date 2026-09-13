@@ -1,7 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
-import { MeshAgentsSchema, type MeshAgents } from "@seat-mesh/core";
+import {
+  MeshAgentsSchema,
+  buildResolvedPaths,
+  type LoadedProfile,
+  type MeshAgents,
+} from "@seat-mesh/core";
 import { buildAgentLaunchCmd } from "./agent-builder.js";
+
+/** Absolute path to mesh-agents.json (respects profile paths.scope). */
+export function meshAgentsJsonPath(loaded: LoadedProfile): string {
+  return buildResolvedPaths(loaded).meshAgentsJson;
+}
+
+/** Absolute path to legacy tmux-main-agents.json seed. */
+export function agentsJsonPath(loaded: LoadedProfile): string {
+  return buildResolvedPaths(loaded).agentsJson;
+}
 
 // ---------------------------------------------------------------------------
 // Legacy harness state (tmux-main-agents.json) -- read-only compat layer.
@@ -20,6 +35,8 @@ export interface PaneAgentState {
 export interface AgentsStateFile {
   panes: PaneAgentState[];
   manager?: PaneAgentState;
+  /** Extra base columns from mesh-agents coords (any profile column id). */
+  coords?: Record<string, PaneAgentState>;
   conventions?: {
     secretary_default_cli?: string;
     mini_default_cli?: string;
@@ -37,12 +54,17 @@ export interface AgentsStateFile {
   };
 }
 
-export function loadAgentsState(workspace: string, relPath: string): AgentsStateFile {
-  const file = path.join(workspace, relPath);
+export function loadAgentsStateAt(file: string): AgentsStateFile {
   if (!fs.existsSync(file)) {
     throw new Error(`agents state not found: ${file}`);
   }
   return JSON.parse(fs.readFileSync(file, "utf8")) as AgentsStateFile;
+}
+
+/** @deprecated prefer loadAgentsStateAt(agentsJsonPath(loaded)) */
+export function loadAgentsState(workspace: string, relPath: string): AgentsStateFile {
+  const file = path.isAbsolute(relPath) ? relPath : path.join(workspace, relPath);
+  return loadAgentsStateAt(file);
 }
 
 export function workerStateForSlot(
@@ -84,14 +106,20 @@ export function resolveLaunchCmd(
  * Load + validate mesh-agents.json via Zod. Returns null if file does not
  * exist (callers may fall back to legacy loadAgentsState).
  */
-export function loadMeshAgents(
-  workspace: string,
-  relPath: string,
-): MeshAgents | null {
-  const file = path.join(workspace, relPath);
+export function loadMeshAgentsAt(file: string): MeshAgents | null {
   if (!fs.existsSync(file)) return null;
   const raw = JSON.parse(fs.readFileSync(file, "utf8"));
   return MeshAgentsSchema.parse(raw);
+}
+
+export function loadMeshAgentsForProfile(loaded: LoadedProfile): MeshAgents | null {
+  return loadMeshAgentsAt(meshAgentsJsonPath(loaded));
+}
+
+/** @deprecated prefer loadMeshAgentsForProfile(loaded) or loadMeshAgentsAt(absPath) */
+export function loadMeshAgents(workspace: string, relPath: string): MeshAgents | null {
+  const file = path.isAbsolute(relPath) ? relPath : path.join(workspace, relPath);
+  return loadMeshAgentsAt(file);
 }
 
 /**
@@ -128,9 +156,21 @@ export function meshToLegacyAgentsState(mesh: MeshAgents): AgentsStateFile {
       }
     : undefined;
 
+  const coords: Record<string, PaneAgentState> = {};
+  for (const [id, slot] of Object.entries(mesh.coords ?? {})) {
+    coords[id] = {
+      type: slot.type,
+      name: slot.name ?? id,
+      role: id,
+      resume_id: slot.resumeId ?? null,
+      resume_cmd: slot.resumeCmd ?? null,
+    };
+  }
+
   return {
     panes,
     manager,
+    coords: Object.keys(coords).length ? coords : undefined,
     conventions: {
       secretary_default_cli: mesh.conventions.secretaryDefaultCli,
       mini_default_cli: mesh.conventions.miniDefaultCli,
@@ -147,14 +187,11 @@ export function meshToLegacyAgentsState(mesh: MeshAgents): AgentsStateFile {
 }
 
 /** Launch/switch: prefer mesh-agents.json (saved resumeCmd) over legacy harness JSON. */
-export function loadLaunchState(
-  workspace: string,
-  meshRelPath: string,
-  legacyRelPath: string,
-): AgentsStateFile {
-  const mesh = loadMeshAgents(workspace, meshRelPath);
+export function loadLaunchState(loaded: LoadedProfile): AgentsStateFile {
+  const meshFile = meshAgentsJsonPath(loaded);
+  const mesh = loadMeshAgentsAt(meshFile);
   if (mesh) return meshToLegacyAgentsState(mesh);
-  return loadAgentsState(workspace, legacyRelPath);
+  return loadAgentsStateAt(agentsJsonPath(loaded));
 }
 
 /**
@@ -162,11 +199,9 @@ export function loadLaunchState(
  * Returns a tagged result so callers know which source was used.
  */
 export function loadAgentsStateCompat(
-  workspace: string,
-  meshRelPath: string,
-  legacyRelPath: string,
+  loaded: LoadedProfile,
 ): { source: "mesh"; state: MeshAgents } | { source: "legacy"; state: AgentsStateFile } {
-  const mesh = loadMeshAgents(workspace, meshRelPath);
+  const mesh = loadMeshAgentsForProfile(loaded);
   if (mesh) return { source: "mesh", state: mesh };
-  return { source: "legacy", state: loadAgentsState(workspace, legacyRelPath) };
+  return { source: "legacy", state: loadAgentsStateAt(agentsJsonPath(loaded)) };
 }

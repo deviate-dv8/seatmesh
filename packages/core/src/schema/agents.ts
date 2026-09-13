@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { expandColumnAlias } from "./seat-kind.js";
 
 /**
  * Mesh-owned slot state file (`mesh-agents.json`).
@@ -10,11 +11,8 @@ import { z } from "zod";
  * Field convention: camelCase (not snake_case). The legacy harness
  * format uses `resume_id`; mesh-agents.json normalises to `resumeId`.
  *
- * Slot mapping (same as slot/types.ts):
- *   manager  - base column 0
- *   secretary - base column 1
- *   workers  - window "workers", 3x2 grid, slots 1-6
- *   minis    - window "minis", 4x2 grid, minis 1-8
+ * Slot mapping: primary manager + primary secretary + coords (every other
+ * base column id from the profile) + workers + minis.
  */
 
 export const CliTypeSchema = z.enum([
@@ -146,23 +144,55 @@ export type SavedLayout = z.infer<typeof SavedLayoutSchema>;
 
 // -- Top-level mesh-agents.json -----------------------------------------
 
-export const MeshAgentsSchema = z.object({
-  /** Schema version for future migrations. */
-  schemaVersion: z.literal(1).default(1),
-  /** Tmux session name ("mesh"). */
-  session: z.string().min(1),
-  /** Workspace root. */
-  workdir: z.string().min(1),
-  manager: ManagerSlotSchema.optional(),
-  manager2: ManagerSlotSchema.optional(),
-  secretary: SecretarySlotSchema.optional(),
-  workers: z.array(WorkerSlotSchema).default([]),
-  minis: z.array(MiniSlotSchema).default([]),
-  /** Saved layout overrides (e.g. minis grid/leads); profile yaml is fallback only. */
-  layout: SavedLayoutSchema.optional(),
-  conventions: ConventionsSchema,
-  /** ISO-8601 timestamp of last mutation. */
-  updatedAt: z.string().datetime().optional(),
+const MeshAgentsObjectSchema = z
+  .object({
+    /** Schema version for future migrations. */
+    schemaVersion: z.literal(1).default(1),
+    /** Tmux session name ("mesh"). */
+    session: z.string().min(1),
+    /** Workspace root. */
+    workdir: z.string().min(1),
+    manager: ManagerSlotSchema.optional(),
+    /** Every extra base column id (not primary manager / secretary). */
+    coords: z.record(z.string(), ManagerSlotSchema).optional(),
+    secretary: SecretarySlotSchema.optional(),
+    workers: z.array(WorkerSlotSchema).default([]),
+    minis: z.array(MiniSlotSchema).default([]),
+    /** Saved layout overrides (e.g. minis grid/leads); profile yaml is fallback only. */
+    layout: SavedLayoutSchema.optional(),
+    conventions: ConventionsSchema,
+    /** ISO-8601 timestamp of last mutation. */
+    updatedAt: z.string().datetime().optional(),
+  })
+  .passthrough();
+
+const COMPACT_COORD_KEY = /^[a-z]+\d+$/;
+
+export const MeshAgentsSchema = MeshAgentsObjectSchema.transform((data) => {
+  const coords = { ...(data.coords ?? {}) };
+  const rest: typeof data = { ...data };
+  for (const [key, val] of Object.entries(data)) {
+    if (!COMPACT_COORD_KEY.test(key)) continue;
+    const parsed = ManagerSlotSchema.safeParse(val);
+    if (!parsed.success) continue;
+    const id = expandColumnAlias(key).find((a) => a.includes("-")) ?? key;
+    if (!coords[id]) {
+      coords[id] = { ...parsed.data, name: parsed.data.name ?? id };
+    }
+    delete (rest as Record<string, unknown>)[key];
+  }
+  return {
+    ...rest,
+    coords: Object.keys(coords).length ? coords : undefined,
+  };
 });
 
 export type MeshAgents = z.infer<typeof MeshAgentsSchema>;
+
+export function extraColumnSlot(
+  mesh: MeshAgents,
+  id: string,
+): z.infer<typeof ManagerSlotSchema> | undefined {
+  if (id === "manager") return mesh.manager;
+  return mesh.coords?.[id];
+}

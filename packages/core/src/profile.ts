@@ -18,7 +18,6 @@ import {
   type MeshRuntimePaths,
 } from "./runtime-paths.js";
 import {
-  managerColumnIds,
   primaryManagerColumn,
   primarySecretaryColumn,
   seatDirSegment,
@@ -103,9 +102,7 @@ export function profilePaths(loaded: LoadedProfile) {
   const resolved = buildResolvedPaths(loaded);
   const rt = meshRuntimePaths(loaded);
   const dirs = profile.seats.dirs;
-  const mgrCols = managerColumnIds(profile.layout);
   const primaryMgr = primaryManagerColumn(profile.layout);
-  const secondMgr = mgrCols[1];
   const primarySec = primarySecretaryColumn(profile.layout);
   for (const [label, abs] of [
     ["dataRoot", resolved.dataRoot],
@@ -127,10 +124,6 @@ export function profilePaths(loaded: LoadedProfile) {
     rolesDir: resolved.rolesDir,
     contractsDir: resolved.contractsDir,
     managerDir: path.join(resolved.seatsRoot, seatDirSegment(dirs, primaryMgr)),
-    manager2Dir: path.join(
-      resolved.seatsRoot,
-      seatDirSegment(dirs, secondMgr ?? "manager-2"),
-    ),
     secretaryDir: path.join(resolved.seatsRoot, seatDirSegment(dirs, primarySec)),
     daemonPort: resolveDaemonPort(profile, loaded.workspace),
     pathsManifest: path.join(loaded.profileDir, "paths.json"),

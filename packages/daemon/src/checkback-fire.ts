@@ -11,12 +11,12 @@ export function checkbackFirePriority(kind: string | undefined): number {
       return 2;
     case "cc-limit-retry":
       return 2;
-    case "manager-2-nudge":
     case "coord-nudge":
       return 3;
     case "mesh-watch":
       return 2;
     default:
+      if (kind?.endsWith("-nudge") && kind !== "manager-nudge") return 3;
       return 10;
   }
 }

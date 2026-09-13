@@ -30,12 +30,16 @@ Agents **can still receive** inbound ACK/status class mail. Receiving ≠ new pr
 
 ## Inbound: deliver vs backlog
 
-### Always deliver (even when BUSY on hub)
+### Never paste while BUSY / typing (hard)
 
-Lightweight — agent may read and **ACK in shell**, must **not** pivot hub:
+Steer into Cursor **follow-up** is forbidden. That paste becomes the next user turn and the agent drops the in-flight instruction.
 
-- Body matches `^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?)\b`
-- Secretary/manager **compose-gate** already holds heavy substance on coord panes; workers use peer backlog instead
+Park to `PEER-BACKLOG.jsonl` until composer is empty/afk:
+
+- ACK / FYI / STATUS / ASSIGN / room pings
+- `held:busy` / `held:typing` / `held:cotyped:*` / `held:coord:wait-busy|wait-typing`
+
+**Exception:** body contains `PRIORITY` or `STOP other work` (and the pane is not humanCoTyped).
 
 ### Backlog (when seat BUSY)
 
@@ -61,7 +65,7 @@ Normal FIFO from backlog + live queue (prompt before room).
 
 - `peer-backlog.ts`: on `held:busy|held:typing`, park row → `PEER-BACKLOG.jsonl`, **continue draining other panes** (no global wedge).
 - `promotePeerBacklog`: when target pane idle, re-queue oldest backlog row to `PEER.jsonl`.
-- `shouldBacklogPeerHold`: false for ACK-class body (deliver lightly even if busy — prefer steer only on cursor follow-up lane).
+- `shouldBacklogPeerHold`: true for busy/typing/cotyped holds. ACK-class is NOT exempt. Only `PRIORITY` / `STOP other work` skip backlog.
 - Manager/secretary: existing `compose-gate.ts` (substance held, ACK lane to secretary).
 
 ## Verify

@@ -12,17 +12,18 @@ export interface PeerBacklogRow extends PeerRow {
 
 const BUSY_HOLD = /^held:(busy|typing)/;
 
-/** Lightweight mail — deliver even when busy; agent ACKs in shell, hub stays rank-1. */
+/** Lightweight mail class (FYI/ACK). Still backlogged while busy — do not steer-paste. */
 export function isAckClassPeer(msg: string): boolean {
   const body = msg.replace(/^\[[^\]]+\]\s*/, "").trim();
   return /^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?)\b/i.test(body);
 }
 
-/** Active HUB beats coordination mail — park unless ACK-class or explicit override. */
+/** Park inbound while the pane is busy/typing. Only PRIORITY / STOP other work pastes. */
 export function shouldBacklogPeerHold(reason: string, msg: string): boolean {
-  if (isAckClassPeer(msg)) return false;
   if (/\bPRIORITY\b|\bSTOP other work\b/i.test(msg)) return false;
   if (BUSY_HOLD.test(reason)) return true;
+  if (/^held:cotyped:/.test(reason)) return true;
+  if (/^held:coord:(wait-busy|wait-typing)/.test(reason)) return true;
   if (/^held:coord:/.test(reason)) return false;
   return false;
 }

@@ -1,5 +1,11 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "@seat-mesh/core";
+import {
+  baseColumnIds,
+  expandColumnAlias,
+  primaryManagerColumn,
+  primarySecretaryColumn,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import { extractOpenCodeSession, normalizeOpenCodeSessionId } from "@seat-mesh/providers";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
@@ -11,7 +17,7 @@ import {
 } from "./launch-verify.js";
 import {
   loadLaunchState,
-  loadMeshAgents,
+  loadMeshAgentsForProfile,
   miniStateForN,
   resolveLaunchCmd,
   workerStateForSlot,
@@ -180,11 +186,7 @@ export function launchSession(
     sessionName: active.sessionName,
   });
 
-  const state = loadLaunchState(
-    active.workspace,
-    active.profile.state.meshAgentsJson,
-    active.profile.state.agentsJson,
-  );
+  const state = loadLaunchState(active);
   const skipEmpty = state.conventions?.launch_skips_empty ?? true;
   const wantAll = !opts.targets?.length;
   const want = new Set((opts.targets ?? []).map((t) => t.toLowerCase()));
@@ -207,26 +209,28 @@ export function launchSession(
     }
   }
 
-  const meshForCoord = loadMeshAgents(
-    loaded.workspace,
-    loaded.profile.state.meshAgentsJson,
+  const meshForCoord = loadMeshAgentsForProfile(loaded);
+  const extraCols = baseColumnIds(layout).filter(
+    (id) =>
+      id !== primaryManagerColumn(layout) && id !== primarySecretaryColumn(layout),
   );
-  if (wantAll || want.has("manager-2") || want.has("manager2")) {
-    const pane = coordPaneForRole(session, layout.base.window, "manager-2");
-    if (pane) {
-      const profileCli = cliForBaseColumn(loaded, "manager-2");
-      const harnessType = profileCli === "cursor-agent" ? "agent" : profileCli;
-      const saved = meshForCoord?.manager2 ?? meshForCoord?.manager;
-      const entry = {
-        type: harnessType,
-        resume_id: saved?.type === harnessType ? (saved.resumeId ?? null) : null,
-        resume_cmd: saved?.type === harnessType ? (saved.resumeCmd ?? null) : null,
-      };
-      const cmd =
-        resolveLaunchCmd({ ...entry, type: harnessType }, loaded.workspace) ??
-        buildAgentLaunchCmd(harnessType, loaded.workspace, entry.resume_id);
-      results.push(tryLaunchPane(loaded, pane, "manager-2", cmd, skipEmpty, harnessType));
-    }
+  for (const id of extraCols) {
+    const aliases = expandColumnAlias(id);
+    if (!(wantAll || aliases.some((a) => want.has(a)))) continue;
+    const pane = coordPaneForRole(session, layout.base.window, id);
+    if (!pane) continue;
+    const profileCli = cliForBaseColumn(loaded, id);
+    const harnessType = profileCli === "cursor-agent" ? "agent" : profileCli;
+    const saved = meshForCoord?.coords?.[id];
+    const entry = {
+      type: harnessType,
+      resume_id: saved?.type === harnessType ? (saved.resumeId ?? null) : null,
+      resume_cmd: saved?.type === harnessType ? (saved.resumeCmd ?? null) : null,
+    };
+    const cmd =
+      resolveLaunchCmd({ ...entry, type: harnessType }, loaded.workspace) ??
+      buildAgentLaunchCmd(harnessType, loaded.workspace, entry.resume_id);
+    results.push(tryLaunchPane(loaded, pane, id, cmd, skipEmpty, harnessType));
   }
 
   if (wantAll || want.has("secretary")) {
@@ -264,7 +268,7 @@ export function launchSession(
     state.conventions?.mini_default_cli ??
     state.conventions?.secretary_default_cli ??
     "opencode";
-  const mesh = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
+  const mesh = loadMeshAgentsForProfile(loaded);
   const wantMinis =
     wantAll || want.has("minis") || want.has("mini") || [...want].some((t) => t.startsWith("mini-"));
   if (wantMinis) {

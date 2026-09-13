@@ -8,26 +8,32 @@ import {
 } from "./mesh-copy.js";
 
 describe("supervise status copy", () => {
-  it("formats a one-line lead STATUS", () => {
+  it("formats a one-line lead STATUS from the profile lead list", () => {
     expect(
-      formatSuperviseStatusLine({
-        managerMark: "BUSY",
-        managerOpen: 0,
-        manager2Mark: "BUSY",
-        manager2Open: 1,
-      }),
-    ).toBe("manager BUSY 0 open | manager-2 BUSY 1 open");
+      formatSuperviseStatusLine([
+        { id: "manager", mark: "BUSY", open: 0 },
+        { id: "lead-west", mark: "BUSY", open: 1 },
+      ]),
+    ).toBe("manager BUSY 0 open | lead-west BUSY 1 open");
+  });
+
+  it("includes every extra manager-kind lead", () => {
+    expect(
+      formatSuperviseStatusLine([
+        { id: "manager", mark: "BUSY", open: 0 },
+        { id: "lead-west", mark: "OPEN", open: 0 },
+        { id: "lead-east", mark: "BUSY", open: 2 },
+      ]),
+    ).toBe("manager BUSY 0 open | lead-west OPEN 0 open | lead-east BUSY 2 open");
   });
 
   it("prefixes the daemon inject tag", () => {
-    const line = formatSuperviseStatusLine({
-      managerMark: "OPEN",
-      managerOpen: 0,
-      manager2Mark: "BLOCKED",
-      manager2Open: 2,
-    });
+    const line = formatSuperviseStatusLine([
+      { id: "manager", mark: "OPEN", open: 0 },
+      { id: "lead-west", mark: "BLOCKED", open: 2 },
+    ]);
     expect(meshInboxSuperviseStatus(line)).toBe(
-      `${MESH_INBOX_TAG} SUPERVISE-STATUS: manager OPEN 0 open | manager-2 BLOCKED 2 open`,
+      `${MESH_INBOX_TAG} SUPERVISE-STATUS: manager OPEN 0 open | lead-west BLOCKED 2 open`,
     );
   });
 

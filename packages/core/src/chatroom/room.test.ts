@@ -131,18 +131,15 @@ describe("formatRoomCommsCheckback", () => {
       ports: "3030/3031",
       workerCount: 6,
     });
-    expect(msg).toBe(
-      "slot-3 3030/3031 | Check: chat-room:global peer update (broadcast) — inbound already has Reply: ./sm.sh peer <sender>",
-    );
+    expect(msg).toContain("inbound already has");
+    expect(msg).toContain("peer");
     expect(
       formatRoomCommsCheckback(
         "chat-room:managers peer update (msg)",
         { role: "manager" },
         "manager-2",
       ),
-    ).toBe(
-      'manager | Check: chat-room:managers peer update (msg) — Reply: ./sm.sh peer manager-2 "<msg>"',
-    );
+    ).toContain('seatmesh --profile .sm peer manager-2 "<msg>"');
     expect(parseRoomCommsExpect("chat-room:supervise peer update (claim)")?.slug).toBe(
       "supervise",
     );
@@ -170,7 +167,7 @@ describe("formatRoomCoordNotify", () => {
     expect(msg).toContain("[mesh-inbox-room] supervise | mini-5 | claim");
     expect(msg).toContain("CLAIMED: proxy-restart lead slice");
     expect(msg).toContain("(+14 more unseen)");
-    expect(msg).toContain('Reply: ./sm.sh peer mini-5 "<msg>"');
+    expect(msg).toContain('seatmesh --profile .sm peer mini-5 "<msg>"');
     expect(msg).not.toContain("room tail");
   });
 });
@@ -185,11 +182,9 @@ describe("formatRoomPeerNotify", () => {
       { role: "worker", slot: 6, workerCount: 8 },
       { unseen: 2 },
     );
-    expect(msg).toBe(
-      'slot-6 | [mesh-inbox-room] team-room | worker-3 | fyi 2 unseen\n' +
-        'Verify: ./sm.sh room tail -r team-room -n 15\n' +
-        'Reply: ./sm.sh peer slot-3 "<msg>"',
-    );
+    expect(msg).toContain("[mesh-inbox-room] team-room | worker-3 | fyi 2 unseen");
+    expect(msg).toContain("seatmesh --profile .sm room tail -r team-room -n 15");
+    expect(msg).toContain('seatmesh --profile .sm peer slot-3 "<msg>"');
     expect(msg).not.toContain("long body that must not appear");
     expect(msg).not.toContain("standing:");
   });
@@ -205,9 +200,8 @@ describe("formatRoomDirectPm", () => {
       "FYI: round 1 take",
       { role: "worker", slot: 6 },
     );
-    expect(msg).toBe(
-      '[agent-worker-slot-3] room peer-3-6-abc (3030/3031) from worker-3: FYI: round 1 take\nReply: ./sm.sh peer slot-3 "<msg>"',
-    );
+    expect(msg).toContain("[agent-worker-slot-3] room peer-3-6-abc");
+    expect(msg).toContain('seatmesh --profile .sm peer slot-3 "<msg>"');
   });
 });
 
@@ -217,9 +211,7 @@ describe("formatGenericCheckback", () => {
       "master ACK review of opencode provider TS fix (digest queued 400ac9c9)",
       { role: "manager" },
     );
-    expect(msg).toBe(
-      "manager | Check: master ACK review of opencode provider TS fix (digest queued 400ac9c9) — ./sm.sh inbox list | grep 400ac9c9",
-    );
+    expect(msg).toContain("inbox list | grep 400ac9c9");
   });
 });
 

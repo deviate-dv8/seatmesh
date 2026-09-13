@@ -45,7 +45,7 @@ export function runPeerVerify(
       pass: false,
       target,
       paneId,
-      detail: "plain_shell — run: ./sm.sh launch manager-2 (no peer until CLI live)",
+      detail: "plain_shell — run: seatmesh launch <target> (no peer until CLI live)",
     };
   }
   if (!defaultComposerReady(snap, prov.id)) {

@@ -12,7 +12,7 @@ export function requireRole(loaded: LoadedProfile, allowed: string[], cmdLabel: 
   console.error(
     `UNAUTHORIZED: ${cmdLabel} requires role=${allowed.join("|")} (you_are=${w.role})`,
   );
-  console.error("hint: ./sm.sh agent");
+  console.error("hint: seatmesh --profile .sm agent");
   process.exit(2);
 }
 
@@ -23,6 +23,6 @@ export function requireCoordRole(loaded: LoadedProfile, cmdLabel: string): void 
   console.error(
     `UNAUTHORIZED: ${cmdLabel} requires role=manager|secretary (you_are=${w.role})`,
   );
-  console.error("hint: ./sm.sh agent");
+  console.error("hint: seatmesh --profile .sm agent");
   process.exit(2);
 }

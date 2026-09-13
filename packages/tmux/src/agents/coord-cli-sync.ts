@@ -78,6 +78,10 @@ function savedCoordEntry(
       resume_cmd: sec.resume_cmd ?? null,
     };
   }
+  const slot = state.coords?.[role];
+  if (slot) {
+    return { ...slot, name: role, role };
+  }
   return undefined;
 }
 
@@ -168,11 +172,7 @@ export function syncCoordClisFromProfile(
   const layout = loaded.profile.layout;
   if (!layout) return [];
 
-  const state = loadLaunchState(
-    loaded.workspace,
-    loaded.profile.state.meshAgentsJson,
-    loaded.profile.state.agentsJson,
-  );
+  const state = loadLaunchState(loaded);
 
   if (trigger === "attach" && !coordSyncEnabledOnAttach(loaded, state.conventions)) {
     return [];

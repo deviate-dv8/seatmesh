@@ -12,7 +12,7 @@ function sampleAgents(): MeshAgents {
     session: "mesh-abc",
     workdir: "/tmp/ws",
     manager: { type: "agent", resumeId: "mgr-1" },
-    manager2: { type: "claude", resumeId: "mgr2-1" },
+    coords: { "lead-west": { type: "claude", resumeId: "lead-1" } },
     secretary: { type: "opencode", wanted: true, resumeId: "ses_sec" },
     workers: [
       { slot: 1, type: "agent", resumeId: "w1" },
@@ -35,7 +35,7 @@ describe("formatSaveSummary", () => {
     expect(out).toContain("--- summary ---");
     expect(out).toContain("session: mesh-abc");
     expect(out).toContain("manager: agent resume");
-    expect(out).toContain("manager-2: claude resume");
+    expect(out).toContain("lead-west: claude resume");
     expect(out).toContain("secretary: wanted=true type=opencode resume");
     expect(out).toContain("slot 1: agent resume");
     expect(out).toContain("slot 2: empty");
@@ -60,15 +60,14 @@ describe("assertSaveAllowed", () => {
 });
 
 describe("saveMeshAgentsFile", () => {
-  it("writes atomically and round-trips manager-2", () => {
+  it("writes atomically and round-trips coord columns", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mesh-agents-"));
-    const rel = "mesh-agents.json";
-    const file = saveMeshAgentsFile(dir, rel, sampleAgents());
+    const file = saveMeshAgentsFile(path.join(dir, ".sm", "mesh-agents.json"), sampleAgents());
     expect(fs.existsSync(file)).toBe(true);
     const leftovers = fs.readdirSync(dir).filter((n) => n.endsWith(".tmp"));
     expect(leftovers).toEqual([]);
     const parsed = MeshAgentsSchema.parse(JSON.parse(fs.readFileSync(file, "utf8")));
-    expect(parsed.manager2?.type).toBe("claude");
+    expect(parsed.coords?.["lead-west"]?.type).toBe("claude");
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

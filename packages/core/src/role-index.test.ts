@@ -77,6 +77,49 @@ describe("role-index", () => {
     expect(roleAllows({}, "anything")).toBe(true);
   });
 
+  it("inherits manager via columns/manager-2.yaml extends (ignores roles/manager-2.yaml)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "sm-role-"));
+    const rolesDir = path.join(root, "roles");
+    fs.mkdirSync(path.join(rolesDir, "columns"), { recursive: true });
+    fs.writeFileSync(
+      path.join(rolesDir, "common.yaml"),
+      `banner:\n  - "from=common"\n`,
+    );
+    fs.writeFileSync(
+      path.join(rolesDir, "manager.yaml"),
+      `kind: manager\nextends: common\nbanner:\n  - "from=manager"\n`,
+    );
+    fs.writeFileSync(
+      path.join(rolesDir, "manager-2.yaml"),
+      `kind: manager-2\nbanner:\n  - "from=legacy-kind-file"\n`,
+    );
+    fs.writeFileSync(
+      path.join(rolesDir, "columns", "manager-2.yaml"),
+      `extends: manager\nbanner:\n  - "from=column-overlay"\n`,
+    );
+
+    const index = loadRoleIndex(rolesDir, "manager-2");
+    expect(index.banner).toEqual(["from=common", "from=manager", "from=column-overlay"]);
+    expect(index.banner).not.toContain("from=legacy-kind-file");
+  });
+
+  it("extends chain merges policies by id (child wins)", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "sm-role-"));
+    const rolesDir = path.join(root, "roles");
+    fs.mkdirSync(rolesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(rolesDir, "worker.yaml"),
+      `kind: worker\npolicies:\n  - id: p1\n    text: base\n`,
+    );
+    fs.writeFileSync(
+      path.join(rolesDir, "mini.yaml"),
+      `kind: mini\nextends: worker\npolicies:\n  - id: p1\n    text: mini override\n`,
+    );
+
+    const index = loadRoleIndex(rolesDir, "mini-3");
+    expect(index.policies?.find((p) => p.id === "p1")?.text).toBe("mini override");
+  });
+
   it("normalizes master alias to manager", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "sm-role-"));
     const rolesDir = path.join(root, "roles");

@@ -150,8 +150,8 @@ export function runSwitch(
     console.log(`OK: fresh-summon whoami prompt ${target} ${brief.detail}`);
   }
 
-  if (row.role === "manager") {
-    selectPaneUnfocused(["-t", paneId, "-T", "manager"]);
+  if (row.role && row.role !== "worker" && row.role !== "manager-mini") {
+    selectPaneUnfocused(["-t", paneId, "-T", row.role]);
   }
   tmux([
     "set-option",

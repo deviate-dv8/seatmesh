@@ -4,6 +4,8 @@
  * Never paste patterns.md or role file lists into a pane inject.
  */
 
+import { seatmeshCmd } from "./cli-hints.js";
+
 /** Always-on dots point here. .sm/roles is whoami-only — not loaded every turn. */
 export const AGENT_PROMPT = {
   constsFile: "services/seat-mesh/packages/core/src/messages/mesh-copy.ts",
@@ -25,9 +27,8 @@ export const BALANCE_CHECKBACK = {
 
 export const SUPERVISE_CHECKBACK = {
   managerNudgeExpect: "manager idle — complete open TASKS.md checkboxes",
-  manager2NudgeExpect: "manager-2 idle — complete open TASKS.md checkboxes",
   secretarySuperviseExpect:
-    "supervise manager + manager-2 — nudge idle lead on open TASKS; ignore stale mini DIGEST",
+    "supervise all manager columns — nudge idle lead on open TASKS; ignore stale mini DIGEST",
   meshWatchExpect: "mesh MINI-DONE / health change / STALE thought-only minis",
   /** After daemon STATUS inject — poll-later; not an inbox row. */
   statusExpect: "SUPERVISE-STATUS — next open TASK or Mark OPEN",
@@ -48,17 +49,11 @@ export function meshInboxContinueLead(role: CoordLeadRole): string {
   );
 }
 
-/** Mechanical STATUS posted by the daemon to both leads (does not need secretary OC). */
-export function formatSuperviseStatusLine(opts: {
-  managerMark: string;
-  managerOpen: number;
-  manager2Mark: string;
-  manager2Open: number;
-}): string {
-  return (
-    `manager ${opts.managerMark} ${opts.managerOpen} open | ` +
-    `manager-2 ${opts.manager2Mark} ${opts.manager2Open} open`
-  );
+/** Mechanical STATUS posted by the daemon to every manager-kind lead. */
+export function formatSuperviseStatusLine(
+  leads: Array<{ id: string; mark: string; open: number }>,
+): string {
+  return leads.map((l) => `${l.id} ${l.mark} ${l.open} open`).join(" | ");
 }
 
 export function meshInboxSuperviseStatus(line: string): string {
@@ -96,8 +91,8 @@ export function meshInboxBalanceStatus(line: string): string {
 export function meshInboxBalanceLeadTick(): string {
   return (
     `${MESH_INBOX_TAG} BALANCE: Daemon tick wrote BALANCE-LAST + room STATUS + auto-assign when pull applies. ` +
-    "Read .sm/seats/manager-2/BALANCE-LAST.md and managers/balance rooms; execute assigned TASK — no manual peer pull. " +
-    "One-shot METHOD: `./sm.sh balance run`. Off: `./sm.sh balance off`."
+    "Read the balance-lead seat BALANCE-LAST.md and managers/balance rooms; execute assigned TASK — no manual peer pull. " +
+    `One-shot METHOD: \`${seatmeshCmd("balance run")}\`. Off: \`${seatmeshCmd("balance off")}\`.`
   );
 }
 
@@ -106,17 +101,17 @@ export function balanceLeadBrief(opts: { interval: string; balancees: string[] }
   return (
     `BALANCE ON interval=${opts.interval} balancees=${list}. ` +
     "Every tick: BALANCE-LAST + room STATUS + auto-assign on pull (daemon METHOD). " +
-    "`./sm.sh balance run` for one tick. Off: `./sm.sh balance off`"
+    `\`${seatmeshCmd("balance run")}\` for one tick. Off: \`${seatmeshCmd("balance off")}\``
   );
 }
 
 /** Secretary SUPERVISE tick inject — one pane per interval; do not spam manager. */
 export function meshInboxSuperviseSecretaryTick(): string {
   return (
-    `${MESH_INBOX_TAG} SUPERVISE: ./sm.sh contexts. Seats are .sm/seats/manager and ` +
-    ".sm/seats/manager-2 (not tasks/agent-seats). Read .sm/seats/secretary/SUPERVISE-LAST.md; " +
+    `${MESH_INBOX_TAG} SUPERVISE: ${seatmeshCmd("contexts")}. Seats are .sm/seats/<column-id> ` +
+    "(not tasks/agent-seats). Read .sm/seats/secretary/SUPERVISE-LAST.md; " +
     "compare TASKS/FOCUS/room PROG/minis. Room STATUS at most once per supervise interval unless " +
-    "material change — ALWAYS `./sm.sh room say -r managers --kind status \"...\"` (the --kind flag " +
+    `material change — ALWAYS \`${seatmeshCmd('room say -r managers --kind status "..."')}\` (the --kind flag ` +
     "is required: coordinator panes get the full message body pasted in unless it's tagged status, " +
     "which floods them on every tick). Peer nudge leads only when no progress since last snapshot " +
     "(not every drain). Idle+open TASK -> one CONTINUE. Update SUPERVISE-LAST.md after tick. " +
@@ -137,7 +132,7 @@ export function meshInboxDigestIncomplete(opts: {
   const open = opts.openIds.join(",") || "none";
   return (
     `${MESH_INBOX_TAG} DIGEST INCOMPLETE: ${opts.done}/${opts.total} open=[${open}] — ` +
-    "./sm.sh secretary collect --nudge"
+    seatmeshCmd("secretary collect --nudge")
   );
 }
 
@@ -145,11 +140,11 @@ export function secretaryDigestPrompt(digestText: string): string {
   return `SECRETARY-DIGEST (mechanical — do not trust chat "all done"):\n${digestText}`;
 }
 
-/** Inject body for ./sm.sh assign — hub already written to FOCUS/TASKS. */
+/** Inject body for seatmesh assign — hub already written to FOCUS/TASKS. */
 export function assignPrompt(target: string, text: string): string {
   return (
-    `ASSIGN ${target}. Hub is your FOCUS NOW (written by ./sm.sh assign — do not wait for a hand-edit). ` +
-    `First: ./sm.sh whoami. Then: ${text.trim()}`
+    `ASSIGN ${target}. Hub is your FOCUS NOW (written by ${seatmeshCmd(`assign ${target} …`)} — do not wait for a hand-edit). ` +
+    `First: ${seatmeshCmd("whoami")}. Then: ${text.trim()}`
   );
 }
 
@@ -157,7 +152,7 @@ export function assignPrompt(target: string, text: string): string {
 export function freshSummonWhoamiPrompt(role?: string): string {
   const who = role ? ` You are ${role}.` : "";
   return (
-    `FRESH SUMMON.${who} First action: run ./sm.sh whoami (no flags). ` +
+    `FRESH SUMMON.${who} First action: run ${seatmeshCmd("whoami")} (no flags). ` +
     "That dump is your role, seat files, FOCUS, TASKS, and hub. Then do that hub. " +
     "A later peer is a task — you already know the seat. Do not ask the operator who you are."
   );
@@ -167,8 +162,8 @@ export function freshSummonWhoamiPrompt(role?: string): string {
 export function secretaryColdStartBrief(): string {
   return (
     `${freshSummonWhoamiPrompt("SECRETARY")} ` +
-    "Seats=.sm/seats/manager and .sm/seats/manager-2 only. " +
-    "Tick: ./sm.sh contexts; if a lead is idle with open TASKS, ./sm.sh peer <lead> CONTINUE one checkbox. " +
+    "Seats=.sm/seats/<column-id> (every profile base column). " +
+    `Tick: ${seatmeshCmd("contexts")}; if a lead is idle with open TASKS, ${seatmeshCmd("peer <lead> CONTINUE one checkbox")}. ` +
     "Never write or run a long shell script. Never peer --direct. mesh-watch OFF."
   );
 }
@@ -176,14 +171,16 @@ export function secretaryColdStartBrief(): string {
 /** One-shot brief pasted to secretary when supervise arms. */
 export function secretarySuperviseBrief(opts: {
   managerPane: string;
-  manager2Pane: string;
   interval: string;
+  extraPanes?: Array<{ id: string; paneId: string }>;
 }): string {
+  const extras = (opts.extraPanes ?? []).map((e) => `${e.id}=${e.paneId}`).join("+");
+  const paneList = [opts.managerPane, extras].filter(Boolean).join("+");
   return (
-    `SUPERVISE ON interval=${opts.interval} panes=${opts.managerPane}+${opts.manager2Pane}. ` +
+    `SUPERVISE ON interval=${opts.interval} panes=${paneList}. ` +
     "Every tick: contexts + lead TASKS + minis; room STATUS at most once per interval unless change. " +
     "Compare .sm/seats/secretary/SUPERVISE-LAST.md — no progress -> peer nudge (not spam). " +
-    "Idle lead with open TASKS -> ./sm.sh peer CONTINUE one checkbox. " +
+    `Idle lead with open TASKS -> ${seatmeshCmd("peer CONTINUE one checkbox")}. ` +
     "Never write or run a long shell script. Never peer --direct."
   );
 }

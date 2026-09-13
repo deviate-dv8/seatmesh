@@ -1,6 +1,6 @@
 {
   "name": "@seat-mesh/daemon",
-  "version": "0.1.21",
+  "version": "0.1.24",
   "type": "module",
   "description": "Inbox orchestrator — sole pane writer; BullMQ workers drain queues.",
   "main": "./dist/index.js",
@@ -11,9 +11,9 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@seat-mesh/core": "0.1.21",
-    "@seat-mesh/providers": "0.1.21",
-    "@seat-mesh/tmux": "0.1.21",
+    "@seat-mesh/core": "0.1.24",
+    "@seat-mesh/providers": "0.1.24",
+    "@seat-mesh/tmux": "0.1.24",
     "bullmq": "^6.3.4",
     "ioredis": "^6.0.0"
   },

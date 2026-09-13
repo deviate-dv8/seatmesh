@@ -44,7 +44,7 @@ describe("requireRole / requireCoordRole", () => {
     expect(() => requireRole(loaded, ["manager"], "mini spawn")).toThrow("__exit__");
     expect(exitCode()).toBe(2);
     expect(errors[0]).toBe("UNAUTHORIZED: mini spawn requires role=manager (you_are=worker)");
-    expect(errors[1]).toBe("hint: ./sm.sh agent");
+    expect(errors[1]).toBe("hint: seatmesh --profile .sm agent");
   });
 
   it("requireCoordRole allows manager-2 and secretary, denies worker", () => {

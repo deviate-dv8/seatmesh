@@ -43,10 +43,8 @@ export function canDeliverNow(
   if (state.phase === "empty" || state.phase === "afk") return true;
 
   if (providerId === "cursor-agent" || providerId === "agent") {
-    if (state.phase === "busy" && state.busyLabel === "follow-up") return true;
-    if (/Add a follow-up|ctrl\+c to stop/.test(captureTail)) return true;
-    if (state.phase === "busy") return false;
-    if (state.phase === "typing" && /Add a follow-up/.test(captureTail)) return true;
+    // Follow-up box is NOT a delivery lane. Steer-paste there becomes the
+    // next user turn and the agent drops the in-flight instruction.
     return false;
   }
 
@@ -64,7 +62,7 @@ function isCoordPane(paneId: string): boolean {
 }
 
 /**
- * Human-co-typed coord pane (FQ-inject-co-typed-pane, default: manager-2) — a
+ * Human-co-typed coord pane (FQ-inject-co-typed-pane, profile humanCoTyped) — a
  * human directly types in this same pane as the CLI, so even a "thin" room
  * ping must never bypass the busy/typing gate the way it does for pure
  * agent-to-agent coord panes (that bypass was the observed footer-bleed).
@@ -75,17 +73,21 @@ function isHumanCoTypedPane(paneId: string, loaded?: LoadedProfile): boolean {
   return isHumanCoTypedColumn(meta.role, loaded?.profile.layout);
 }
 
-/** Cursor follow-up composer accepts steer injects (coord + worker parity). */
+/** Follow-up UI detector only — never a delivery bypass (steals the next user turn). */
 export function isCursorFollowUpSteer(
   state: ComposerState,
   captureTail: string,
   providerId: string,
 ): boolean {
-  // Claude: never steer-inject while generating — Esc aborts auto mode.
   if (providerId === "claude") return false;
   if (providerId !== "cursor-agent" && providerId !== "agent") return false;
   if (state.phase === "busy" && state.busyLabel === "follow-up") return true;
   return /Add a follow-up|ctrl\+c to stop/.test(captureTail);
+}
+
+/** Only these words may paste onto a busy/typing pane (not force/roomPing/ACK). */
+export function isExplicitHubOverride(message: string): boolean {
+  return /\bPRIORITY\b|\bSTOP other work\b/i.test(message);
 }
 
 export type DeliverResult =
@@ -137,20 +139,24 @@ export function deliverToPane(
   const coord = isCoordPane(paneId);
   const coTyped = coord && isHumanCoTypedPane(paneId, opts.loaded);
 
-  // Hard floor for humanCoTyped panes (FQ-inject-co-typed-pane): busy/typing never
-  // pastes here, full stop — not even `force`/`roomPing`, which exist precisely to
-  // bypass the ordinary coord gate and were themselves observed pasting mid-keystroke
-  // (a forced balance-lead-tick STATUS interleaving with live operator typing).
-  if (coTyped && (state.phase === "busy" || state.phase === "typing")) {
-    return { ok: false, reason: `held:cotyped:${state.phase}` };
+  // Hard floor: busy/typing never gets an inbox paste. Cursor follow-up
+  // steer was the leak — the inject became the next user turn and the
+  // in-flight instruction was dropped. Queue/backlog instead.
+  // PRIORITY / STOP other work may paste except on humanCoTyped panes.
+  if (state.phase === "busy" || state.phase === "typing") {
+    if (coTyped || !isExplicitHubOverride(message)) {
+      return {
+        ok: false,
+        reason: coTyped ? `held:cotyped:${state.phase}` : `held:${state.phase}`,
+      };
+    }
   }
 
   // Co-typed panes never get the thin-room-ping bypass either — a "status" ping
   // pasted mid-keystroke is exactly the tty-interleaving bug this gate stops.
   const roomPingBypass = opts.roomPing === true && !coTyped;
-  const followUpSteer = isCursorFollowUpSteer(state, snap.captureTail, prov.id);
 
-  if (!opts.force && coord && !roomPingBypass && !followUpSteer) {
+  if (!opts.force && coord && !roomPingBypass) {
     const gate = classifyCoordDelivery(paneId, state, snap.captureTail, prov.id);
     if (!gate.canDeliver) {
       const extra =
@@ -165,18 +171,12 @@ export function deliverToPane(
     !opts.force &&
     !opts.lightweight &&
     !roomPingBypass &&
-    !followUpSteer &&
     !canDeliverNow(state, snap.captureTail, prov.id)
   ) {
     return { ok: false, reason: `held:${state.phase}${state.busyLabel ? `:${state.busyLabel}` : ""}` };
   }
 
-  const steer =
-    !opts.lightweight &&
-    (followUpSteer ||
-      (!coord &&
-        (state.phase === "busy" ||
-          (state.phase === "typing" && /Add a follow-up/.test(snap.captureTail)))));
+  const steer = false;
 
   const plan = prov.injectPlan(snap);
   injectToPane(paneId, message, plan, prov.id, snap.captureTail);

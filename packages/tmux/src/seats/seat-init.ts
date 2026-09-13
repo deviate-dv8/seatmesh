@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { buildResolvedPaths, type LoadedProfile } from "@seat-mesh/core";
+import { buildResolvedPaths, seatDirSegment, type LoadedProfile } from "@seat-mesh/core";
 import { gateQueuePath } from "./seat-paths.js";
 
 const GATE_QUEUE_TEMPLATE = `# serial gate queue (canonical — fresh agents start here)
@@ -74,9 +74,7 @@ export function runSeatInit(loaded: LoadedProfile): SeatInitResult {
 
   const coordDirs: string[] = [];
   for (const col of loaded.profile.layout?.base.columns ?? ["manager", "secretary"]) {
-    if (col === "manager") coordDirs.push(dirs?.manager ?? "manager");
-    else if (col === "manager-2") coordDirs.push(dirs?.["manager-2"] ?? "manager-2");
-    else if (col === "secretary") coordDirs.push(dirs?.secretary ?? "secretary");
+    coordDirs.push(seatDirSegment(dirs, col));
   }
   for (const name of [...new Set(coordDirs)]) {
     const d = path.join(root, name);

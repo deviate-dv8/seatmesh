@@ -19,6 +19,7 @@ export * from "./paths.js";
 export * from "./paths-manifest.js";
 export * from "./dotdir.js";
 export * from "./profile.js";
+export * from "./profile-edit.js";
 export * from "./runtime-paths.js";
 export * from "./role-index.js";
 export * from "./chatroom/index.js";

@@ -40,14 +40,23 @@ overwrites on re-run unless `--force`.
 
 ---
 
-## Merge rules (same as today + extensions)
+## Merge rules (`extends` inheritance)
 
-1. Load `roles/common.yaml` + `roles/<kind>.yaml` (`loadRoleIndex`).
-2. `banner`, `read_first`, `files`, `policies` — union/dedupe (existing).
-3. **New:** `guards`, `commands`, `funcs` — merge per `SEAT-MESH-PREFERENCES.md`
-   (deny accumulates; child role overrides allow).
+Same model as seat **kinds** (closed) vs column **ids** (open) in `seat-kind.ts`:
 
-Pane `@mesh_role` picks kind: `manager` | `secretary` | `worker` | `manager-mini` -> `mini`.
+1. **`extends:`** — every role file may name a parent (`extends: common`, `extends: manager`,
+   `extends: worker`). Parent merges first; child wins on same `policies[].id`.
+2. **Implicit common** — if a kind file has no `extends`, `common.yaml` is still merged when present.
+3. **Column overlays** — extra coord columns use `roles/columns/<columnId>.yaml` with
+   `extends: manager` (or `secretary`, etc.). Example: `columns/manager-2.yaml`, not
+   `roles/manager-2.yaml`.
+4. `banner`, `read_first`, `files` — union/dedupe by path; `guards`/`funcs` — deny accumulates,
+   child `allow` wins.
+
+Pane `@mesh_role` = column id. `loadRoleIndex` resolves: overlay chain if
+`columns/<id>.yaml` exists, else kind chain (`manager.yaml` + common).
+
+**Forbidden:** `roles/manager-2.yaml` as a fake kind — duplicates the provider/kind model.
 
 ---
 
@@ -140,7 +149,7 @@ Paths in `read_first` / `files` are **relative to workspace root** (parent of `.
 | Gap | Fix |
 |-----|-----|
 | Init has `master.yaml`, no `mini.yaml` | Rename -> `manager.yaml`; add `mini.yaml` template |
-| Init roles are stubs (`extends: common` unused) | Flesh out predefined sections per table above |
+| Init roles stubs | Templates use `extends: common`; column deltas in `roles/columns/` |
 | Bundled `profiles/consumer/roles/` duplicates `.sm/` | Deprecate; consumer uses `.sm/roles/` only |
 | No `guards` / `funcs` in schema | Extend `RoleIndex` + `renderRoleIndex` + `./sm.sh agent` |
 | `./sm.sh agent` not wired | Filter TS catalog + yaml funcs by merged role |

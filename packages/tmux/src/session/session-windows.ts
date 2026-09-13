@@ -4,7 +4,7 @@ import {
   workersLayoutEnabled,
   type LoadedProfile,
 } from "@seat-mesh/core";
-import { loadMeshAgents } from "../agents/agents-state.js";
+import { loadMeshAgentsForProfile } from "../agents/agents-state.js";
 import { tmux } from "../lib/tmux-run.js";
 
 /** Window names present in the tmux session. */
@@ -38,7 +38,7 @@ export interface LayoutWindowFlags {
 export function layoutWindowFlags(loaded: LoadedProfile): LayoutWindowFlags {
   const layout = loaded.profile.layout;
   if (!layout) return { nvim: false, workers: false, minis: false };
-  const mesh = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
+  const mesh = loadMeshAgentsForProfile(loaded);
   const saved = mesh?.layout ?? null;
   return {
     nvim: nvimLayoutEnabled(layout, saved),

@@ -1,4 +1,5 @@
 import { MESH_INBOX_ROOM_TAG, MESH_INBOX_TAG } from "../messages/mesh-copy.js";
+import { seatmeshCmd } from "../messages/cli-hints.js";
 
 /** Parse expect from room say checkback arm: `chat-room:<slug> peer update (<kind>)`. */
 export function parseRoomCommsExpect(expect: string): { slug: string; kind: string } | null {
@@ -75,10 +76,10 @@ export function formatWorkerInjectStamp(ctx: RoomCommsReplyContext): string {
   return `${seat} -`;
 }
 
-/** Room reply one-liner (receiver copies, replaces `<msg>`). No local runner. */
+/** Room reply one-liner (receiver runs in shell, replaces `<msg>`). */
 export function formatRoomSayReplyCmd(slug: string): string {
   const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
-  return `room say${roomFlag} "<msg>"`;
+  return seatmeshCmd(`room say${roomFlag} "<msg>"`);
 }
 
 /** Peer to-slot reply one-liner (`fromSlot` = sender to answer). */
@@ -86,9 +87,9 @@ export function formatToSlotReplyCmd(fromSlot: string | number): string {
   return `to-slot ${fromSlot} "<msg>"`;
 }
 
-/** Coordinator peer reply one-liner (`fromRole` = sender to answer, e.g. "manager-2"). */
+/** Coordinator peer reply one-liner (`fromRole` = sender column id). */
 export function formatPeerReplyCmd(fromRole: string): string {
-  return `peer ${fromRole} "<msg>"`;
+  return seatmeshCmd(`peer ${fromRole} "<msg>"`);
 }
 
 /** Map room/ledger agent id to the one `./sm.sh peer` target (no second harness). */
@@ -105,9 +106,10 @@ export function peerTargetFromAgentId(from: string): string {
   return id;
 }
 
-/** Inbound comms footer — copy this one line; do not pick room say / to-slot / tail. */
+/** Inbound comms footer — run in shell same turn; composer prose does not deliver. */
 export function formatReplyToSender(from: string): string {
-  return `Reply: ${formatPeerReplyCmd(peerTargetFromAgentId(from))}`;
+  const shell = formatPeerReplyCmd(peerTargetFromAgentId(from));
+  return `SHELL (required — chat-only "received" does NOT file): ${shell}`;
 }
 
 /** Short checkback / patience nudge (not a full playbook). */
@@ -158,7 +160,7 @@ export function formatRoomPeerNotify(
   // content, just a reply command). Ledger is truth, so tell them how to read it first.
   return (
     `${seat} | ${MESH_INBOX_ROOM_TAG} ${tag}\n` +
-    `Verify: room tail${roomFlag} -n 15\n${formatReplyToSender(from)}`
+    `Verify: ${seatmeshCmd(`room tail${roomFlag} -n 15`)}\n${formatReplyToSender(from)}`
   );
 }
 

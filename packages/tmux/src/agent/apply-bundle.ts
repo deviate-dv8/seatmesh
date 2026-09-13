@@ -44,7 +44,7 @@ function appendInstructionTasks(
 ): void {
   if (!instructions.length) return;
   const target = parseSeatTarget(
-    leadAgentId === "manager2" ? "manager-2" : leadAgentId,
+    leadAgentId,
   );
   const sorted = [...instructions].sort((a, b) => a.index - b.index);
   for (const ins of sorted) {
@@ -76,11 +76,12 @@ export function applyAgentContractBundle(
   console.log(`OK: bundle ${pathWritten}`);
 
   for (const b of bundle.balance) {
-    if (b.balanceLead === "manager-2") {
-      balanceLeadCommand(loaded, registry, "on", b.interval ?? "10m");
-    } else {
-      console.log(`SKIP: balance lead ${b.balanceLead} (vendor balance binds manager-2 only)`);
+    const lead = b.balanceLead?.trim();
+    if (!lead) {
+      console.log("SKIP: balance lead missing");
+      continue;
     }
+    balanceLeadCommand(loaded, registry, "on", b.interval ?? "10m");
   }
 
   for (const s of bundle.supervise) {

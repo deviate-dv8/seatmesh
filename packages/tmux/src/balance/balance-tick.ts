@@ -51,12 +51,7 @@ function progressNote(prior: number | null, open: number): string {
 /** Real METHOD tick — snapshots seats, writes BALANCE-LAST.md, returns STATUS line. */
 export function runBalanceTick(loaded: LoadedProfile, opts?: { dryRun?: boolean }): BalanceTickResult {
   const doc = loadBalanceVendorContract(contractsDirFor(loaded));
-  const mainTarget =
-    doc.main_lead === "manager-2"
-      ? { role: "manager-2" as const }
-      : doc.main_lead === "manager"
-        ? { role: "manager" as const }
-        : parseSeatTarget(doc.main_lead);
+  const mainTarget = parseSeatTarget(doc.main_lead);
 
   const mainSnap = readSeatSnapshot(loaded, mainTarget);
   const mainMark = mainSnap?.focus.mark ?? "?";

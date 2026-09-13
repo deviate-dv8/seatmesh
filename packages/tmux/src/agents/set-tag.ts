@@ -1,7 +1,7 @@
 import type { CliType, LoadedProfile, MeshAgents, ProviderRegistry } from "@seat-mesh/core";
-import { MeshAgentsSchema, buildResolvedPaths, portsForSlot } from "@seat-mesh/core";
+import { MeshAgentsSchema, isManagerKind, portsForSlot } from "@seat-mesh/core";
 import { buildAgentLaunchCmd } from "./agent-builder.js";
-import { loadMeshAgents } from "./agents-state.js";
+import { loadMeshAgentsForProfile, meshAgentsJsonPath } from "./agents-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget, type PaneRow } from "../lib/resolve-pane.js";
 import { saveMeshAgentsFile } from "../session/save-session.js";
@@ -36,8 +36,7 @@ function detectLiveType(
 }
 
 export function ensureMeshAgentsRecord(loaded: LoadedProfile): MeshAgents {
-  const rel = loaded.profile.state.meshAgentsJson;
-  const existing = loadMeshAgents(loaded.workspace, rel);
+  const existing = loadMeshAgentsForProfile(loaded);
   if (existing) return existing;
   return MeshAgentsSchema.parse({
     schemaVersion: 1,
@@ -135,15 +134,16 @@ export function patchMeshAgentsForPane(
     });
   }
 
-  if (row.role === "manager-2") {
+  if (isManagerKind(row.role) && row.role !== "manager") {
+    const slot = {
+      type: finalized.type,
+      name: row.role,
+      resumeId: finalized.resumeId,
+      resumeCmd: finalized.resumeCmd,
+    };
     return MeshAgentsSchema.parse({
       ...next,
-      manager2: {
-        type: finalized.type,
-        name: "manager-2",
-        resumeId: finalized.resumeId,
-        resumeCmd: finalized.resumeCmd,
-      },
+      coords: { ...(next.coords ?? {}), [row.role]: slot },
     });
   }
 
@@ -190,7 +190,9 @@ export function patchMeshAgentsForPane(
 
 function currentTypeFromMesh(mesh: MeshAgents, row: PaneRow): CliType | null {
   if (row.role === "manager") return mesh.manager?.type ?? null;
-  if (row.role === "manager-2") return mesh.manager2?.type ?? null;
+  if (isManagerKind(row.role) && row.role !== "manager") {
+    return mesh.coords?.[row.role]?.type ?? null;
+  }
   if (row.role === "secretary") return mesh.secretary?.type ?? null;
   if (row.mini) {
     return mesh.minis.find((m) => m.mini === Number(row.mini))?.type ?? null;
@@ -205,9 +207,9 @@ function persistPatched(
   loaded: LoadedProfile,
   mesh: MeshAgents,
 ): string {
-  const rel = loaded.profile.state.meshAgentsJson;
-  saveMeshAgentsFile(loaded.workspace, rel, mesh);
-  return buildResolvedPaths(loaded).meshAgentsJson;
+  const file = meshAgentsJsonPath(loaded);
+  saveMeshAgentsFile(file, mesh);
+  return file;
 }
 
 function printSlot(mesh: MeshAgents, row: PaneRow): void {
@@ -215,8 +217,8 @@ function printSlot(mesh: MeshAgents, row: PaneRow): void {
     console.log(JSON.stringify(mesh.manager ?? null, null, 2));
     return;
   }
-  if (row.role === "manager-2") {
-    console.log(JSON.stringify(mesh.manager2 ?? null, null, 2));
+  if (isManagerKind(row.role) && row.role !== "manager") {
+    console.log(JSON.stringify(mesh.coords?.[row.role] ?? null, null, 2));
     return;
   }
   if (row.role === "secretary") {
@@ -268,9 +270,9 @@ function normalizeTagTarget(target: string): string {
 }
 
 function targetLabel(row: PaneRow): string {
-  if (row.role === "manager") return "manager";
-  if (row.role === "manager-2") return "manager-2";
-  if (row.role === "secretary") return "secretary";
+  if (isManagerKind(row.role) || row.role === "secretary" || row.role.startsWith("secretary-")) {
+    return row.role;
+  }
   if (row.mini) return `mini-${row.mini}`;
   if (row.slot && /^\d+$/.test(row.slot)) return `slot-${row.slot}`;
   return row.paneId;

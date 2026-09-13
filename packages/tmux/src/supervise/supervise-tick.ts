@@ -4,6 +4,7 @@ import {
   chatRoomConfigForLoaded,
   formatSuperviseStatusLine,
   hubLockActive,
+  managerColumnIds,
   sayInRoomSync,
   type LoadedProfile,
   type ProviderRegistry,
@@ -17,7 +18,7 @@ export interface SuperviseTickResult {
   lastPath: string;
   materialChange: boolean;
   roomStatusPosted: boolean;
-  nudged: Array<"manager" | "manager-2">;
+  nudged: string[];
   wroteLedger: boolean;
 }
 
@@ -27,11 +28,9 @@ function superviseLastPath(loaded: LoadedProfile): string {
   return path.join(loaded.workspace, ".sm", "seats", dir, "SUPERVISE-LAST.md");
 }
 
-function parsePriorLine(lastText: string, key: "manager" | "manager-2"): string | null {
-  const re =
-    key === "manager"
-      ? /\|\s*manager\s*\|\s*(\d+)\s*\|\s*(\w+)\s*\|/
-      : /\|\s*manager-2\s*\|\s*(\d+)\s*\|\s*(\w+)\s*\|/;
+function parsePriorLine(lastText: string, key: string): string | null {
+  const esc = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\|\\s*${esc}\\s*\\|\\s*(\\d+)\\s*\\|\\s*(\\w+)\\s*\\|`);
   const m = lastText.match(re);
   if (!m) return null;
   return `${m[2]}:${m[1]}`;
@@ -55,7 +54,7 @@ export interface SuperviseTickOpts {
   baseWindow: string;
   registry: ProviderRegistry;
   /** Deliver CONTINUE to idle lead with open TASKS (intent=continue). Return whether paste ok. */
-  deliverContinue?: (role: "manager" | "manager-2", paneId: string) => boolean;
+  deliverContinue?: (role: string, paneId: string) => boolean;
   dryRun?: boolean;
 }
 
@@ -64,30 +63,23 @@ export function runSuperviseTick(
   loaded: LoadedProfile,
   opts: SuperviseTickOpts,
 ): SuperviseTickResult {
-  const mgr = readSeatSnapshot(loaded, { role: "manager" });
-  const m2 = readSeatSnapshot(loaded, { role: "manager-2" });
-  const managerMark = mgr?.focus.mark ?? "?";
-  const managerOpen = mgr?.tasks.open ?? 0;
-  const manager2Mark = m2?.focus.mark ?? "?";
-  const manager2Open = m2?.tasks.open ?? 0;
-
-  const statusLine = formatSuperviseStatusLine({
-    managerMark,
-    managerOpen,
-    manager2Mark,
-    manager2Open,
+  const mgrIds = managerColumnIds(loaded.profile.layout);
+  const leads = mgrIds.map((id) => {
+    const snap = readSeatSnapshot(loaded, { role: id });
+    return {
+      id,
+      mark: snap?.focus.mark ?? "?",
+      open: snap?.tasks.open ?? 0,
+    };
   });
+  const statusLine = formatSuperviseStatusLine(leads);
 
   const lastPath = superviseLastPath(loaded);
   const priorText = fs.existsSync(lastPath) ? fs.readFileSync(lastPath, "utf8") : "";
-  const priorMgr = parsePriorLine(priorText, "manager");
-  const priorM2 = parsePriorLine(priorText, "manager-2");
-  const nowMgr = `${managerMark}:${managerOpen}`;
-  const nowM2 = `${manager2Mark}:${manager2Open}`;
+  const nowById = new Map(leads.map((l) => [l.id, `${l.mark}:${l.open}`]));
   const materialChange =
-    priorMgr !== nowMgr ||
-    priorM2 !== nowM2 ||
-    !priorText.trim();
+    !priorText.trim() ||
+    leads.some((l) => parsePriorLine(priorText, l.id) !== nowById.get(l.id));
 
   const stamp = new Date().toISOString().slice(0, 16).replace("T", "T");
   const tableLines = [
@@ -97,8 +89,11 @@ export function runSuperviseTick(
     "",
     "| Lead | Open TASKS | Mark | vs prior |",
     "|------|------------|------|----------|",
-    `| manager | ${managerOpen} | ${managerMark} | ${priorMgr === nowMgr ? "same" : `${priorMgr ?? "?"} -> ${nowMgr}`} |`,
-    `| manager-2 | ${manager2Open} | ${manager2Mark} | ${priorM2 === nowM2 ? "same" : `${priorM2 ?? "?"} -> ${nowM2}`} |`,
+    ...leads.map((l) => {
+      const now = nowById.get(l.id) ?? `${l.mark}:${l.open}`;
+      const prior = parsePriorLine(priorText, l.id);
+      return `| ${l.id} | ${l.open} | ${l.mark} | ${prior === now ? "same" : `${prior ?? "?"} -> ${now}`} |`;
+    }),
     "",
     `**STATUS line:** \`${statusLine}\``,
     "",
@@ -127,18 +122,14 @@ export function runSuperviseTick(
     }
   }
 
-  const nudged: Array<"manager" | "manager-2"> = [];
+  const nudged: string[] = [];
   if (opts.deliverContinue && !opts.dryRun) {
-    const pairs: Array<{ role: "manager" | "manager-2"; open: number }> = [
-      { role: "manager", open: managerOpen },
-      { role: "manager-2", open: manager2Open },
-    ];
-    for (const { role, open } of pairs) {
-      if (open <= 0) continue;
-      const paneId = coordPaneForRole(opts.session, opts.baseWindow, role);
+    for (const lead of leads) {
+      if (lead.open <= 0) continue;
+      const paneId = coordPaneForRole(opts.session, opts.baseWindow, lead.id);
       if (!paneId) continue;
       if (!leadIdle(opts.registry, paneId)) continue;
-      if (opts.deliverContinue(role, paneId)) nudged.push(role);
+      if (opts.deliverContinue(lead.id, paneId)) nudged.push(lead.id);
     }
   }
 

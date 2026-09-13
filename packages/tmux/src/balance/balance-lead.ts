@@ -88,11 +88,16 @@ function balanceMarkerPath(loaded: LoadedProfile): string {
   try {
     return balanceLockPath(loaded);
   } catch {
-    return path.join(loaded.workspace, ".sm/contracts/locks/balance/manager-2.on");
+    return path.join(loaded.workspace, ".sm/contracts/locks/balance/lead.on");
   }
 }
 
-function armBalanceTickCheckback(loaded: LoadedProfile, leadPane: string, interval: string): void {
+function armBalanceTickCheckback(
+  loaded: LoadedProfile,
+  leadPane: string,
+  interval: string,
+  leadLabel: string,
+): void {
   const secs = parseDurationSeconds(interval);
   const expires = new Date(Date.now() + secs * 1000).toISOString();
   cancelCheckbackLocal(loaded, BALANCE_LEAD_TICK_ID);
@@ -105,7 +110,7 @@ function armBalanceTickCheckback(loaded: LoadedProfile, leadPane: string, interv
     ownerPane: leadPane,
     expiresAt: expires,
     senderLabel: "daemon",
-    recipientLabel: "manager-2",
+    recipientLabel: leadLabel,
   };
   upsertCheckbackLocal(loaded, {
     ...body,
@@ -169,7 +174,7 @@ export function balanceLeadCommand(
   }
 
   armContractLock(contractsDir, doc.id, doc.balance_lead);
-  armBalanceTickCheckback(loaded, leadResolved.paneId, interval);
+  armBalanceTickCheckback(loaded, leadResolved.paneId, interval, doc.balance_lead);
 
   const brief = balanceLeadBrief({ interval, balancees: doc.balancees });
   try {

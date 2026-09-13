@@ -22,6 +22,26 @@ export function isRegistrySeatmeshInstall(): boolean {
   return dir.includes(`${path.sep}node_modules${path.sep}seatmesh${path.sep}`);
 }
 
+/**
+ * True when running from npx's throwaway per-invocation cache (`~/.npm/_npx/<hash>/...`)
+ * rather than a real `npm install -g seatmesh` — re-resolved/redownloaded every run, no
+ * stable version pin, and easy to confuse with "seatmesh isn't really installed."
+ */
+export function isNpxEphemeralInstall(): boolean {
+  const dir = path.dirname(fileURLToPath(import.meta.url));
+  return dir.includes(`${path.sep}_npx${path.sep}`);
+}
+
+export function formatInstallStatusLine(installed: string, latest: string | null): string {
+  const upToDate = !latest || !semverLess(installed, latest);
+  const versionPart = `seatmesh ${installed}${latest ? (upToDate ? " (up to date)" : ` (latest: ${latest})`) : ""}`;
+  if (!isRegistrySeatmeshInstall()) return `${versionPart} [dev checkout]`;
+  if (isNpxEphemeralInstall()) {
+    return `${versionPart} -- WARN: running via npx cache, not installed. Run: npm install -g seatmesh@latest`;
+  }
+  return versionPart;
+}
+
 export function semverLess(a: string, b: string): boolean {
   const pa = a.split(".").map((x) => Number.parseInt(x, 10) || 0);
   const pb = b.split(".").map((x) => Number.parseInt(x, 10) || 0);

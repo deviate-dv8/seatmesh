@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import {
+  isCoordKind,
+  isManagerKind,
   loadRoleIndex,
   profilePaths,
   renderRoleIndex,
@@ -38,19 +40,16 @@ function readTrimmed(file: string, max: number): string {
 
 export function roleKindForWhoami(w: WhoamiResult): string {
   if (w.role === "manager-mini") return "mini";
-  if (w.role === "secretary") return "secretary";
-  if (w.role === "manager-2") return "manager-2";
-  if (w.role === "manager") return "manager";
+  if (w.role === "secretary" || w.role.startsWith("secretary-")) return w.role;
+  if (isManagerKind(w.role)) return w.role;
   return "worker";
 }
 
 function whoamiSeatTarget(w: WhoamiResult, mini: string | null): SeatTarget {
-  if (w.role === "manager") return { role: "manager" };
-  if (w.role === "manager-2") return { role: "manager-2" };
-  if (w.role === "secretary") return { role: "secretary" };
   if (w.role === "manager-mini" || mini) {
     return { role: "manager-mini", mini: mini ?? null };
   }
+  if (isCoordKind(w.role)) return { role: w.role };
   const slot = w.slotLabel ?? (w.slot != null ? String(w.slot) : null);
   return { role: "worker", slot };
 }

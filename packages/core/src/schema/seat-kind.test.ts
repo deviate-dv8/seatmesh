@@ -16,6 +16,7 @@ describe("seat kinds vs open column ids", () => {
   it("infers kind from prefix without a manager-N enum", () => {
     expect(seatKindFromId("manager")).toBe("manager");
     expect(seatKindFromId("manager-2")).toBe("manager");
+    expect(seatKindFromId("manager-100")).toBe("manager");
     expect(seatKindFromId("manager-relief")).toBe("manager");
     expect(seatKindFromId("lead-west")).toBe("manager");
     expect(seatKindFromId("secretary")).toBe("secretary");
@@ -59,9 +60,9 @@ describe("seat kinds vs open column ids", () => {
 });
 
 describe("humanCoTyped columns (FQ-inject-co-typed-pane)", () => {
-  it("defaults to manager-2 when the profile sets nothing", () => {
-    expect(humanCoTypedColumnIds()).toEqual(["manager-2"]);
-    expect(isHumanCoTypedColumn("manager-2")).toBe(true);
+  it("defaults humanCoTyped to empty when the profile sets nothing", () => {
+    expect(humanCoTypedColumnIds()).toEqual([]);
+    expect(isHumanCoTypedColumn("manager-2")).toBe(false);
     expect(isHumanCoTypedColumn("manager")).toBe(false);
     expect(isHumanCoTypedColumn("secretary")).toBe(false);
   });

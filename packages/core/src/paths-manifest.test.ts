@@ -50,6 +50,7 @@ describe("paths-manifest", () => {
     expect(p.daemonDir).toBe(path.join(sm, "runtime", "daemon"));
     expect(p.sqlitePath).toBe(path.join(sm, "runtime", "mesh.sqlite"));
     expect(p.chatRoomsRoot).toBe(path.join(sm, "chat-rooms"));
+    expect(p.meshAgentsJson).toBe(path.join(sm, "mesh-agents.json"));
     expect(resolveHarnessPath(loaded, "seats")).toBe(path.join(sm, "seats"));
   });
 

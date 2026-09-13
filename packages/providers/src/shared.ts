@@ -162,6 +162,7 @@ export function claudeInputDraft(captureTail: string): string {
   for (let i = lines.length - 1; i >= 0; i--) {
     const m = /^\s*❯\s+(.*)$/.exec(lines[i] ?? "");
     if (!m) continue;
+    if (isDecorativeChromeNeighbor(lines[i - 1] ?? "", lines[i + 1] ?? "")) continue;
     const first = (m[1] ?? "").trim();
     if (CLAUDE_NON_DRAFT_HINT_RE.test(first)) return "";
     const parts = [first];
@@ -195,6 +196,21 @@ const OC_BUSY_RE =
   /Thinking|Working|Running|⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|esc interrupt/i;
 const OC_COMPOSER_RE =
   /Ask anything|Ask a question|Type a message|Send a message|What would you like/i;
+
+/** A run of box-drawing/rule characters — a decorative divider, never real composer text. */
+const RULE_LINE_RE = /^[\s─━│┃┆┊╌╍┄┅╭╮╰╯┌┐└┘┏┓┗┛┣┫┳┻╋=_.\-]{3,}$/;
+
+/**
+ * True when a `❯ ...`-prefixed line is Claude Code UI chrome (a dimmed suggested-reply
+ * chip, or a bordered box) rather than a live unsent composer draft. Both render with the
+ * same `❯` marker in plain-text capture (color/dim styling is stripped by `-p` capture),
+ * so the only surviving plain-text signal is that chrome is sandwiched between rule/divider
+ * lines immediately above and/or below it — a real draft sits directly above the bottom
+ * shortcuts footer with no divider in between.
+ */
+export function isDecorativeChromeNeighbor(prevLine: string, nextLine: string): boolean {
+  return RULE_LINE_RE.test(prevLine.trim()) || RULE_LINE_RE.test(nextLine.trim());
+}
 
 export function composerFromCapture(
   pane: PaneSnapshot,
@@ -253,10 +269,16 @@ export function composerFromCapture(
   }
 
   // Composer draft heuristic: only "typing" when a draft sits under a live prompt line
-  const lines = tail.split("\n").filter((l) => l.trim());
+  const rawLines = tail.split("\n");
+  const lines = rawLines.filter((l) => l.trim());
   const last = lines.at(-1) ?? "";
+  const lastRawIdx = rawLines.lastIndexOf(last);
   const promptMatch = last.match(/^[❯›>](.+)/);
-  if (promptMatch && promptMatch[1]!.trim().length > 0) {
+  if (
+    promptMatch &&
+    promptMatch[1]!.trim().length > 0 &&
+    !isDecorativeChromeNeighbor(rawLines[lastRawIdx - 1] ?? "", rawLines[lastRawIdx + 1] ?? "")
+  ) {
     return { phase: "typing", draftFingerprint: promptMatch[1]!.trim().slice(0, 80) };
   }
 

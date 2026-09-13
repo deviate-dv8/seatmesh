@@ -17,6 +17,7 @@ const baseMesh: MeshAgents = {
   schemaVersion: 1,
   session: "mesh",
   workdir: "/tmp/ws",
+  coords: undefined,
   workers: [],
   minis: [],
   conventions: {

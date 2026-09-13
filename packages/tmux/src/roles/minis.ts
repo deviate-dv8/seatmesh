@@ -9,7 +9,7 @@ import {
 } from "@seat-mesh/core";
 import {
   loadAgentsState,
-  loadMeshAgents,
+  loadMeshAgentsForProfile,
   miniStateForN,
   resolveLaunchCmd,
 } from "../agents/agents-state.js";
@@ -124,7 +124,7 @@ function ensureMiniCli(
 
   if (!live) {
     const agents = loadAgentsState(loaded.workspace, loaded.profile.state.agentsJson);
-    const mesh = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
+    const mesh = loadMeshAgentsForProfile(loaded);
     const saved = mesh ? miniStateForN(mesh, n) : undefined;
     const miniCli =
       agents.conventions?.mini_default_cli ??

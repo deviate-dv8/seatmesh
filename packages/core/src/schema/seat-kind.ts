@@ -1,12 +1,12 @@
 /**
  * Seat kinds are closed. Column / instance ids are open strings from the profile.
- * Consumer names like `manager-2` are config, not engine enum members.
+ * Consumer column ids are config, not engine enum members.
  */
 
 export const SEAT_KINDS = ["manager", "secretary", "worker", "mini"] as const;
 export type SeatKind = (typeof SEAT_KINDS)[number];
 
-/** Stable column id: `manager`, `lead-west`, `secretary-2`, … */
+/** Stable column id from the profile (`manager`, `lead-west`, …). */
 export const COLUMN_ID_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
 export type ColumnKinds = Record<string, SeatKind>;
@@ -15,7 +15,7 @@ export function isSeatKind(v: string): v is SeatKind {
   return (SEAT_KINDS as readonly string[]).includes(v);
 }
 
-/** `manager2` -> also `manager-2`; `secretary-2` -> also `secretary2`. */
+/** Compact `nameN` <-> hyphen `name-N` (any prefix + digits). */
 export function expandColumnAlias(raw: string): string[] {
   const t = raw.trim().toLowerCase();
   if (!t) return [];
@@ -101,11 +101,11 @@ export function primarySecretaryColumn(layout?: LayoutColumnsInput | null): stri
 /**
  * Base columns where a human directly co-types in the same pane as the CLI
  * (FQ-inject-co-typed-pane). Profile `layout.base.humanCoTyped` wins; unset
- * defaults to `["manager-2"]`, the consumer's own reported co-typed seat.
+ * defaults to `[]` — set `layout.base.humanCoTyped` in the consumer profile.
  */
 export function humanCoTypedColumnIds(layout?: LayoutColumnsInput | null): string[] {
   const explicit = layout?.base?.humanCoTyped;
-  return explicit?.length ? [...explicit] : ["manager-2"];
+  return explicit?.length ? [...explicit] : [];
 }
 
 export function isHumanCoTypedColumn(id: string, layout?: LayoutColumnsInput | null): boolean {

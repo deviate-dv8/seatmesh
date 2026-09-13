@@ -20,6 +20,11 @@ import {
   verifyMeshSession,
 } from "@seat-mesh/tmux";
 import { printSeatmeshBanner } from "./banner.js";
+import {
+  formatInstallStatusLine,
+  readInstalledCliVersion,
+  resolveLatestRegistryVersion,
+} from "./version-nudge.js";
 
 export interface PrereqRow {
   name: string;
@@ -176,6 +181,8 @@ function printInTmux(): void {
 
 export interface StatusReportOptions {
   json?: boolean;
+  /** Full section-by-section dump (prereqs, profile, connectivity, ...). Default: one-line summary. */
+  verbose?: boolean;
 }
 
 export interface StatusReport {
@@ -230,6 +237,22 @@ export async function printStatusReport(
   }
 
   const projectCfg = findDotSmConfig(process.cwd());
+
+  if (!opts.verbose) {
+    const installed = readInstalledCliVersion();
+    const latest = resolveLatestRegistryVersion();
+    console.log(formatInstallStatusLine(installed, latest));
+    if (!projectCfg) {
+      console.log("seatmesh is not initialized on this project -- run: npx seatmesh init");
+      return report;
+    }
+    console.log(`seatmesh (${loaded.profile.name}) session=${loaded.sessionName}`);
+    console.log(sessionOk ? `session: up${layoutOk ? "" : " (layout issue -- see --verbose)"}` : "session: down");
+    console.log(inboxOk ? meshInboxStatusLine(loaded, h0) : `inbox: down :${port}`);
+    console.log(report.ok ? "OK: stack ready" : "FAIL: run --verbose for detail, or npx seatmesh init/session up/inbox start");
+    return report;
+  }
+
   printSeatmeshBanner({
     subtitle: `status  profile=${loaded.profile.name}  session=${loaded.sessionName}`,
     tagline: !projectCfg,

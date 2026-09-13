@@ -1,9 +1,12 @@
 import {
   DEFAULT_GUARDS,
+  seatmeshCmd,
   type CommsAction,
   type SlotGuard,
   type SlotRole,
 } from "@seat-mesh/core";
+
+const m = (sub: string) => seatmeshCmd(sub);
 import type { WhoamiResult } from "./whoami.js";
 
 /** Map tmux mesh role -> guard role + optional extra deny. */
@@ -26,60 +29,60 @@ export function resolveGuardRole(w: WhoamiResult): {
 }
 
 const ACTION_COMMANDS: Record<CommsAction, string[]> = {
-  "send.toMaster": ["./sm.sh to-master <msg>"],
+  "send.toMaster": [m("to-master <msg>")],
   "send.peer": [
-    "./sm.sh to-slot <N> <msg>",
-    "./sm.sh to-mini <N> <msg>",
-    "./sm.sh room say [-r slug] <msg>",
+    m("to-slot <N> <msg>"),
+    m("to-mini <N> <msg>"),
+    m('room say [-r slug] <msg>'),
   ],
   "send.coord": [
-    "./sm.sh room broadcast <msg>",
-    "./sm.sh room say [-r slug] <msg>",
-    "./sm.sh to-master <coord>",
+    m("room broadcast <msg>"),
+    m('room say [-r slug] <msg>'),
+    m("to-master <coord>"),
   ],
   "spawn.mini": [
-    "./sm.sh mini spawn [--role R] <task>",
-    "./sm.sh mini list | prompt | done | kill | reassign",
+    m("mini spawn [--role R] <task>"),
+    m("mini list | prompt | done | kill | reassign"),
   ],
   "prompt.worker": [
-    "./sm.sh prompt <slot> <msg>",
-    "./sm.sh remind <slot|all> [note]",
-    "./sm.sh switch|handoff <target> <cli> [reason]",
-    "./sm.sh continue <slot|all> (night)",
-    "./sm.sh flush <target>",
+    m("prompt <slot> <msg>"),
+    m("remind <slot|all> [note]"),
+    m("switch|handoff <target> <cli> [reason]"),
+    m("continue <slot|all> (night)"),
+    m("flush <target>"),
   ],
-  "snapshot.cold": ["./sm.sh snapshot here <slug>"],
-  "nav.log": ["./sm.sh nav log ... (if enabled)"],
+  "snapshot.cold": [m("snapshot here <slug>")],
+  "nav.log": [m("nav log ... (if enabled)")],
   merge: ["merge / QA column / board mutate (operator only — not CLI)"],
   "board.mutate": ["board column moves (operator only)"],
 };
 
 /** Shared baseline — every in-session agent. */
 const BASE_COMMANDS = [
-  "./sm.sh agent",
-  "./sm.sh whoami [target]",
-  "./sm.sh checkback start|list|cancel ...",
-  "./sm.sh room tail [-r slug]",
-  "./sm.sh contexts",
-  "./sm.sh peek <target> status|full",
-  "./sm.sh inbox (health)",
-  "./sm.sh profile show",
+  m("agent"),
+  m("whoami [target]"),
+  m("checkback start|list|cancel ..."),
+  m("room tail [-r slug]"),
+  m("contexts"),
+  m("peek <target> status|full"),
+  m("inbox (health)"),
+  m("profile show"),
 ];
 
 const ROLE_EXTRA_CAN: Record<string, string[]> = {
   manager: [
-    "./sm.sh triage (read)",
-    "./sm.sh secretary start|status|digest",
-    "./sm.sh inbox restart",
-    "./sm.sh launch [targets]",
-    "./sm.sh verify | reload | labels",
+    m("triage (read)"),
+    m("secretary start|status|digest"),
+    m("inbox restart"),
+    m("launch [targets]"),
+    m("verify | reload | labels"),
   ],
   secretary: [
-    "./sm.sh secretary dispatch|collect|watch on|off",
-    "./sm.sh mini spawn (tester|code-reviewer|helper only)",
+    m("secretary dispatch|collect|watch on|off"),
+    m("mini spawn (tester|code-reviewer|helper only)"),
   ],
   worker: ["workspace notify script (operator prove)"],
-  mini: ["./sm.sh mini done <N> PASS|FAIL: ..."],
+  mini: [m("mini done <N> PASS|FAIL: ...")],
 };
 
 function allowsAction(
@@ -142,13 +145,13 @@ export function buildAgentCard(w: WhoamiResult): {
     `guard_role=${guardRole}`,
     ...(slotBit ? [slotBit] : []),
     ...(portsBit ? [portsBit] : []),
-    "scope=./sm.sh agent (profile role — not full whoami hub)",
+    `scope=${m("agent")} (profile role — not full whoami hub)`,
     "--- can ---",
     ...can.map((c) => `  ${c}`),
     "--- cannot ---",
     ...(cannot.length ? cannot.map((c) => `  ${c}`) : ["  (none beyond operator gates)"]),
     "---",
-    "full_hub=./sm.sh whoami",
+    `full_hub=${m("whoami")}`,
     "one_path=services/seatmesh/docs/ONE-PATH.md",
   ];
 

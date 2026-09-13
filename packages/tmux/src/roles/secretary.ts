@@ -21,7 +21,12 @@ import {
 } from "@seat-mesh/providers";
 import { guessSecretaryOpenCodeSession } from "@seat-mesh/providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
-import { loadLaunchState, loadMeshAgents, resolveLaunchCmd } from "../agents/agents-state.js";
+import {
+  loadLaunchState,
+  loadMeshAgentsForProfile,
+  meshAgentsJsonPath,
+  resolveLaunchCmd,
+} from "../agents/agents-state.js";
 import { saveMeshAgentsFile } from "../session/save-session.js";
 import { enqueuePeer, ensureMeshInbox, inboxHealth, meshInboxPort } from "../comms/inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
@@ -37,7 +42,6 @@ import { applyMeshBorderFormat } from "../session/borders.js";
 
 const MESH_WATCH_ID = "mesh-watch-secretary";
 const MANAGER_NUDGE_ID = "mesh-manager-nudge";
-const MANAGER2_NUDGE_ID = "mesh-manager-2-nudge";
 const SECRETARY_SUPERVISE_ID = "mesh-secretary-supervise";
 
 function superviseMarkerPath(loaded: LoadedProfile): string {
@@ -113,10 +117,9 @@ function ensureSecretaryBanners(loaded: LoadedProfile, paneId: string): void {
 }
 
 function clearSecretaryResumeOnDisk(loaded: LoadedProfile): void {
-  const rel = loaded.profile.state.meshAgentsJson;
-  const mesh = loadMeshAgents(loaded.workspace, rel);
+  const mesh = loadMeshAgentsForProfile(loaded);
   if (!mesh?.secretary) return;
-  saveMeshAgentsFile(loaded.workspace, rel, {
+  saveMeshAgentsFile(meshAgentsJsonPath(loaded), {
     ...mesh,
     secretary: { ...mesh.secretary, resumeId: null, resumeCmd: null },
     updatedAt: new Date().toISOString(),
@@ -129,11 +132,7 @@ function resolveSecretaryLaunchCmd(
   paneId?: string,
   fresh = false,
 ): string | null {
-  const state = loadLaunchState(
-    loaded.workspace,
-    loaded.profile.state.meshAgentsJson,
-    loaded.profile.state.agentsJson,
-  );
+  const state = loadLaunchState(loaded);
   const harnessType = typ === "cursor-agent" ? "agent" : typ;
   let resumeId: string | null = null;
   if (!fresh) {
@@ -184,11 +183,7 @@ export function secretaryRestart(
   }
   const paneId = resolved.paneId;
 
-  const state = loadLaunchState(
-    workspace,
-    loaded.profile.state.meshAgentsJson,
-    loaded.profile.state.agentsJson,
-  );
+  const state = loadLaunchState(loaded);
   let typ =
     typArg ??
     state.secretary?.type ??
@@ -444,7 +439,6 @@ export function secretarySupervise(
 
   if (sub === "off") {
     cancelPatience(loaded, MANAGER_NUDGE_ID);
-    cancelPatience(loaded, MANAGER2_NUDGE_ID);
     for (const extra of extraPanes) {
       cancelPatience(loaded, `mesh-${extra.id}-nudge`);
     }
@@ -466,13 +460,15 @@ export function secretarySupervise(
           since?: string;
           interval?: string;
           managerPane?: string;
-          manager2Pane?: string;
+          extraManagerPanes?: Array<{ id: string; paneId: string }>;
           secretaryPane?: string;
         };
         if (meta.since) console.log(`  since: ${meta.since}`);
         if (meta.interval) console.log(`  interval: ${meta.interval}`);
         if (meta.managerPane) console.log(`  manager: ${meta.managerPane}`);
-        if (meta.manager2Pane) console.log(`  manager-2: ${meta.manager2Pane}`);
+        for (const extra of meta.extraManagerPanes ?? []) {
+          console.log(`  ${extra.id}: ${extra.paneId}`);
+        }
         if (meta.secretaryPane) console.log(`  secretary: ${meta.secretaryPane}`);
       } catch {
         /* ignore */
@@ -486,7 +482,6 @@ export function secretarySupervise(
   const expires = new Date(Date.now() + secs * 1000).toISOString();
 
   cancelPatience(loaded, MANAGER_NUDGE_ID);
-  cancelPatience(loaded, MANAGER2_NUDGE_ID);
   for (const extra of extraPanes) {
     cancelPatience(loaded, `mesh-${extra.id}-nudge`);
   }
@@ -495,8 +490,8 @@ export function secretarySupervise(
   // Primary manager is the hub — no daemon CONTINUE nudge (was spamming the pane).
   for (const extra of extraPanes) {
     armPatience(loaded, {
-      id: extra.id === "manager-2" ? MANAGER2_NUDGE_ID : `mesh-${extra.id}-nudge`,
-      kind: extra.id === "manager-2" ? "manager-2-nudge" : "coord-nudge",
+      id: `mesh-${extra.id}-nudge`,
+      kind: "coord-nudge",
       renewSec: secs,
       expect: `${extra.id} idle — complete open TASKS.md checkboxes`,
       ownerPane: extra.paneId,
@@ -532,7 +527,7 @@ export function secretarySupervise(
   if (!skipBrief) {
     const brief = secretarySuperviseBrief({
       managerPane: mgrResolved.paneId,
-      manager2Pane: extraPanes[0]?.paneId ?? "",
+      extraPanes,
       interval,
     });
 
@@ -566,7 +561,6 @@ export function secretarySupervise(
         since: new Date().toISOString(),
         interval,
         managerPane: mgrResolved.paneId,
-        manager2Pane: extraPanes[0]?.paneId,
         extraManagerPanes: extraPanes,
         secretaryPane: secResolved.paneId,
       },

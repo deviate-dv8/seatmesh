@@ -4,13 +4,17 @@ import {
   MeshAgentsSchema,
   type CliType,
   type LoadedProfile,
+  type ManagerSlot,
   type MeshAgents,
   type MiniSlot,
   type SavedLayout,
   type SecretarySlot,
   type WorkerSlot,
   buildResolvedPaths,
+  baseColumnIds,
   mergeMeshAgentsIntoProfile,
+  primaryManagerColumn,
+  primarySecretaryColumn,
   normalizeMinisLeads,
   portsForSlot,
 } from "@seat-mesh/core";
@@ -20,7 +24,12 @@ import {
   normalizeOpenCodeSessionId,
 } from "@seat-mesh/providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
-import { loadMeshAgents } from "../agents/agents-state.js";
+import {
+  loadMeshAgentsAt,
+  loadMeshAgentsForProfile,
+  meshAgentsJsonPath,
+} from "../agents/agents-state.js";
+import { seatmeshCmd } from "@seat-mesh/core";
 import { loadMinisState } from "../roles/minis.js";
 import {
   coordPaneForRole,
@@ -120,8 +129,7 @@ function detectPane(
 
 /** Apply mesh-agents.json layout overrides onto a loaded profile. */
 export function applyMeshState(loaded: LoadedProfile): LoadedProfile {
-  const rel = loaded.profile.state.meshAgentsJson;
-  const mesh = loadMeshAgents(loaded.workspace, rel);
+  const mesh = loadMeshAgentsForProfile(loaded);
   return {
     ...loaded,
     profile: mergeMeshAgentsIntoProfile(loaded.profile, mesh),
@@ -133,14 +141,15 @@ export function persistSavedLayout(
   loaded: LoadedProfile,
   layoutPatch: SavedLayout,
 ): LoadedProfile {
-  const rel = loaded.profile.state.meshAgentsJson;
-  const existing = loadMeshAgents(loaded.workspace, rel);
+  const meshFile = meshAgentsJsonPath(loaded);
+  const existing = loadMeshAgentsAt(meshFile);
   const base = existing ?? {
     schemaVersion: 1 as const,
     session: loaded.sessionName,
     workdir: loaded.workspace,
     workers: [],
     minis: [],
+    layout: undefined,
     conventions: {
       secretaryDefaultCli: "opencode" as const,
       miniDefaultCli: "opencode" as const,
@@ -156,7 +165,7 @@ export function persistSavedLayout(
     },
     updatedAt: new Date().toISOString(),
   });
-  saveMeshAgentsFile(loaded.workspace, rel, next);
+  saveMeshAgentsFile(meshFile, next);
   return applyMeshState(loaded);
 }
 
@@ -168,7 +177,7 @@ export function scrapeMeshAgents(
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
-    throw new Error(`session '${session}' does not exist — ./sm.sh session up`);
+    throw new Error(`session '${session}' does not exist — ${seatmeshCmd("session up")}`);
   }
 
   const minisCfg = layout.minis;
@@ -179,7 +188,7 @@ export function scrapeMeshAgents(
   };
 
   const miniState = loadMinisState(loaded);
-  const existing = loadMeshAgents(loaded.workspace, loaded.profile.state.meshAgentsJson);
+  const existing = loadMeshAgentsForProfile(loaded);
   const workerMeta = listMeshWorkers(session, layout.workers.window);
   const miniMeta = listMeshMinis(session, layout.minis.window);
 
@@ -220,7 +229,6 @@ export function scrapeMeshAgents(
   }
 
   const mgrPane = meshManagerPane(session, layout.base.window);
-  const mgr2Pane = coordPaneForRole(session, layout.base.window, "manager-2");
   const secPane = meshSecretaryPane(session, layout.base.window);
   const manager = mgrPane
     ? (() => {
@@ -234,17 +242,25 @@ export function scrapeMeshAgents(
       })()
     : undefined;
 
-  const manager2 = mgr2Pane
-    ? (() => {
-        const det = detectPane(mgr2Pane, registry, loaded.workspace, existing?.manager2);
-        return {
-          type: det.type,
-          name: "manager-2",
-          resumeId: det.resumeId,
-          resumeCmd: det.resumeCmd,
-        };
-      })()
-    : undefined;
+  const extraColIds = baseColumnIds(layout).filter(
+    (id) =>
+      id !== primaryManagerColumn(layout) && id !== primarySecretaryColumn(layout),
+  );
+  const coords: Record<string, ManagerSlot> = { ...(existing?.coords ?? {}) };
+  for (const id of extraColIds) {
+    const pane = coordPaneForRole(session, layout.base.window, id);
+    if (!pane) {
+      delete coords[id];
+      continue;
+    }
+    const det = detectPane(pane, registry, loaded.workspace, existing?.coords?.[id]);
+    coords[id] = {
+      type: det.type,
+      name: id,
+      resumeId: det.resumeId,
+      resumeCmd: det.resumeCmd,
+    };
+  }
 
   let secretary: SecretarySlot | undefined;
   if (secPane) {
@@ -280,7 +296,7 @@ export function scrapeMeshAgents(
     session,
     workdir: loaded.workspace,
     manager,
-    manager2,
+    coords: Object.keys(coords).length ? coords : undefined,
     secretary,
     workers,
     minis,
@@ -309,8 +325,8 @@ export function scrapeMeshAgents(
   });
 }
 
-export function saveMeshAgentsFile(workspace: string, relPath: string, data: MeshAgents): string {
-  const file = path.join(workspace, relPath);
+/** Write mesh-agents.json at an absolute path (atomic rename). */
+export function saveMeshAgentsFile(file: string, data: MeshAgents): string {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const body = JSON.stringify(data, null, 2) + "\n";
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
@@ -349,9 +365,8 @@ export function formatSaveSummary(data: MeshAgents, file: string): string {
     const m = data.manager;
     lines.push(`manager: ${m.type}${m.resumeId ? " resume" : ""}`);
   }
-  if (data.manager2) {
-    const m = data.manager2;
-    lines.push(`manager-2: ${m.type}${m.resumeId ? " resume" : ""}`);
+  for (const [id, slot] of Object.entries(data.coords ?? {})) {
+    lines.push(`${id}: ${slot.type}${slot.resumeId ? " resume" : ""}`);
   }
   if (data.secretary) {
     const s = data.secretary;
@@ -386,8 +401,7 @@ export function saveMeshSessionDetailed(
   registry: ProviderRegistry,
 ): SaveMeshSessionResult {
   const data = scrapeMeshAgents(loaded, registry);
-  const rel = loaded.profile.state.meshAgentsJson;
-  const file = saveMeshAgentsFile(loaded.workspace, rel, data);
+  const file = saveMeshAgentsFile(meshAgentsJsonPath(loaded), data);
   return { file, data };
 }
 

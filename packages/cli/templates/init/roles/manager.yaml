@@ -1,4 +1,5 @@
 kind: manager
+extends: common
 banner:
   - "cold_start=./sm.sh whoami --validate | coordination; spawn/review minis; PROPOSAL gate"
 read_first:

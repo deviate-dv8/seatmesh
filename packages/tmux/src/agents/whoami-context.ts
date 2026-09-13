@@ -10,8 +10,11 @@ import {
   runtimePathHint,
   unseenSummaryForAgent,
   isManagerKind,
+  seatmeshCmd,
   type LoadedProfile,
 } from "@seat-mesh/core";
+
+const m = (sub: string) => seatmeshCmd(sub);
 import type { WhoamiResult } from "./whoami.js";
 
 interface CheckbackRow {
@@ -29,6 +32,16 @@ interface InboxRow {
   from: string;
   msg: string;
   resolved: boolean;
+}
+
+interface PeerRow {
+  id: string;
+  at: string;
+  fromAgent?: string | null;
+  fromSlot?: string;
+  targetLabel: string;
+  msg: string;
+  sent: boolean;
 }
 
 interface MiniRow {
@@ -119,7 +132,7 @@ export function buildWhoamiContextLines(
 
   lines.push("--- context ---");
   lines.push(`agent_id=${agentId}`);
-  lines.push("fresh_summon=run ./sm.sh whoami first; hub is that dump; later peer is a task");
+  lines.push(`fresh_summon=run ${m("whoami")} first; hub is that dump; later peer is a task`);
   if (mini) lines.push(`mini=${mini}`);
   if (opts.jobRole) lines.push(`job_role=${opts.jobRole}`);
 
@@ -137,7 +150,7 @@ export function buildWhoamiContextLines(
     const scope = r.scope ? ` | ${truncate(r.scope, 72)}` : "";
     lines.push(`room=${r.slug} role=${r.role}${scope}`);
   }
-  lines.push("room_cmds=./sm.sh room tail -n 30 | ./sm.sh room tail -r supervise -n 20");
+  lines.push(`room_cmds=${m("room tail -n 30")} | ${m("room tail -r supervise -n 20")}`);
 
   const cfg = chatRoomConfigForLoaded(loaded);
   const superviseSlug = listRooms(loaded.workspace, cfg).includes("supervise")
@@ -166,7 +179,7 @@ export function buildWhoamiContextLines(
       lines.push("--- supervise inbox (room ledger) ---");
       lines.push(`supervise_unseen=${unseen}`);
       lines.push(`supervise_path=tasks/chat-rooms/${superviseSlug}/ROOM.jsonl`);
-      lines.push(`supervise_tail=./sm.sh room tail -r ${superviseSlug} -n 20`);
+      lines.push(`supervise_tail=${m(`room tail -r ${superviseSlug} -n 20`)}`);
       if (unseen > 0) {
         lines.push(`supervise_hint=${unseen} unseen — run supervise_tail before continuing`);
       }
@@ -191,7 +204,7 @@ export function buildWhoamiContextLines(
         );
       }
       if (cbs.length > 5) lines.push(`checkback_more=${cbs.length - 5}`);
-      lines.push("checkback_cmds=./sm.sh checkback list | ./sm.sh checkback cancel <id>");
+      lines.push(`checkback_cmds=${m("checkback list")} | ${m("checkback cancel <id>")}`);
     }
   }
 
@@ -205,7 +218,7 @@ export function buildWhoamiContextLines(
     lines.push(`mini_focus=${miniDir}/FOCUS.md`);
     lines.push(`mini_tasks=${miniDir}/TASKS.md`);
     lines.push(`gate_queue=${runtimePathHint(loaded.workspace, rt.gateQueue)}`);
-    lines.push("cold_start=./sm.sh cold-start (full hub inline)");
+    lines.push(`cold_start=${m("cold-start")} (full hub inline)`);
 
     const minisPath = rt.minisJson;
     if (fs.existsSync(minisPath)) {
@@ -228,8 +241,8 @@ export function buildWhoamiContextLines(
 
   if (w.role === "worker" && w.slot != null) {
     lines.push(`gate_queue=${runtimePathHint(loaded.workspace, rt.gateQueue)}`);
-    lines.push("fresh_summon=run ./sm.sh whoami first; hub is that dump; later peer is a task");
-    lines.push("cold_start=./sm.sh whoami (includes GATE-QUEUE + open TASKS inline)");
+    lines.push(`fresh_summon=run ${m("whoami")} first; hub is that dump; later peer is a task`);
+    lines.push(`cold_start=${m("whoami")} (includes GATE-QUEUE + open TASKS inline)`);
   }
 
   if (w.role === "manager") {
@@ -246,9 +259,32 @@ export function buildWhoamiContextLines(
     lines.push(`inbox_path=${runtimePathHint(loaded.workspace, rt.inboxJsonl)}`);
   }
 
+  // Every non-primary-manager role (manager-2/3, secretary, workers, minis) can go a whole
+  // session without ever seeing what's addressed to them, because a busy/typing pane never
+  // gets the daemon's push-inject and nothing else surfaces the backlog. Show it here instead,
+  // since whoami is the one thing every seat is told to run each turn.
+  const peerBacklog = readJsonl<PeerRow>(rt.peerJsonl, (row) => {
+    const r = row as PeerRow;
+    if (r.sent) return null;
+    if (r.targetLabel !== agentId && r.targetLabel !== w.role) return null;
+    return r;
+  });
+  lines.push("--- peer backlog (addressed to you) ---");
+  lines.push(`peer_unsent=${peerBacklog.length}`);
+  if (peerBacklog.length) {
+    for (const row of peerBacklog.slice(-3)) {
+      const from = row.fromAgent || row.fromSlot || "?";
+      lines.push(`peer=${row.id.slice(0, 8)} from=${from} ${truncate(row.msg, 100)}`);
+    }
+    if (peerBacklog.length > 3) lines.push(`peer_more=${peerBacklog.length - 3}`);
+    lines.push(`peer_hint=daemon has NOT pushed these (pane busy/typing never gets auto-inject) — read them here, don't wait for them to arrive`);
+  }
+
   lines.push("--- comms ---");
   lines.push(commsOneLiner(w.role, mini, loaded.profile.session.workerCount));
-  lines.push("checkback_vs_supervise=checkback=poll-later self; supervise=secretary->manager only (./sm.sh secretary supervise)");
+  lines.push(
+    `checkback_vs_supervise=checkback=poll-later self; supervise=secretary->manager only (${m("secretary supervise")})`,
+  );
   lines.push("slot_vs_mini=slot-N=worker 30N0/30N1; mini-N=minis window only");
 
   return lines;

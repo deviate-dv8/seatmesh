@@ -38,7 +38,7 @@ export const LayoutSchema = z.object({
        * Horizontal base columns — any ids. Kind is prefix or `kinds` map
        * (manager / secretary / …). N managers and N secretaries are config, not enum.
        */
-      columns: z.array(BaseColumnSchema).min(1).max(12).default(["manager", "secretary"]),
+      columns: z.array(BaseColumnSchema).min(1).max(128).default(["manager", "secretary"]),
       /** Override inferred kind per column id (`relief: manager`, `sec-west: secretary`). */
       kinds: z.record(z.string(), SeatKindSchema).optional(),
       /** CLI type per column id (default: secretary-kind=opencode, else agent). */

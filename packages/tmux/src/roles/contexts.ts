@@ -1,4 +1,9 @@
-import { buildResolvedPaths, portsForSlot, type LoadedProfile } from "@seat-mesh/core";
+import {
+  buildResolvedPaths,
+  portsForSlot,
+  seatDirSegment,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import { readSeatSnapshot } from "../seats/seat-update.js";
 
 export interface SeatContextRow {
@@ -30,13 +35,7 @@ export function seatContextRows(loaded: LoadedProfile): SeatContextRow[] {
   }
 
   for (const col of loaded.profile.layout?.base.columns ?? ["manager", "secretary"]) {
-    if (col !== "manager" && col !== "manager-2" && col !== "secretary") continue;
-    const seatDir =
-      col === "manager"
-        ? (loaded.profile.seats.dirs?.manager ?? "manager")
-        : col === "manager-2"
-          ? (loaded.profile.seats.dirs?.["manager-2"] ?? "manager-2")
-          : (loaded.profile.seats.dirs?.secretary ?? "secretary");
+    const seatDir = seatDirSegment(loaded.profile.seats.dirs, col);
     rows.push(rowFor(loaded, seatDir, "-", { role: col }));
   }
 
@@ -60,10 +59,10 @@ export function printSeatContexts(loaded: LoadedProfile, json = false): void {
   }
 
   console.log(`== live seats (${root}) ==`);
-  console.log(`${"seat".padEnd(10)} ${"ports".padEnd(12)} ${"tasks".padStart(5)} ${"rem".padStart(4)}  focus-preview`);
+  console.log(`${"seat".padEnd(12)} ${"ports".padEnd(12)} ${"tasks".padStart(5)} ${"rem".padStart(4)}  focus-preview`);
   for (const r of rows) {
     console.log(
-      `${r.seat.padEnd(10)} ${r.ports.padEnd(12)} ${String(r.tasks).padStart(5)} ${String(r.rem).padStart(4)}  ${r.preview}`,
+      `${r.seat.padEnd(12)} ${r.ports.padEnd(12)} ${String(r.tasks).padStart(5)} ${String(r.rem).padStart(4)}  ${r.preview}`,
     );
   }
   console.log("(tasks/rem = open checkbox counts in TASKS.md / REMINDER.md; FOCUS is NOW-only)");

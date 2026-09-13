@@ -41,8 +41,10 @@ export function parseMeshInboxIntent(message: string): MeshInboxIntent | null {
 /** Non-assign intents must not end with Reply: peer boilerplate. */
 export function stripReplyPeerFooter(message: string): string {
   return message
+    .replace(/\nSHELL \(required[^\n]*$/gm, "")
     .replace(/\nReply: peer[^\n]*$/gm, "")
     .replace(/\nReply: \.\/sm\.sh peer[^\n]*$/gm, "")
+    .replace(/\nReply: seatmesh[^\n]*$/gm, "")
     .trimEnd();
 }
 

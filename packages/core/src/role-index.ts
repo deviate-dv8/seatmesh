@@ -23,7 +23,9 @@ export interface RoleAllowDeny {
 
 export interface RoleIndex {
   kind: string;
-  /** Printed first on ./sm.sh whoami (patterns.md / ONE-PATH). */
+  /** Parent role file name (no .yaml) — merged before this file. */
+  extends?: string;
+  /** Printed first on whoami (patterns.md / ONE-PATH). */
   banner?: string[];
   read_first?: RoleIndexEntry[];
   policies?: RolePolicy[];
@@ -32,9 +34,11 @@ export interface RoleIndex {
   vars?: Record<string, string>;
   /** Comms + builtin command guards (AGENT-FUNC-GUARDS.md / ROLE-YAML.md). */
   guards?: RoleAllowDeny;
-  /** Attached-external (./sm.sh func) allow/deny per role. */
+  /** Attached-external (seatmesh func) allow/deny per role. */
   funcs?: RoleAllowDeny;
 }
+
+type RoleYaml = Partial<RoleIndex> & { extends?: string; kind?: string };
 
 /** Deny accumulates from base; child role's own allow list wins over base's allow. */
 function mergeAllowDeny(base?: RoleAllowDeny, role?: RoleAllowDeny): RoleAllowDeny | undefined {
@@ -52,11 +56,17 @@ function mergeRoleIndex(base: Partial<RoleIndex>, role: RoleIndex): RoleIndex {
     seen.add(item.path);
     return true;
   });
+  const policyById = new Map<string, RolePolicy>();
+  for (const p of [...(base.policies ?? []), ...(role.policies ?? [])]) {
+    policyById.set(p.id, p);
+  }
+  const policies = [...policyById.values()];
   return {
     ...role,
+    kind: role.kind ?? base.kind ?? "worker",
     banner: [...(base.banner ?? []), ...(role.banner ?? [])],
     read_first: dedupedReadFirst,
-    policies: [...(base.policies ?? []), ...(role.policies ?? [])],
+    policies,
     files: [...new Set([...(base.files ?? []), ...(role.files ?? [])])],
     inject: [...(base.inject ?? []), ...(role.inject ?? [])],
     vars: { ...(base.vars ?? {}), ...(role.vars ?? {}) },
@@ -82,23 +92,80 @@ function normalizeRoleKind(kind: string): string {
   return kind === "master" ? "manager" : kind;
 }
 
-export function loadRoleIndex(rolesDir: string, kind: string): RoleIndex {
-  const normalized = normalizeRoleKind(kind);
-  const seatKind = seatKindFromId(normalized);
-  const specific = path.join(rolesDir, `${normalized}.yaml`);
-  const kindFile = path.join(rolesDir, `${seatKind}.yaml`);
-  const file = fs.existsSync(specific) ? specific : kindFile;
-  if (!fs.existsSync(file)) {
-    throw new Error(`role index missing: ${file}`);
+function roleYamlPath(rolesDir: string, name: string): string {
+  return path.join(rolesDir, `${name}.yaml`);
+}
+
+function columnOverlayPath(rolesDir: string, columnId: string): string {
+  return path.join(rolesDir, "columns", `${columnId}.yaml`);
+}
+
+/** Load one yaml file and merge its `extends` chain (child wins on conflicts). */
+function loadRoleFileChain(
+  rolesDir: string,
+  name: string,
+  filePath: string,
+  visiting: Set<string>,
+): RoleIndex {
+  const key = `${filePath}`;
+  if (visiting.has(key)) {
+    throw new Error(`role extends cycle at ${filePath}`);
   }
-  let common: Partial<RoleIndex> = {};
-  const commonFile = path.join(rolesDir, "common.yaml");
-  if (fs.existsSync(commonFile)) {
-    common = YAML.parse(fs.readFileSync(commonFile, "utf8")) as Partial<RoleIndex>;
+  visiting.add(key);
+
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`role index missing: ${filePath}`);
   }
-  const data = YAML.parse(fs.readFileSync(file, "utf8")) as RoleIndex;
-  if (!data.kind) data.kind = normalized;
-  return mergeRoleIndex(common, data);
+
+  const raw = YAML.parse(fs.readFileSync(filePath, "utf8")) as RoleYaml;
+  const extendsName = raw.extends?.trim();
+  let merged: RoleIndex = { kind: raw.kind ?? name };
+
+  if (extendsName) {
+    const parentNorm = normalizeRoleKind(extendsName);
+    const parentPath = roleYamlPath(rolesDir, parentNorm);
+    const parent = loadRoleFileChain(rolesDir, parentNorm, parentPath, visiting);
+    merged = mergeRoleIndex(parent, { ...merged, ...stripExtends(raw), kind: raw.kind ?? name });
+  } else if (name === "common") {
+    merged = mergeRoleIndex({}, { ...merged, ...stripExtends(raw), kind: "common" });
+  } else {
+    const commonPath = roleYamlPath(rolesDir, "common");
+    if (fs.existsSync(commonPath)) {
+      const common = loadRoleFileChain(rolesDir, "common", commonPath, visiting);
+      merged = mergeRoleIndex(common, { ...merged, ...stripExtends(raw), kind: raw.kind ?? name });
+    } else {
+      merged = mergeRoleIndex({}, { ...merged, ...stripExtends(raw), kind: raw.kind ?? name });
+    }
+  }
+
+  visiting.delete(key);
+  return merged;
+}
+
+function stripExtends(raw: RoleYaml): Partial<RoleIndex> {
+  const { extends: _e, ...rest } = raw;
+  return rest;
+}
+
+/**
+ * Pane column id -> merged role index.
+ * 1. Seat kind file (`manager.yaml`) with optional `extends:` chain (+ implicit common).
+ * 2. Optional column overlay `.sm/roles/columns/<columnId>.yaml` with `extends: manager` (etc.).
+ * Never load `roles/<columnId>.yaml` as a kind — use `columns/<columnId>.yaml`.
+ */
+export function loadRoleIndex(rolesDir: string, paneRoleId: string): RoleIndex {
+  const columnId = normalizeRoleKind(paneRoleId);
+  const seatKind = seatKindFromId(columnId);
+  const overlayPath = columnOverlayPath(rolesDir, columnId);
+  if (columnId !== seatKind && fs.existsSync(overlayPath)) {
+    const merged = loadRoleFileChain(rolesDir, columnId, overlayPath, new Set());
+    merged.kind = seatKind;
+    return merged;
+  }
+  const kindPath = roleYamlPath(rolesDir, seatKind);
+  const merged = loadRoleFileChain(rolesDir, seatKind, kindPath, new Set());
+  merged.kind = seatKind;
+  return merged;
 }
 
 function substituteVars(text: string, vars: Record<string, string>): string {

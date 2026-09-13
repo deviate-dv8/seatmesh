@@ -14,6 +14,8 @@ import {
   loadBalanceVendorContract,
   contractsDirFor,
   hubLockActive,
+  isManagerKind,
+  isSecretaryKind,
   meshInboxBalanceLeadTick,
   meshInboxBalanceStatus,
   parseRoomCommsExpect,
@@ -160,7 +162,7 @@ function drainInboxLaneOnce(
     ctx.log(`INBOX held id=${row.id} lane=${lane} reason=${gate.reason}`);
     return { attempted: 1, delivered: 0, held: 1 };
   }
-  const result = deliverToPane(targetPane, payload, ctx.registry);
+  const result = deliverToPane(targetPane, payload, ctx.registry, { loaded: ctx.loaded });
   if (!result.ok) {
     ctx.log(`INBOX held id=${row.id} lane=${lane} reason=${result.reason}`);
     return { attempted: 1, delivered: 0, held: 1 };
@@ -249,9 +251,7 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
     if (
       hubLockActive(ctx.loaded.workspace) &&
       isAckClassPeer(row.msg) &&
-      (row.targetLabel === "manager" ||
-        row.targetLabel === "manager-2" ||
-        row.targetLabel === "secretary")
+      (isManagerKind(row.targetLabel) || isSecretaryKind(row.targetLabel))
     ) {
       markPeerRowSkipped(ctx.store, row);
       ctx.log(`PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=hub-lock`);
@@ -270,15 +270,14 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
     const roomPing = row.kind === "room";
     const thinRoomPing = roomPing && /\[mesh-inbox-room\]/.test(row.msg);
     const toManager =
-      row.targetLabel === "manager" ||
+      isManagerKind(row.targetLabel) ||
       row.targetLabel === "master" ||
-      row.targetLabel === "manager" ||
-      paneMetaForPane(row.targetPane)?.role === "manager";
+      isManagerKind(paneMetaForPane(row.targetPane)?.role ?? "");
     const lightweight = isAckClassPeer(row.msg) || roomPing;
     const result = deliverToPane(row.targetPane, row.msg, ctx.registry, {
       lightweight,
       // Thin room ledger pings bypass coord idle-settle (manager/manager-b/secretary) —
-      // except humanCoTyped panes (default manager-2), which never get that bypass.
+      // except humanCoTyped panes (profile layout.base.humanCoTyped), which never get that bypass.
       roomPing: thinRoomPing || (roomPing && !toManager),
       loaded: ctx.loaded,
     });
@@ -442,21 +441,28 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       const mgrPane = meshManagerPane(ctx.session, ctx.baseWindow);
       const digestBlock = meshInboxDigestBlock(digest.text);
       if (mgrPane) {
-        deliverToPane(mgrPane, digestBlock, ctx.registry, { skipVerify: true });
+        deliverToPane(mgrPane, digestBlock, ctx.registry, { skipVerify: true, loaded: ctx.loaded });
       }
       const secMsg = `${formatCompactSeat({ role: "secretary" })} | ${meshInboxDigestIncomplete({
         done: digest.done,
         total: digest.total,
         openIds: digest.openIds,
       })}`;
-      deliverToPane(pane, secMsg, ctx.registry, { skipVerify: true });
+      deliverToPane(pane, secMsg, ctx.registry, { skipVerify: true, loaded: ctx.loaded });
       ctx.log(`mesh-watch digest done=${digest.done}/${digest.total} open=${digest.openIds.join(",") || "none"}`);
     } else if (row.kind === "manager-nudge") {
       row.status = "cancelled";
       row.updatedAt = new Date().toISOString();
       ctx.log("manager-nudge cancelled (disabled — protect manager lead health)");
-    } else if (row.kind === "manager-2-nudge") {
-      const role: "manager-2" = "manager-2";
+    } else if (row.kind === "coord-nudge" || (row.kind?.endsWith("-nudge") && row.kind !== "manager-nudge")) {
+      const role =
+        row.recipientLabel?.trim() ||
+        paneMetaForPane(pane)?.role ||
+        "";
+      if (!role) {
+        ctx.log(`${row.kind} skip (no recipient)`);
+        continue;
+      }
       const leadPane = coordPaneForRole(ctx.session, ctx.baseWindow, role) || undefined;
       if (leadPane && pane && pane !== leadPane) {
         ctx.log(`${row.kind} retarget ${pane} -> ${leadPane} (supervisee must be ${role})`);
@@ -515,8 +521,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       }
       const meta = pane ? paneMetaForPane(pane) : null;
       const role = meta?.role ?? "worker";
-      const leadRole =
-        role === "manager" || role === "manager-2" ? (role as "manager" | "manager-2") : null;
+      const leadRole = isManagerKind(role) ? role : null;
       const msg = leadRole
         ? meshInboxCcLimitRetryContinue(leadRole)
         : `${formatCompactSeat({
@@ -559,7 +564,14 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       if (!r.ok) deferFailedFire(ctx, row, now, r.reason ?? "deliver");
       ctx.log(`coord-expect ${outcome.retried ? "retry" : "hold"} ${outcome.reason}`);
     } else if (row.kind === "balance-lead-tick") {
-      const role: "manager-2" = "manager-2";
+      let role = row.recipientLabel?.trim() || "";
+      if (!role) {
+        try {
+          role = loadBalanceVendorContract(contractsDirFor(ctx.loaded)).balance_lead;
+        } catch {
+          role = "";
+        }
+      }
       const leadPane = coordPaneForRole(ctx.session, ctx.baseWindow, role) || pane;
       if (leadPane && pane && pane !== leadPane) {
         row.ownerPane = leadPane;

@@ -4,7 +4,7 @@ import { coordComposerDraft } from "@seat-mesh/providers";
  * True if `text` is mesh-generated inject/steering copy, not a human draft.
  * Room-fanout pings (formatRoomPeerNotify/formatRoomCoordNotify) and the worker
  * inject stamp (formatWorkerInjectStamp) all prefix the actual tag with
- * "<seat> | " (e.g. "manager-2 | [mesh-inbox-room] managers | ..."), so an
+ * "<seat> | " (any profile column id + inbox tag), so an
  * anchored ^ check alone never matches them — check the text with that seat
  * prefix stripped too, or every room-fanout ping gets misread as a human draft.
  */

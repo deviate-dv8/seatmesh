@@ -195,7 +195,7 @@ export function injectPromptDirect(
   const provider = registry.detect(snap);
   if (!provider) {
     throw new Error(
-      `no live agent CLI in ${resolved.paneId} — run ./sm.sh launch ${target} first`,
+      `no live agent CLI in ${resolved.paneId} — run seatmesh --profile .sm launch ${target} first`,
     );
   }
 
@@ -205,7 +205,7 @@ export function injectPromptDirect(
   }
   if (!opts.force && (state.phase === "typing" || state.phase === "busy")) {
     throw new Error(
-      `pane ${resolved.paneId} composer phase=${state.phase} — clear draft or wait; use ./sm.sh room say -r managers or seat QUEUE.md`,
+      `pane ${resolved.paneId} composer phase=${state.phase} — clear draft or wait; use seatmesh --profile .sm room say -r managers or seat QUEUE.md`,
     );
   }
   if (!opts.force && (provider.id === "claude" || provider.id === "cursor-agent")) {

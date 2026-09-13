@@ -12,6 +12,10 @@ import {
   roleAllows,
   isCoordKind,
   isManagerKind,
+  managerColumnIds,
+  addBaseColumn,
+  removeBaseColumn,
+  listBaseColumns,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import { createRegistryForProfile } from "@seat-mesh/providers";
@@ -150,19 +154,41 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   Docs: README.md + docs/ONE-PATH.md + docs/QUICKSTART.md
   Cold start: bin/seatmesh auto-runs npm install + build when dist is stale
 
+Setup (run once per project, by a human)
+  start               init (if no .sm/ here) + session up, in one step
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
   sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
   update [--dry-run] [--migrate]        refresh _vendor templates + paths.json (not npm upgrade)
-  report [--json]         full stack report (same as bare npx seatmesh)
-  session attach|up|status
+
+Status / diagnostics
+  report [--json] [--verbose]   stack status (one line default; --verbose = full section dump)
   verify              layout + labels health
+  test                          smoke: layout, providers, inbox, proxy
+
+Session / layout (infra shape, operator or manager)
+  session attach|up|status
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
   layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
+  layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
+                                 N base columns (managers/secretaries) are config, not enum
   realign               resize-only: base ratio + worker/mini equal grids
   ops list|clear                pane-op queue (serial)
   save|auto [--json] [--no-labels]   scrape session -> mesh-agents.json (+ labels; daemon auto-scrapes every 10m)
   labels                        re-apply @mesh_* + border strip
   inbox [--json] [--wait N] [--meta] | inbox list|resolve|log|instances|stop|restart
+
+Agent runtime (what a pane calls on itself, every turn)
+  whoami [target] [--validate] | cold-start [--inject] | seat init|now|assign|mark|task|remind
+  agent [target]              scoped can/cannot for this pane (profile role)
+  agent context [roles|init]  registered read_first/files; init scaffolds .sm + validates
+  func <id> <args...>         attached external (funcs: in mesh.config.yaml)
+  contexts [--json] | peek | pane-meta | ppa
+  switch | handoff | set | tag <target|self> <id|--auto> | title | status
+  night on|off|status | continue <slot|all>   (manager + night on)
+  slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
+  prompt | remind | flush
+
+Coordination / comms (pane to pane)
   assign <target> <text...>     FOCUS NOW + TASK + peer SENT (do not hand-edit FOCUS)
   peer <target> <msg...>        FYI/ACK only — work goes through assign
   to-slot | to-mini <msg...>    enqueue (daemon injects) — to-master retired, use room say
@@ -170,20 +196,10 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   mini list|spawn|prompt|done|dispatch-all
   checkback start|list|cancel|cancel-all|reset|ack  (alias: patience)
   coord expect <target> <hub> <snippet...>   arm coord-expect on manager (verify + re-assign)
+  room | chat | index | proxy | providers | manager | stack | profile show
   notify <session> <check> [--url URL]   desktop toast (seat from TMUX pane)
   preview <file...> [--set days] [--notify]   publish markdown to mdview.io
-  test                          smoke: layout, providers, inbox, proxy
   launch [--now] [targets…]
-  prompt | remind | flush
-  contexts [--json] | peek | pane-meta | ppa
-  switch | handoff | set | tag <target|self> <id|--auto> | title | status
-  night on|off|status | continue <slot|all>   (manager + night on)
-  slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
-  agent [target]              scoped can/cannot for this pane (profile role)
-  agent context [roles|init]  registered read_first/files; init scaffolds .sm + validates
-  func <id> <args...>         attached external (funcs: in mesh.config.yaml)
-  whoami [target] [--validate] | cold-start [--inject] | seat init|now|assign|mark|task|remind
-  room | chat | index | proxy | providers | manager | stack | profile show
 
   --profile <dir|yaml>   override config (default: .sm/ walk-up or bundled profile)
 `);
@@ -196,7 +212,7 @@ async function main(): Promise<void> {
   const { profile: profileArg, rest } = parseArgs(process.argv.slice(2));
   const [cmd, sub, ...tail] = rest;
 
-  if (!cmd) {
+  if (!cmd || (cmd.startsWith("-") && cmd !== "-h" && cmd !== "--help")) {
     const json = rest.includes("--json");
     if (!profileArg && !findDotSmConfig()) {
       const { printDiscoveryReport } = await import("./discovery-report.js");
@@ -205,7 +221,8 @@ async function main(): Promise<void> {
     }
     const loaded = meshLoaded(profileArg);
     const { printStatusReport } = await import("./status-report.js");
-    const report = await printStatusReport(loaded, { json });
+    const verbose = rest.includes("--verbose") || rest.includes("-v");
+    const report = await printStatusReport(loaded, { json, verbose });
     process.exit(report.ok ? 0 : 1);
   }
 
@@ -243,6 +260,27 @@ async function main(): Promise<void> {
     for (const line of r.copied) console.log(`  copied: ${line}`);
     for (const line of r.skipped) console.log(`  skipped: ${line}`);
     for (const line of r.notes) console.log(`  note: ${line}`);
+    return;
+  }
+
+  if (cmd === "start") {
+    let startProfileArg = profileArg;
+    if (!profileArg && !findDotSmConfig()) {
+      const r = runInit({});
+      console.log(`OK: init ${r.smDir}`);
+      startProfileArg = r.configPath;
+    }
+    const loaded = meshLoaded(startProfileArg);
+    try {
+      const { upsertGlobalSession } = await import("@seat-mesh/core");
+      await upsertGlobalSession(loaded);
+    } catch {
+      /* non-fatal */
+    }
+    sessionUp(loaded);
+    console.log(`OK: session '${loaded.sessionName}' up`);
+    printMeshInboxStatus(loaded);
+    console.log(`  next: npx seatmesh session attach`);
     return;
   }
 
@@ -354,6 +392,57 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     return;
+  }
+
+  if (cmd === "layout" && sub === "column") {
+    const loaded = meshLoaded(profileArg);
+    const action = tail[0];
+    const args = tail.slice(1);
+    if (action === "list" || !action) {
+      for (const id of listBaseColumns(loaded)) console.log(id);
+      return;
+    }
+    if (action === "add") {
+      const id = args.find((a) => !a.startsWith("--"));
+      if (!id) {
+        console.error("usage: layout column add <id> [--cli <provider>] [--after <id>] [--co-typed]");
+        process.exit(2);
+      }
+      const cliIdx = args.indexOf("--cli");
+      const afterIdx = args.indexOf("--after");
+      try {
+        const result = addBaseColumn(loaded, id, {
+          cli: cliIdx !== -1 ? args[cliIdx + 1] : undefined,
+          after: afterIdx !== -1 ? args[afterIdx + 1] : undefined,
+          coTyped: args.includes("--co-typed"),
+        });
+        console.log(`OK: column added ${result.id} -> [${result.columns.join(", ")}]`);
+        console.log(
+          "No role yaml or seats.dirs entry needed -- seat dir + FOCUS/TASKS/REMINDER auto-create on next up/reload.",
+        );
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+      return;
+    }
+    if (action === "remove") {
+      const id = args[0];
+      if (!id) {
+        console.error("usage: layout column remove <id>");
+        process.exit(2);
+      }
+      try {
+        const result = removeBaseColumn(loaded, id);
+        console.log(`OK: column removed ${result.id} -> [${result.columns.join(", ")}]`);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error("usage: layout column list|add|remove");
+    process.exit(2);
   }
 
   if (cmd === "layout") {
@@ -535,7 +624,8 @@ async function main(): Promise<void> {
       else args.push(a);
     }
     if (args[0] === "verify") {
-      const target = args[1] ?? "manager-2";
+      const mgrs = managerColumnIds(loaded.profile.layout);
+      const target = args[1] ?? mgrs[1] ?? mgrs[0] ?? "manager";
       const reg = createRegistryForProfile(loaded.profile);
       const r = runPeerVerify(loaded, reg, target);
       printPeerVerify(r);
@@ -1028,7 +1118,10 @@ async function main(): Promise<void> {
   if (cmd === "report") {
     const loaded = meshLoaded(profileArg);
     const { printStatusReport } = await import("./status-report.js");
-    const report = await printStatusReport(loaded, { json: rest.includes("--json") });
+    const report = await printStatusReport(loaded, {
+      json: rest.includes("--json"),
+      verbose: rest.includes("--verbose") || rest.includes("-v"),
+    });
     process.exit(report.ok ? 0 : 1);
   }
 

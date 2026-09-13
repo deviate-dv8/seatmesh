@@ -19,7 +19,7 @@ ORDER=(
 
 for dir in "${ORDER[@]}"; do
   echo "publish: $dir"
-  npm publish -w "$(basename "$dir")" --access public
+  npm publish -w "$dir" --access public
 done
 
 echo "done: npm view seatmesh version"

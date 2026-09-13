@@ -56,8 +56,8 @@ function armSuperviseContract(loaded: LoadedProfile, agentId: string, from: stri
     slug: "managers",
     createdBy: from,
     kind: "contract",
-    scope: "Manager coord digest — manager + manager-2",
-    members: doc.leads ?? ["manager", "manager-2"],
+    scope: "Manager coord digest — profile manager columns",
+    members: doc.leads ?? ["manager"],
     leads: doc.leads,
   });
   console.log(`OK: contract ${doc.id} ON agent=${agentId}`);
