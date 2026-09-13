@@ -1,3 +1,4 @@
+import { stripMeshOwnedLines } from "../messages/mesh-copy.js";
 import type { ComposerState, PaneSnapshot } from "../providers/types.js";
 import {
   UxSchema,
@@ -120,7 +121,7 @@ export function evaluateUxRules(
   providerId: string,
   config: ResolvedUxConfig,
 ): UxMatchResult | null {
-  const tail = pane.captureTail;
+  const tail = stripMeshOwnedLines(pane.captureTail);
   if (!tail.trim()) {
     return {
       ruleId: "plain-empty",
@@ -174,7 +175,9 @@ export function uxLimitKinds(config: ResolvedUxConfig): {
     }
     if (rule.onRise === "connectivity.rate-limit") {
       rateLimitKinds.add(rule.set.kind);
-      for (const p of rule.for) limitProviders.add(p);
+      for (const p of rule.for) {
+        if (p !== "*") limitProviders.add(p);
+      }
     }
   }
 

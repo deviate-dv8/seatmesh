@@ -105,6 +105,7 @@ async function main(): Promise<void> {
   }
 
   let shuttingDown = false;
+  let spawning = false;
   let child: ChildProcess | null = null;
   let childStartedAt = 0;
   let restarts = 0;
@@ -144,16 +145,35 @@ async function main(): Promise<void> {
     }
   };
 
+  const waitPortQuiet = async (timeoutMs: number): Promise<boolean> => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      if (shuttingDown) return true;
+      const h = await fetchHealth(port);
+      if (!h) return true;
+      await sleepMs(200);
+    }
+    return !(await fetchHealth(port));
+  };
+
   const spawnChild = async (reason: string): Promise<void> => {
-    if (shuttingDown) return;
+    if (shuttingDown || spawning) return;
     if (fs.existsSync(stopPath)) {
       shuttingDown = true;
       return;
     }
-
+    if (child?.pid && processAlive(child.pid)) return;
+    spawning = true;
+    try {
     if (logFd == null) {
       fs.mkdirSync(path.dirname(logPath), { recursive: true });
       logFd = fs.openSync(logPath, "a");
+    }
+
+    const quiet = await waitPortQuiet(10_000);
+    if (!quiet) {
+      log("WARN: port still serving — skip spawn (avoid EADDRINUSE burst)");
+      return;
     }
 
     log(`spawn child (${reason})`);
@@ -187,6 +207,9 @@ async function main(): Promise<void> {
     }
     writeMeta(Number(health.pid ?? child.pid ?? 0) || child.pid);
     log(`child healthy pid=${String(health.pid ?? child.pid ?? "?")}`);
+    } finally {
+      spawning = false;
+    }
   };
 
   const shutdown = (why: string) => {

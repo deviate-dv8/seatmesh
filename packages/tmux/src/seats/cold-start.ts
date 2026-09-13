@@ -1,5 +1,11 @@
 import fs from "node:fs";
-import { loadRoleIndex, profilePaths, renderRoleIndex, type LoadedProfile } from "@seat-mesh/core";
+import {
+  loadRoleIndex,
+  profilePaths,
+  renderRoleIndex,
+  secretaryColdStartBrief,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import type { WhoamiResult } from "../agents/whoami.js";
 import { gateQueuePath, seatDirFor, seatFile, type SeatTarget } from "./seat-paths.js";
 
@@ -73,6 +79,7 @@ export function buildColdStartBrief(
   w: WhoamiResult,
   opts: { mini?: string | null } = {},
 ): string {
+  if (w.role === "secretary") return secretaryColdStartBrief();
   const mini = opts.mini ?? null;
   const target = whoamiSeatTarget(w, mini);
   const seatDir = seatDirFor(loaded, target);
@@ -127,6 +134,7 @@ export function buildFullColdStartBrief(
   w: WhoamiResult,
   opts: { mini?: string | null; jobRole?: string } = {},
 ): string {
+  if (w.role === "secretary") return secretaryColdStartBrief();
   const parts: string[] = [];
   const paths = profilePaths(loaded);
   const kind = roleKindForWhoami(w);

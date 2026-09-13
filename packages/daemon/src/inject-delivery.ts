@@ -2,7 +2,16 @@
  * Sole daemon inject path: registry.detect -> provider.injectPlan -> injectToPane.
  */
 import { spawnSync } from "node:child_process";
-import type { ComposerState, ProviderRegistry } from "@seat-mesh/core";
+import type { ComposerState, LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import {
+  formatMeshInboxStamp,
+  isCoordKind,
+  isHumanCoTypedColumn,
+  MESH_INBOX_ROOM_TAG,
+  MESH_INBOX_TAG,
+  type MeshInboxIntent,
+  stripReplyPeerFooter,
+} from "@seat-mesh/core";
 import { capturePaneSnapshot, injectToPane, paneMetaForPane } from "@seat-mesh/tmux";
 import { classifyCoordDelivery } from "./compose-gate.js";
 
@@ -51,7 +60,19 @@ export function canDeliverNow(
 
 function isCoordPane(paneId: string): boolean {
   const meta = paneMetaForPane(paneId);
-  return meta?.role === "manager" || meta?.role === "secretary";
+  return Boolean(meta?.role && isCoordKind(meta.role));
+}
+
+/**
+ * Human-co-typed coord pane (FQ-inject-co-typed-pane, default: manager-2) — a
+ * human directly types in this same pane as the CLI, so even a "thin" room
+ * ping must never bypass the busy/typing gate the way it does for pure
+ * agent-to-agent coord panes (that bypass was the observed footer-bleed).
+ */
+function isHumanCoTypedPane(paneId: string, loaded?: LoadedProfile): boolean {
+  const meta = paneMetaForPane(paneId);
+  if (!meta?.role) return false;
+  return isHumanCoTypedColumn(meta.role, loaded?.profile.layout);
 }
 
 /** Cursor follow-up composer accepts steer injects (coord + worker parity). */
@@ -60,6 +81,8 @@ export function isCursorFollowUpSteer(
   captureTail: string,
   providerId: string,
 ): boolean {
+  // Claude: never steer-inject while generating — Esc aborts auto mode.
+  if (providerId === "claude") return false;
   if (providerId !== "cursor-agent" && providerId !== "agent") return false;
   if (state.phase === "busy" && state.busyLabel === "follow-up") return true;
   return /Add a follow-up|ctrl\+c to stop/.test(captureTail);
@@ -76,6 +99,25 @@ export interface DeliverOptions {
   lightweight?: boolean;
   /** Room thin-ping — bypass manager/secretary coord idle-settle gate. */
   roomPing?: boolean;
+  /** Passive STATUS / supervise tick — skip compose-gate (operator: force-send to secretary). */
+  force?: boolean;
+  /** Machine intent for coord filtering (checkback-verify, continue, …). */
+  intent?: MeshInboxIntent;
+  /** Resolves layout.base.humanCoTyped for the co-typed-pane gate (FQ-inject-co-typed-pane). */
+  loaded?: LoadedProfile;
+}
+
+/** operator standing: every daemon paste is tagged so coord panes can filter (draft-preserve, STATUS). */
+export function stampDaemonInject(message: string, intent?: MeshInboxIntent): string {
+  let body = message;
+  if (intent && intent !== "assign") {
+    body = stripReplyPeerFooter(body);
+  }
+  const t = body.trimStart();
+  if (t.startsWith(MESH_INBOX_TAG) || t.startsWith(MESH_INBOX_ROOM_TAG)) {
+    return formatMeshInboxStamp(body, intent);
+  }
+  return formatMeshInboxStamp(`${MESH_INBOX_TAG} ${t}`, intent);
 }
 
 export function deliverToPane(
@@ -84,6 +126,7 @@ export function deliverToPane(
   registry: ProviderRegistry,
   opts: DeliverOptions = {},
 ): DeliverResult {
+  message = stampDaemonInject(message, opts.intent);
   const snap = capturePaneSnapshot(paneId);
   if (!snap) return { ok: false, reason: "no_snapshot" };
 
@@ -92,9 +135,22 @@ export function deliverToPane(
 
   const state = prov.composerState(snap);
   const coord = isCoordPane(paneId);
+  const coTyped = coord && isHumanCoTypedPane(paneId, opts.loaded);
+
+  // Hard floor for humanCoTyped panes (FQ-inject-co-typed-pane): busy/typing never
+  // pastes here, full stop — not even `force`/`roomPing`, which exist precisely to
+  // bypass the ordinary coord gate and were themselves observed pasting mid-keystroke
+  // (a forced balance-lead-tick STATUS interleaving with live operator typing).
+  if (coTyped && (state.phase === "busy" || state.phase === "typing")) {
+    return { ok: false, reason: `held:cotyped:${state.phase}` };
+  }
+
+  // Co-typed panes never get the thin-room-ping bypass either — a "status" ping
+  // pasted mid-keystroke is exactly the tty-interleaving bug this gate stops.
+  const roomPingBypass = opts.roomPing === true && !coTyped;
   const followUpSteer = isCursorFollowUpSteer(state, snap.captureTail, prov.id);
 
-  if (coord && !opts.roomPing && !followUpSteer) {
+  if (!opts.force && coord && !roomPingBypass && !followUpSteer) {
     const gate = classifyCoordDelivery(paneId, state, snap.captureTail, prov.id);
     if (!gate.canDeliver) {
       const extra =
@@ -106,8 +162,9 @@ export function deliverToPane(
       return { ok: false, reason: `held:coord:${gate.phase}${extra}` };
     }
   } else if (
+    !opts.force &&
     !opts.lightweight &&
-    !opts.roomPing &&
+    !roomPingBypass &&
     !followUpSteer &&
     !canDeliverNow(state, snap.captureTail, prov.id)
   ) {

@@ -1,4 +1,10 @@
-import type { Detection, PaneSnapshot, ComposerState, PromptCapture } from "@seat-mesh/core";
+import {
+  stripMeshOwnedLines,
+  type Detection,
+  type PaneSnapshot,
+  type ComposerState,
+  type PromptCapture,
+} from "@seat-mesh/core";
 
 /** Process cmdlines attached to snapshot (from pane tree walk). */
 export function cmdlines(pane: PaneSnapshot): string[] {
@@ -142,15 +148,44 @@ export function agentInputDraft(captureTail: string): string {
   return drafts.join("\n");
 }
 
+/** Claude Code UI hint that reuses the "❯" marker but is never a human draft. */
+const CLAUDE_NON_DRAFT_HINT_RE = /^Press up to edit queued messages$/i;
+
+/**
+ * Claude's composer draft — collects wrapped continuation lines, not just the
+ * first visual line (a footer-bleed root cause: a multi-line human draft under
+ * a live "❯ " prompt only shows the "❯" on its first row, so a last-line-only
+ * check reports "empty" mid-keystroke on co-typed panes; FQ-inject-co-typed-pane).
+ */
+export function claudeInputDraft(captureTail: string): string {
+  const lines = captureTail.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^\s*❯\s+(.*)$/.exec(lines[i] ?? "");
+    if (!m) continue;
+    const first = (m[1] ?? "").trim();
+    if (CLAUDE_NON_DRAFT_HINT_RE.test(first)) return "";
+    const parts = [first];
+    for (let j = i + 1; j < lines.length; j++) {
+      const cont = lines[j] ?? "";
+      if (!cont.trim()) break;
+      if (/^\s*❯\s/.test(cont)) break;
+      parts.push(cont.trim());
+    }
+    return parts.join(" ").trim();
+  }
+  return "";
+}
+
 /** Live unsent composer text for coord-pane settle gate. */
 export function coordComposerDraft(captureTail: string, providerId: string): string {
   if (providerId === "opencode") return opencodeInputDraft(captureTail);
   if (providerId === "cursor-agent") return agentInputDraft(captureTail);
+  if (providerId === "claude") return claudeInputDraft(captureTail);
   return "";
 }
 
 const OC_LIMIT_RE =
-  /rate\s*limit|usage\s*limit|quota\s*exceed|hit your.*limit|limit reached|too many requests|\b429\b|free[ -]?tier.*limit|plan limit|OC-LIMIT|zen.*limit|session\s*(expired|limit|ended)|expired\s*session|provider\s*limit|free\s*usage\s*exceed|usage\s*exceeded|subscribe to go/i;
+  /rate\s*limit|usage\s*limit|quota\s*exceed|hit your.*limit|limit reached|too many requests|\b429\b|free[ -]?tier.*limit|plan limit|zen.*limit|session\s*(expired|limit|ended)|expired\s*session|provider\s*limit|free\s*usage\s*exceed|usage\s*exceeded|subscribe to go/i;
 const OC_CONNECT_RE =
   /cannot\s+connect\s+to\s+api|unable\s+to\s+connect|service\s+unavailable|connection\s+error|ECONNREFUSED|socket\s+connection\s+was\s+closed/i;
 const CC_LIMIT_RE =
@@ -165,7 +200,7 @@ export function composerFromCapture(
   pane: PaneSnapshot,
   providerId: string,
 ): ComposerState {
-  const tail = pane.captureTail;
+  const tail = stripMeshOwnedLines(pane.captureTail);
   if (!tail.trim()) {
     return { phase: "plain_shell" };
   }
@@ -239,6 +274,10 @@ export function defaultComposerReady(
 
 /** OpenCode splash must show composer prompt before paste. */
 export function opencodeComposerReady(pane: PaneSnapshot): boolean {
+  const tail = pane.captureTail ?? "";
+  if (/esc exit shell mode/i.test(tail) || /● Tip Run \/connect/i.test(tail)) {
+    return false;
+  }
   const state = composerFromCapture(pane, "opencode");
   return state.phase === "empty" || state.phase === "afk";
 }

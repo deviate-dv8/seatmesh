@@ -11,7 +11,7 @@ export function buildPreviewCommand(getLoaded: () => LoadedProfile): Command {
     .argument("<files...>", "one or more .md files")
     .option("--set <days>", "expiresInDays (1-30, default 1)", "1")
     .option("--notify", "desktop toast per published URL (sm notify)")
-    .action((files: string[], opts: { set: string; notify?: boolean }) => {
+    .action(async (files: string[], opts: { set: string; notify?: boolean }) => {
       const loaded = getLoaded();
       const days = parsePreviewDays(opts.set);
       if (days == null) {
@@ -19,7 +19,7 @@ export function buildPreviewCommand(getLoaded: () => LoadedProfile): Command {
         process.exit(2);
       }
 
-      const result = runMeshPreview(loaded, {
+      const result = await runMeshPreview(loaded, {
         files,
         days,
         notify: opts.notify === true,

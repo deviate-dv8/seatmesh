@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { WhoamiResult } from "../agents/whoami.js";
-import { notifySeatDisplay, notifySlotArg } from "./notify-operator.js";
+import { desktopNotifyAvailable, notifySeatDisplay, notifySlotArg } from "./notify-operator.js";
+
+function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
+  const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+  Object.defineProperty(process, "platform", { value: platform });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process, "platform", original);
+  }
+}
 
 function who(partial: Partial<WhoamiResult> & Pick<WhoamiResult, "role">): WhoamiResult {
   return {
@@ -45,5 +55,16 @@ describe("notifySeatDisplay", () => {
   it("passes through named seats", () => {
     expect(notifySeatDisplay("manager")).toBe("manager");
     expect(notifySeatDisplay("mini-2")).toBe("mini-2");
+  });
+});
+
+describe("desktopNotifyAvailable (cross-platform)", () => {
+  it("win32 is always available (node-notifier bundles SnoreToast)", () => {
+    expect(withPlatform("win32", () => desktopNotifyAvailable())).toBe(true);
+  });
+
+  it("darwin/linux depend on a real command being on PATH (env-dependent, just must not throw)", () => {
+    expect(() => withPlatform("darwin", () => desktopNotifyAvailable())).not.toThrow();
+    expect(() => withPlatform("linux", () => desktopNotifyAvailable())).not.toThrow();
   });
 });

@@ -1,6 +1,10 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { LoadedProfile, MeshAgents } from "@seat-mesh/core";
-import { assertSaveAllowed, formatSaveSummary } from "./save-session.js";
+import { MeshAgentsSchema } from "@seat-mesh/core";
+import { assertSaveAllowed, formatSaveSummary, saveMeshAgentsFile } from "./save-session.js";
 
 function sampleAgents(): MeshAgents {
   return {
@@ -8,6 +12,7 @@ function sampleAgents(): MeshAgents {
     session: "mesh-abc",
     workdir: "/tmp/ws",
     manager: { type: "agent", resumeId: "mgr-1" },
+    manager2: { type: "claude", resumeId: "mgr2-1" },
     secretary: { type: "opencode", wanted: true, resumeId: "ses_sec" },
     workers: [
       { slot: 1, type: "agent", resumeId: "w1" },
@@ -30,6 +35,7 @@ describe("formatSaveSummary", () => {
     expect(out).toContain("--- summary ---");
     expect(out).toContain("session: mesh-abc");
     expect(out).toContain("manager: agent resume");
+    expect(out).toContain("manager-2: claude resume");
     expect(out).toContain("secretary: wanted=true type=opencode resume");
     expect(out).toContain("slot 1: agent resume");
     expect(out).toContain("slot 2: empty");
@@ -50,5 +56,19 @@ describe("assertSaveAllowed", () => {
     } as LoadedProfile;
     expect(() => assertSaveAllowed(loaded)).not.toThrow();
     if (prev) process.env.TMUX_PANE = prev;
+  });
+});
+
+describe("saveMeshAgentsFile", () => {
+  it("writes atomically and round-trips manager-2", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mesh-agents-"));
+    const rel = "mesh-agents.json";
+    const file = saveMeshAgentsFile(dir, rel, sampleAgents());
+    expect(fs.existsSync(file)).toBe(true);
+    const leftovers = fs.readdirSync(dir).filter((n) => n.endsWith(".tmp"));
+    expect(leftovers).toEqual([]);
+    const parsed = MeshAgentsSchema.parse(JSON.parse(fs.readFileSync(file, "utf8")));
+    expect(parsed.manager2?.type).toBe("claude");
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -1,5 +1,6 @@
 import type { AgentProvider, Detection, InjectPlan, PaneSnapshot } from "@seat-mesh/core";
 import {
+  agentInputDraft,
   cmdlines,
   composerFromCapture,
   defaultComposerReady,
@@ -56,5 +57,9 @@ export const cursorAgentProvider: AgentProvider = {
 
   scrapePromptTurn(pane) {
     return scrapePromptTurnGeneric(pane);
+  },
+
+  humanDraft(pane: PaneSnapshot): string {
+    return agentInputDraft(pane.captureTail);
   },
 };

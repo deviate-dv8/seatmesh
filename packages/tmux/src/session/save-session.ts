@@ -17,7 +17,6 @@ import {
 import type { ProviderRegistry } from "@seat-mesh/core";
 import {
   extractOpenCodeSession,
-  guessSecretaryOpenCodeSession,
   normalizeOpenCodeSessionId,
 } from "@seat-mesh/providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
@@ -249,17 +248,14 @@ export function scrapeMeshAgents(
 
   let secretary: SecretarySlot | undefined;
   if (secPane) {
+    const paneSid = normalizeOpenCodeSessionId(
+      tmux(["display-message", "-t", secPane, "-p", "#{@mesh_oc_session}"]).out,
+    );
     let preserved: PreservedSlot | undefined = existing?.secretary;
-    const preservedSid = normalizeOpenCodeSessionId(preserved?.resumeId);
-    if (!preservedSid) {
-      const guess = guessSecretaryOpenCodeSession(loaded.workspace);
-      preserved = {
-        ...preserved,
-        type: "opencode",
-        resumeId: guess ?? null,
-      };
+    if (!paneSid) {
+      preserved = { ...preserved, type: "opencode", resumeId: null, resumeCmd: null };
     } else {
-      preserved = { ...preserved, type: "opencode", resumeId: preservedSid };
+      preserved = { ...preserved, type: "opencode", resumeId: paneSid };
     }
     const det = detectPane(secPane, registry, loaded.workspace, preserved);
     secretary = {
@@ -316,7 +312,10 @@ export function scrapeMeshAgents(
 export function saveMeshAgentsFile(workspace: string, relPath: string, data: MeshAgents): string {
   const file = path.join(workspace, relPath);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+  const body = JSON.stringify(data, null, 2) + "\n";
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmp, body, "utf8");
+  fs.renameSync(tmp, file);
   return file;
 }
 
@@ -386,10 +385,9 @@ export function saveMeshSessionDetailed(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
 ): SaveMeshSessionResult {
-  const file = buildResolvedPaths(loaded).meshAgentsJson;
   const data = scrapeMeshAgents(loaded, registry);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n", "utf8");
+  const rel = loaded.profile.state.meshAgentsJson;
+  const file = saveMeshAgentsFile(loaded.workspace, rel, data);
   return { file, data };
 }
 

@@ -25,7 +25,7 @@ function stubLoaded(profileDir: string, workspace: string): LoadedProfile {
     roles: { dir: "roles" },
     data: { root: "runtime" },
     providers: ["empty"],
-  } as MeshProfile;
+  } as unknown as MeshProfile;
   return {
     profile,
     profileDir,

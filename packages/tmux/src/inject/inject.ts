@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import type { InjectPlan } from "@seat-mesh/core";
+import { withActivePanePreserved } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
+import { humanDraftToPreserve } from "./inject-draft.js";
 
 function sleepMs(ms: number): void {
   if (ms <= 0) return;
@@ -8,26 +10,34 @@ function sleepMs(ms: number): void {
 }
 
 export function withPaneInputEnabled(paneId: string, fn: () => void): void {
-  const off = tmux(["display-message", "-t", paneId, "-p", "#{pane_input_off}"]).out;
-  if (off === "1") {
-    tmux(["select-pane", "-e", "-t", paneId]);
-  }
-  try {
-    fn();
-  } finally {
+  withActivePanePreserved(paneId, () => {
+    const off = tmux(["display-message", "-t", paneId, "-p", "#{pane_input_off}"]).out;
     if (off === "1") {
-      tmux(["select-pane", "-d", "-t", paneId]);
+      tmux(["select-pane", "-e", "-t", paneId]);
     }
-  }
+    try {
+      fn();
+    } finally {
+      if (off === "1") {
+        tmux(["select-pane", "-d", "-t", paneId]);
+      }
+    }
+  });
 }
 
+// Named buffer — never touch the default tmux paste buffer, which is the same one
+// mouse-select / prefix+[ copy-mode use. Every inject was silently clobbering
+// whatever the operator had actually copied (operator-reported: "why does my copy keep
+// getting saved over").
+const SM_INJECT_BUFFER = "sm-inject";
+
 function pasteMessage(paneId: string, message: string): void {
-  const loaded = spawnSync("tmux", ["load-buffer", "-"], {
+  const loaded = spawnSync("tmux", ["load-buffer", "-b", SM_INJECT_BUFFER, "-"], {
     input: message,
     encoding: "utf8",
   });
   if (loaded.status === 0) {
-    const pasted = tmux(["paste-buffer", "-t", paneId, "-d"]);
+    const pasted = tmux(["paste-buffer", "-b", SM_INJECT_BUFFER, "-t", paneId, "-d"]);
     if (!pasted.ok) {
       tmux(["send-keys", "-t", paneId, "-l", message]);
     }
@@ -36,17 +46,41 @@ function pasteMessage(paneId: string, message: string): void {
   }
 }
 
+function clearComposerDraft(paneId: string, providerId: string, generating: boolean): void {
+  if (generating) {
+    tmux(["send-keys", "-t", paneId, "C-u"]);
+    sleepMs(60);
+    return;
+  }
+  if (providerId === "cursor-agent" || providerId === "agent") {
+    tmux(["send-keys", "-t", paneId, "Escape"]);
+    sleepMs(120);
+    tmux(["send-keys", "-t", paneId, "C-u"]);
+    sleepMs(60);
+    return;
+  }
+  tmux(["send-keys", "-t", paneId, "C-u"]);
+  sleepMs(80);
+  tmux(["send-keys", "-t", paneId, "C-u"]);
+  sleepMs(60);
+}
+
+function restoreComposerDraft(paneId: string, draft: string): void {
+  if (!draft.trim()) return;
+  pasteMessage(paneId, draft);
+}
+
 /** Cursor-agent paste with bracketed-paste guard. */
 function injectCursorAgent(paneId: string, message: string, captureTail: string): void {
   const bottom = captureTail.split("\n").slice(-14).join("\n");
   const generating = /Working|Running|Thinking|enter steer/.test(bottom);
   const followUp = /Add a follow-up/.test(bottom);
+  const saved = humanDraftToPreserve(captureTail, "cursor-agent", message);
 
-  if (!generating) {
-    if (/→/.test(bottom) && !followUp) {
-      tmux(["send-keys", "-t", paneId, "Escape"]);
-      sleepMs(250);
-    }
+  if (saved) clearComposerDraft(paneId, "cursor-agent", generating);
+  else if (!generating && /→/.test(bottom) && !followUp) {
+    tmux(["send-keys", "-t", paneId, "Escape"]);
+    sleepMs(250);
   }
 
   pasteMessage(paneId, message);
@@ -58,6 +92,42 @@ function injectCursorAgent(paneId: string, message: string, captureTail: string)
   tmux(["send-keys", "-t", paneId, "Enter"]);
   sleepMs(200);
   tmux(["send-keys", "-t", paneId, "Enter"]);
+  if (saved) {
+    sleepMs(200);
+    restoreComposerDraft(paneId, saved);
+  }
+}
+
+/** Claude Code: clear stuck composer draft before paste (else inject is invisible). */
+function injectClaude(paneId: string, message: string, plan: InjectPlan, captureTail = ""): void {
+  const live = captureTail || tmux(["capture-pane", "-t", paneId, "-p", "-S", "-12"]).out || "";
+  const saved = humanDraftToPreserve(live, "claude", message);
+  if (plan.flushEscFirst) {
+    tmux(["send-keys", "-t", paneId, "Escape"]);
+    sleepMs(120);
+    tmux(["send-keys", "-t", paneId, "Escape"]);
+    sleepMs(150);
+  }
+  const bottom = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-8"]).out ?? "";
+  if (saved || /^❯\s/m.test(bottom) || /\n❯\s/m.test(bottom)) {
+    tmux(["send-keys", "-t", paneId, "C-u"]);
+    sleepMs(80);
+    tmux(["send-keys", "-t", paneId, "C-u"]);
+    sleepMs(80);
+  }
+  pasteMessage(paneId, message);
+  sleepMs(plan.enterDelayMs ?? 200);
+  tmux(["send-keys", "-t", paneId, "Enter"]);
+  sleepMs(400);
+  const after = tmux(["capture-pane", "-t", paneId, "-p", "-S", "-6"]).out ?? "";
+  if (/Press up to edit queued messages/i.test(after)) {
+    tmux(["send-keys", "-t", paneId, "Enter"]);
+    sleepMs(300);
+  }
+  if (saved) {
+    sleepMs(150);
+    restoreComposerDraft(paneId, saved);
+  }
 }
 
 /** Direct pane inject (orchestrator path later). */
@@ -74,7 +144,14 @@ export function injectToPane(
       return;
     }
 
-    if (plan.flushEscFirst) {
+    if (providerId === "claude") {
+      injectClaude(paneId, message, plan, captureTail);
+      return;
+    }
+
+    const saved = humanDraftToPreserve(captureTail, providerId ?? "", message);
+    if (saved) clearComposerDraft(paneId, providerId ?? "", false);
+    else if (plan.flushEscFirst) {
       tmux(["send-keys", "-t", paneId, "Escape"]);
       sleepMs(120);
       tmux(["send-keys", "-t", paneId, "Escape"]);
@@ -84,6 +161,10 @@ export function injectToPane(
     pasteMessage(paneId, message);
     sleepMs(plan.enterDelayMs);
     tmux(["send-keys", "-t", paneId, "Enter"]);
+    if (saved) {
+      sleepMs(150);
+      restoreComposerDraft(paneId, saved);
+    }
   });
 }
 

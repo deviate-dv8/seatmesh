@@ -5,10 +5,11 @@ import { buildLaunchCmd } from "./agents-state.js";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { pasteLaunchCmd } from "./launch.js";
 import { isOpenCodeLaunch, verifyOpenCodeAfterPaste } from "./launch-verify.js";
-import { enqueueColdStart } from "../seats/cold-start-inject.js";
+import { injectAfterLaunch } from "../seats/cold-start-inject.js";
 import { invalidatePaneContext } from "../seats/cold-start-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
+import { selectPaneUnfocused } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 import { saveMeshSession } from "../session/save-session.js";
 
@@ -91,7 +92,7 @@ export function runSwitch(
   if (opts.reason) console.log(`reason: ${opts.reason}`);
   console.log(`resume: ${keepRid ?? "(none - fresh)"}`);
 
-  tmux(["select-pane", "-e", "-t", paneId]);
+  selectPaneUnfocused(["-e", "-t", paneId]);
 
   withPaneInputEnabled(paneId, () => {
     if (oldType === "kiro") {
@@ -142,22 +143,15 @@ export function runSwitch(
               : target;
 
   invalidatePaneContext(loaded, paneId, targetLabel);
-  try {
-    const cs = enqueueColdStart(loaded, target, {
-      force: true,
-      mini: row.mini ?? undefined,
-    });
-    console.log(
-      cs.skipped
-        ? `cold-start skipped (fingerprint=${cs.fingerprint}) — inbox holds until hub changes`
-        : `cold-start enqueued fingerprint=${cs.fingerprint} — inbox held until delivered`,
-    );
-  } catch (e) {
-    console.error(`WARN: cold-start enqueue failed: ${(e as Error).message}`);
+  const brief = injectAfterLaunch(loaded, registry, target, paneId);
+  if (!brief.ok) {
+    console.error(`WARN: fresh-summon whoami prompt ${target}: ${brief.detail}`);
+  } else {
+    console.log(`OK: fresh-summon whoami prompt ${target} ${brief.detail}`);
   }
 
   if (row.role === "manager") {
-    tmux(["select-pane", "-t", paneId, "-T", "manager"]);
+    selectPaneUnfocused(["-t", paneId, "-T", "manager"]);
   }
   tmux([
     "set-option",

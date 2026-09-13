@@ -6,6 +6,30 @@ enqueue-only comms so nothing stomps a live composer.
 
 ## Install and cold start
 
+### Global CLI (npm)
+
+```bash
+# If your shell inherits npm_config_prefix from this repo, unset it first:
+bash scripts/global-install-seatmesh.sh          # seatmesh@latest from registry
+bash scripts/global-install-seatmesh.sh local    # git checkout packages/cli
+
+seatmesh --help
+seatmesh init
+```
+
+`better-sqlite3` is **optional** — install succeeds without a C++ toolchain; profiles
+with `storage.backend: sqlite` fall back to JSONL when the native module is missing.
+For sqlite, use Node 22 LTS and `build-essential`, or set `storage.backend: jsonl`.
+
+Publish (maintainers): `bash scripts/publish-npm.sh` after `npm login`. Schedule:
+[docs/RELEASE.md](docs/RELEASE.md) (next: **2026-09-14**).
+
+Global/npx installs print an **stderr upgrade hint** when npm has a newer `seatmesh`
+(6h cache). `seatmesh update` refreshes profile vendor files — **not** the npm package;
+use `npm install -g seatmesh@latest` or `npx seatmesh@latest`.
+
+### Git checkout / monorepo
+
 The CLI entry (`bin/seatmesh`) **auto-builds on first run**: if `dist/` is missing
 or stale, it runs `npm install` and `npm run build` in the package root, then execs
 the CLI. No manual build step required for normal use.

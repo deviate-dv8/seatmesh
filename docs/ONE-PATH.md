@@ -21,8 +21,13 @@ raw-paste into tmux from scripts when a command exists.
 | What can I run (scoped) | `agent [target]` |
 | Who am I / hub inline | `whoami [target]` |
 | Validate role-index paths | `whoami --validate` |
-| Role briefing inject | automatic on attach when configured; `cold-start [target] --inject` |
+| Role briefing inject | fresh launch/switch/restart injects FRESH SUMMON — agent runs `./sm.sh whoami` |
 | Ensure seat templates | `seat init` (also runs on reload / session up) |
+| Give a seat work | `assign <target> <text>` — FOCUS NOW + TASK + peer SENT. Do not hand-edit FOCUS. |
+| Flip seat Mark | `seat mark <target> <OPEN\|BUSY\|BLOCKED>` |
+| Write FOCUS NOW only | `seat now <target> <text>` (no peer) |
+| Append / check a TASK | `seat task add <target> "<text>"` / `seat task check <target> "<match>"` |
+| Append a reminder | `seat remind <target> "<text>"` |
 | Seat map | `contexts [--json]` |
 | Cold archive | `snapshot here <slug>` |
 
@@ -30,6 +35,10 @@ raw-paste into tmux from scripts when a command exists.
 
 **patterns.md:** one command per goal — no flag forest. See `doc-inputs/patterns.md`
 "Single Command, Zero Decisions".
+
+**CLI vs agent methods:** living forum + triage table
+`tasks/seat-mesh/forums/cli-usage-forum.md` (grep-first; do not ingest whole file each turn).
+Use `./sm.sh agent` for scoped **can/cannot**; use forum **COLLAPSE/METHOD** rows when proposing new surface.
 
 | Goal | Command |
 |------|---------|

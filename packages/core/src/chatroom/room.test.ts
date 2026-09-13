@@ -22,7 +22,8 @@ import {
   formatSeatStamp,
   parseRoomCommsExpect,
 } from "./checkback-hint.js";
-import { resolveAgentId } from "./agent-id.js";
+import { peerTargetForComms, resolveAgentId } from "./agent-id.js";
+import { lastInboundRoomFrom } from "./read-state.js";
 import { parseDurationToSeconds } from "./duration.js";
 import { checkbackTimingForExpect, isRoomCallExpect } from "./comms-checkback.js";
 import { canBroadcastToGlobal, isGlobalSlug, resolveRoomSlug } from "./global.js";
@@ -32,6 +33,13 @@ describe("resolveAgentId", () => {
     expect(resolveAgentId({ role: "manager-mini", mini: 4 })).toBe("mini-4");
     expect(resolveAgentId({ role: "worker", slot: 2 })).toBe("worker-2");
     expect(resolveAgentId({ role: "secretary" })).toBe("secretary");
+  });
+});
+
+describe("peerTargetForComms", () => {
+  it("never emits bare manager-mini", () => {
+    expect(peerTargetForComms({ role: "manager-mini", mini: 1 })).toBe("mini-1");
+    expect(peerTargetForComms({ role: "manager" })).toBe("manager");
   });
 });
 
@@ -103,6 +111,18 @@ describe("formatSeatStamp", () => {
   });
 });
 
+describe("lastInboundRoomFrom", () => {
+  it("returns latest from that is not self", () => {
+    const rows = [
+      { from: "manager" },
+      { from: "manager-2" },
+      { from: "manager" },
+    ] as { from: string }[];
+    expect(lastInboundRoomFrom(rows as never, "manager")).toBe("manager-2");
+    expect(lastInboundRoomFrom(rows as never, "manager-2")).toBe("manager");
+  });
+});
+
 describe("formatRoomCommsCheckback", () => {
   it("one-line check nudge with tail + say", () => {
     const msg = formatRoomCommsCheckback("chat-room:global peer update (broadcast)", {
@@ -112,18 +132,28 @@ describe("formatRoomCommsCheckback", () => {
       workerCount: 6,
     });
     expect(msg).toBe(
-      'slot-3 3030/3031 | Check: chat-room:global peer update (broadcast) — ./sm.sh room tail -n 30 | reply ./sm.sh room say "<msg>"',
+      "slot-3 3030/3031 | Check: chat-room:global peer update (broadcast) — inbound already has Reply: ./sm.sh peer <sender>",
+    );
+    expect(
+      formatRoomCommsCheckback(
+        "chat-room:managers peer update (msg)",
+        { role: "manager" },
+        "manager-2",
+      ),
+    ).toBe(
+      'manager | Check: chat-room:managers peer update (msg) — Reply: ./sm.sh peer manager-2 "<msg>"',
     );
     expect(parseRoomCommsExpect("chat-room:supervise peer update (claim)")?.slug).toBe(
       "supervise",
     );
   });
 
-  it("includes room slug in tail for non-global", () => {
+  it("does not offer a second harness", () => {
     const msg = formatRoomCommsCheckback("chat-room:supervise peer update (claim)", {
       role: "manager",
     });
-    expect(msg).toContain("./sm.sh room tail -r supervise");
+    expect(msg).not.toContain("room say");
+    expect(msg).not.toContain("room tail");
   });
 });
 
@@ -140,7 +170,8 @@ describe("formatRoomCoordNotify", () => {
     expect(msg).toContain("[mesh-inbox-room] supervise | mini-5 | claim");
     expect(msg).toContain("CLAIMED: proxy-restart lead slice");
     expect(msg).toContain("(+14 more unseen)");
-    expect(msg).toContain("./sm.sh room tail -r supervise");
+    expect(msg).toContain('Reply: ./sm.sh peer mini-5 "<msg>"');
+    expect(msg).not.toContain("room tail");
   });
 });
 
@@ -155,7 +186,9 @@ describe("formatRoomPeerNotify", () => {
       { unseen: 2 },
     );
     expect(msg).toBe(
-      'slot-6 | [mesh-inbox-room] team-room | worker-3 | fyi 2 unseen\nVerify: ./sm.sh room tail -r team-room -n 15 (no chat reply — continue FOCUS/TASKS hub)',
+      'slot-6 | [mesh-inbox-room] team-room | worker-3 | fyi 2 unseen\n' +
+        'Verify: ./sm.sh room tail -r team-room -n 15\n' +
+        'Reply: ./sm.sh peer slot-3 "<msg>"',
     );
     expect(msg).not.toContain("long body that must not appear");
     expect(msg).not.toContain("standing:");
@@ -173,7 +206,7 @@ describe("formatRoomDirectPm", () => {
       { role: "worker", slot: 6 },
     );
     expect(msg).toBe(
-      '[agent-worker-slot-3] room peer-3-6-abc (3030/3031) from worker-3: FYI: round 1 take — reply ./sm.sh room say -r peer-3-6-abc "<msg>"',
+      '[agent-worker-slot-3] room peer-3-6-abc (3030/3031) from worker-3: FYI: round 1 take\nReply: ./sm.sh peer slot-3 "<msg>"',
     );
   });
 });

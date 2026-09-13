@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { LoadedProfile } from "@seat-mesh/core";
+import { freshSummonWhoamiPrompt, secretaryColdStartBrief } from "@seat-mesh/core";
 import { buildColdStartBrief, buildFullColdStartBrief, openTaskLines } from "./cold-start.js";
 import { runSeatInit } from "./seat-init.js";
 import { gateQueuePath } from "./seat-paths.js";
@@ -35,7 +36,7 @@ function tmpLoaded(): LoadedProfile {
       providers: ["opencode"],
       roles: { dir: "roles" },
     },
-  } as LoadedProfile;
+  } as unknown as LoadedProfile;
 }
 
 describe("cold-start", () => {
@@ -117,5 +118,15 @@ describe("cold-start", () => {
     expect(isPaneContextReady(loaded, "%mb")).toBe(false);
     markColdStartDelivered(loaded, "%mb");
     expect(isPaneContextReady(loaded, "%mb")).toBe(true);
+  });
+
+  it("fresh summon prompt orders whoami before any task", () => {
+    const fresh = freshSummonWhoamiPrompt("manager-2");
+    expect(fresh).toMatch(/FRESH SUMMON/);
+    expect(fresh).toMatch(/\.\/sm\.sh whoami/);
+    expect(fresh).toMatch(/manager-2/);
+    expect(fresh.length).toBeLessThan(400);
+    expect(secretaryColdStartBrief()).toMatch(/FRESH SUMMON/);
+    expect(secretaryColdStartBrief()).toMatch(/\.\/sm\.sh whoami/);
   });
 });

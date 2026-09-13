@@ -1,10 +1,12 @@
 import {
-  armCommsCheckback,
+  armCommsCheckbackSync,
   chatRoomConfigForLoaded,
+  expectPeerReply,
   expectPeerSlotReply,
   expectRoomCallPending,
   expectRoomCallResolved,
   expectRoomPeerReply,
+  isCoordKind,
 } from "@seat-mesh/core";
 import type { LoadedProfile } from "@seat-mesh/core";
 import { runWhoami } from "../agents/whoami.js";
@@ -22,20 +24,19 @@ export function armSenderChatCheckback(
   const pane = ownerPane(loaded, opts.pane);
   if (!pane) return;
   const cfg = chatRoomConfigForLoaded(loaded);
-  void armCommsCheckback({
+  const res = armCommsCheckbackSync({
     cfg,
     ownerPane: pane,
     expect,
     kind: opts.kind ?? "comms",
     ownerSlot: opts.slot ?? null,
     senderPane: pane,
-  }).then((res) => {
-    if (res.ok) {
-      console.log("checkback: armed");
-    } else if (!res.skipped) {
-      console.log(`checkback: ${res.reason ?? "failed"}`);
-    }
   });
+  if (res.ok) {
+    console.log("checkback: armed");
+  } else if (!res.skipped) {
+    console.log(`checkback: ${res.reason ?? "failed"}`);
+  }
 }
 
 /** Arm recipient checkback after inbound peer/room inject (direct or queued). */
@@ -43,9 +44,16 @@ export function armRecipientChatCheckback(
   loaded: LoadedProfile,
   targetPane: string,
   expect: string,
+  opts: { skipCoord?: boolean; targetLabel?: string } = {},
 ): void {
+  if (opts.skipCoord !== false && opts.targetLabel) {
+    const lab = opts.targetLabel.toLowerCase();
+    if (isCoordKind(lab, loaded.profile?.layout?.base.kinds) || lab.startsWith("manager")) {
+      return;
+    }
+  }
   const cfg = chatRoomConfigForLoaded(loaded);
-  void armCommsCheckback({
+  armCommsCheckbackSync({
     cfg,
     ownerPane: targetPane,
     expect,
@@ -62,6 +70,20 @@ export function armAfterToSlot(
   armSenderChatCheckback(loaded, expectPeerSlotReply(fromSlot), {
     pane: opts.pane,
     slot: opts.slot,
+    kind: "peer-send",
+  });
+}
+
+/** Default-on checkback for `./sm.sh peer <target> <msg>` (coordinator <-> coordinator/worker). */
+export function armAfterPeer(
+  loaded: LoadedProfile,
+  target: string,
+  opts: { pane?: string } = {},
+): void {
+  const t = target.replace(/^slot-/, "").toLowerCase();
+  if (isCoordKind(t, loaded.profile.layout?.base.kinds)) return;
+  armSenderChatCheckback(loaded, expectPeerReply(target), {
+    pane: opts.pane,
     kind: "peer-send",
   });
 }

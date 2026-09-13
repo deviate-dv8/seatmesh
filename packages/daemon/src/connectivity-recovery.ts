@@ -130,6 +130,7 @@ let paneScanOffset = 0;
 /** Last carrier IP actually observed while up — a live fetch during an outage always fails. */
 let lastKnownGoodIp: string | null = null;
 const paneLimitCache = new Map<string, { connect: boolean; rate: boolean }>();
+const paneCcLimitSeen = new Set<string>();
 
 function anyRateLimitInCache(): boolean {
   for (const flags of paneLimitCache.values()) {
@@ -300,6 +301,8 @@ export interface ConnectivityPollInput {
   state: ConnectivityRecoveryState;
   log: (line: string) => void;
   resumeOpenCodePanes: (reason: string, meta?: ResumeWaveMeta) => void;
+  /** Claude cc-limit rising edge — schedule session-scoped retry checkback. */
+  onCcLimitRise?: (paneId: string, snap: import("@seat-mesh/core").PaneSnapshot) => void;
 }
 
 /** Scan all monitor panes; update limit sets; trigger async recovery on rising edges only. */
@@ -315,6 +318,7 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
     state,
     log,
     resumeOpenCodePanes,
+    onCcLimitRise,
   } = input;
 
   const conn = loaded.profile.connectivity;
@@ -325,6 +329,9 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
   const liveIds = new Set(panes.map((p) => p.paneId));
   for (const id of paneLimitCache.keys()) {
     if (!liveIds.has(id)) paneLimitCache.delete(id);
+  }
+  for (const id of paneCcLimitSeen) {
+    if (!liveIds.has(id)) paneCcLimitSeen.delete(id);
   }
 
   const prevConnect = new Set(state.connectPanes);
@@ -360,8 +367,17 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
       continue;
     }
     const st = prov.composerState(snap);
+    if (st.phase === "limit" && st.limitKind === "cc-limit" && prov.id === "claude") {
+      if (!paneCcLimitSeen.has(paneId)) {
+        paneCcLimitSeen.add(paneId);
+        onCcLimitRise?.(paneId, snap);
+        log(`CC-LIMIT rising ${label} ${paneId}`);
+      }
+      continue;
+    }
     if (st.phase !== "limit" || !st.limitKind) {
       paneLimitCache.delete(paneId);
+      paneCcLimitSeen.delete(paneId);
       continue;
     }
     const connect = proxyDownKinds.has(st.limitKind);

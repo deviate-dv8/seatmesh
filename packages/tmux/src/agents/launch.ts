@@ -27,6 +27,8 @@ import {
 } from "../lib/pane-meta.js";
 import { baseColumns, cliForBaseColumn } from "../session/base-layout.js";
 import { listWindowPaneIds, resolveMiniPaneId } from "../session/window-panes.js";
+import { injectAfterLaunch } from "../seats/cold-start-inject.js";
+import { saveMeshSession } from "../session/save-session.js";
 export interface LaunchResult {
   paneId: string;
   label: string;
@@ -121,6 +123,12 @@ export function tryLaunchPane(
     });
 
     if (!isOpenCodeLaunch(type, cmd)) {
+      const brief = injectAfterLaunch(loaded, registry, label, paneId);
+      if (!brief.ok) {
+        console.error(`WARN: post-launch brief ${label}: ${brief.detail}`);
+      } else {
+        console.log(`OK: post-launch brief ${label} ${brief.detail}`);
+      }
       return { paneId, label, status: "launched", cmd };
     }
 
@@ -135,6 +143,12 @@ export function tryLaunchPane(
         reason: `${label}: ${verified.reason}`,
         cmd,
       };
+    }
+    const brief = injectAfterLaunch(loaded, registry, label, paneId);
+    if (!brief.ok) {
+      console.error(`WARN: post-launch brief ${label}: ${brief.detail}`);
+    } else {
+      console.log(`OK: post-launch brief ${label} ${brief.detail}`);
     }
     return { paneId, label, status: "launched", cmd };
   } catch (e) {
@@ -305,6 +319,14 @@ export function launchSession(
     }
     const cmd = resolveLaunchCmd(entry, loaded.workspace);
     results.push(tryLaunchPane(loaded, pane, `slot-${slot}`, cmd, skipEmpty, entry.type));
+  }
+
+  if (results.some((r) => r.status === "launched")) {
+    try {
+      saveMeshSession(active, registryForProfile(active));
+    } catch (e) {
+      console.error(`WARN: mesh-agents persist after launch: ${(e as Error).message}`);
+    }
   }
 
   return results;

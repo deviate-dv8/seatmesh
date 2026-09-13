@@ -1,6 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
 import { buildResolvedPaths, portsForSlot, type LoadedProfile } from "@seat-mesh/core";
+import { readSeatSnapshot } from "../seats/seat-update.js";
 
 export interface SeatContextRow {
   seat: string;
@@ -10,44 +9,24 @@ export interface SeatContextRow {
   preview: string;
 }
 
-function openChecks(p: string): number {
-  if (!fs.existsSync(p)) return 0;
-  let n = 0;
-  for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
-    if (line.trim().startsWith("- [ ]")) n++;
-  }
-  return n;
-}
-
-function focusPreview(text: string, n = 2): string {
-  const out: string[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const s = line.trim();
-    if (!s || s.startsWith("#")) continue;
-    if (s.startsWith("**Tmux seat:**") && s.includes("(fill")) continue;
-    if (s.startsWith("<!--")) continue;
-    out.push(s);
-    if (out.length >= n) break;
-  }
-  return out.length ? out.join(" | ").slice(0, 56) : "(no FOCUS body)";
+function rowFor(loaded: LoadedProfile, seat: string, ports: string, target: { role: string; slot?: string; mini?: string }): SeatContextRow {
+  const snap = readSeatSnapshot(loaded, target);
+  return {
+    seat,
+    ports,
+    tasks: snap?.tasks.open ?? 0,
+    rem: snap?.reminder.open ?? 0,
+    preview: snap?.focus.nowPreview ?? "(no FOCUS.md)",
+  };
 }
 
 export function seatContextRows(loaded: LoadedProfile): SeatContextRow[] {
-  const root = buildResolvedPaths(loaded).seatsRoot;
+  buildResolvedPaths(loaded); // preserves the prior existsSync/root resolution side effect (throws on bad profile)
   const formula = loaded.profile.ports?.worker ?? "30{n}0/30{n}1";
   const rows: SeatContextRow[] = [];
 
   for (let n = 1; n <= 8; n++) {
-    const d = path.join(root, `slot-${n}`);
-    rows.push({
-      seat: `slot-${n}`,
-      ports: portsForSlot(formula, n),
-      tasks: openChecks(path.join(d, "TASKS.md")),
-      rem: openChecks(path.join(d, "REMINDER.md")),
-      preview: fs.existsSync(path.join(d, "FOCUS.md"))
-        ? focusPreview(fs.readFileSync(path.join(d, "FOCUS.md"), "utf8"))
-        : "(no FOCUS.md)",
-    });
+    rows.push(rowFor(loaded, `slot-${n}`, portsForSlot(formula, n), { role: "worker", slot: String(n) }));
   }
 
   for (const col of loaded.profile.layout?.base.columns ?? ["manager", "secretary"]) {
@@ -58,31 +37,13 @@ export function seatContextRows(loaded: LoadedProfile): SeatContextRow[] {
         : col === "manager-2"
           ? (loaded.profile.seats.dirs?.["manager-2"] ?? "manager-2")
           : (loaded.profile.seats.dirs?.secretary ?? "secretary");
-    const d = path.join(root, seatDir);
-    rows.push({
-      seat: seatDir,
-      ports: "-",
-      tasks: openChecks(path.join(d, "TASKS.md")),
-      rem: openChecks(path.join(d, "REMINDER.md")),
-      preview: fs.existsSync(path.join(d, "FOCUS.md"))
-        ? focusPreview(fs.readFileSync(path.join(d, "FOCUS.md"), "utf8"))
-        : "(no FOCUS.md)",
-    });
+    rows.push(rowFor(loaded, seatDir, "-", { role: col }));
   }
 
   const miniPat = loaded.profile.seats.dirs?.mini ?? "mini-{n}";
   if (!miniPat.endsWith(".json")) {
     for (let n = 1; n <= loaded.profile.session.miniMax; n++) {
-      const miniDir = path.join(root, miniPat.replace("{n}", String(n)));
-      rows.push({
-        seat: `mini-${n}`,
-        ports: "-",
-        tasks: openChecks(path.join(miniDir, "TASKS.md")),
-        rem: openChecks(path.join(miniDir, "REMINDER.md")),
-        preview: fs.existsSync(path.join(miniDir, "FOCUS.md"))
-          ? focusPreview(fs.readFileSync(path.join(miniDir, "FOCUS.md"), "utf8"))
-          : "(no FOCUS.md)",
-      });
+      rows.push(rowFor(loaded, `mini-${n}`, "-", { role: "mini", mini: String(n) }));
     }
   }
 

@@ -1,8 +1,17 @@
 import { z } from "zod";
 import { gridPaneCapacity } from "../layout/minis.js";
+import { COLUMN_ID_RE, SEAT_KINDS } from "./seat-kind.js";
 
-export const BaseColumnSchema = z.enum(["manager", "manager-2", "secretary"]);
+export { COLUMN_ID_RE, SEAT_KINDS } from "./seat-kind.js";
+export type { SeatKind } from "./seat-kind.js";
+
+/** Open column id from profile — not a closed manager-N enum. */
+export const BaseColumnSchema = z
+  .string()
+  .regex(COLUMN_ID_RE, "column id must match [a-z][a-z0-9-]{0,31}");
 export type BaseColumn = z.infer<typeof BaseColumnSchema>;
+
+const SeatKindSchema = z.enum(SEAT_KINDS);
 
 const MinisLeadsSchema = z
   .union([
@@ -25,16 +34,17 @@ export const LayoutSchema = z.object({
   base: z
     .object({
       window: z.string().default("base"),
-      /** Horizontal columns: manager (+ optional manager-2) + secretary (right). */
-      columns: z.array(BaseColumnSchema).min(2).max(3).default(["manager", "secretary"]),
-      /** Optional CLI type per column (defaults: manager/manager-2=agent, secretary=opencode). */
-      cli: z
-        .object({
-          manager: z.string().optional(),
-          "manager-2": z.string().optional(),
-          secretary: z.string().optional(),
-        })
-        .optional(),
+      /**
+       * Horizontal base columns — any ids. Kind is prefix or `kinds` map
+       * (manager / secretary / …). N managers and N secretaries are config, not enum.
+       */
+      columns: z.array(BaseColumnSchema).min(1).max(12).default(["manager", "secretary"]),
+      /** Override inferred kind per column id (`relief: manager`, `sec-west: secretary`). */
+      kinds: z.record(z.string(), SeatKindSchema).optional(),
+      /** CLI type per column id (default: secretary-kind=opencode, else agent). */
+      cli: z.record(z.string(), z.string()).optional(),
+      /** Human-typed panes: daemon must queue while typing (FQ-inject-co-typed-pane). */
+      humanCoTyped: z.array(BaseColumnSchema).optional(),
       /** Secretary column width (percent of base window width). Default 50. */
       secretaryWidthPct: z.number().int().min(25).max(65).optional(),
       /**
@@ -52,12 +62,25 @@ export const LayoutSchema = z.object({
   workers: z
     .object({
       window: z.string().default("workers"),
-      grid: z.literal("3x2"),
+      /** Equal grid: `3x2`, `4x2`, etc. `slots` must equal cols*rows. */
+      grid: z
+        .string()
+        .regex(/^\d+x\d+$/, "grid must be COLSxROWS e.g. 3x2")
+        .default("3x2"),
       slots: z.number().int().min(1).max(12).default(6),
       /** Off on cold start — manager runs `./sm.sh layout` to add worker grid. */
       enabled: z.boolean().default(false),
     })
-    .default({ window: "workers", grid: "3x2", slots: 6, enabled: false }),
+    .default({ window: "workers", grid: "3x2", slots: 6, enabled: false })
+    .superRefine((w, ctx) => {
+      const cap = gridPaneCapacity(w.grid);
+      if (w.slots !== cap) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `workers.slots (${w.slots}) must equal grid capacity (${cap} for ${w.grid})`,
+        });
+      }
+    }),
   minis: z
     .object({
       window: z.string().default("minis"),

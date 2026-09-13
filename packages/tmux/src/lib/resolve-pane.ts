@@ -1,5 +1,9 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "@seat-mesh/core";
+import {
+  baseColumnIds,
+  expandColumnAlias,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import {
   resolveLiveTmuxSession,
   sessionWorkspaceId,
@@ -147,42 +151,43 @@ export function resolvePaneTarget(
     return { paneId: raw, row };
   }
 
-  if (raw === "manager" || raw === "master") {
-    const row = findInMesh(ctx, (p) => p.role === "manager");
-    if (!row) {
-      const live = liveSessionFromContext(ctx);
-      return { error: `no manager pane in mesh session '${live}'` };
-    }
-    return { paneId: row.paneId, row };
-  }
-
-  if (raw === "manager-2" || raw === "manager2") {
-    const row = findInMesh(ctx, (p) => p.role === "manager-2");
-    if (!row) {
-      const live = liveSessionFromContext(ctx);
-      return { error: `no manager-2 pane in mesh session '${live}'` };
-    }
-    return { paneId: row.paneId, row };
-  }
-
   if (raw === "manager-b" || raw === "master-b" || raw === "co-manager") {
     return {
-      error: "manager-b removed — use manager-2, manager, or ./sm.sh room say -r managers",
+      error: "manager-b removed — use a profile column id or room say -r managers",
     };
   }
 
-  if (raw === "secretary") {
-    const row = findInMesh(ctx, (p) => p.role === "secretary");
-    if (!row) return { error: "no secretary pane in session" };
-    return { paneId: row.paneId, row };
+  const columnIds =
+    typeof ctx === "string" ? ["manager", "secretary"] : baseColumnIds(ctx.profile.layout);
+  const want = new Set(expandColumnAlias(raw));
+  if (want.has("master")) want.add("manager");
+  const colHit = findInMesh(ctx, (p) => want.has(p.role) || columnIds.some((c) => want.has(c) && p.role === c));
+  if (colHit) return { paneId: colHit.paneId, row: colHit };
+  if (columnIds.some((c) => want.has(c))) {
+    const live = liveSessionFromContext(ctx);
+    return { error: `no ${raw} pane in mesh session '${live}'` };
   }
+  const roleHit = findInMesh(ctx, (p) => want.has(p.role));
+  if (roleHit) return { paneId: roleHit.paneId, row: roleHit };
 
-  const miniMatch = raw.match(/^mini-(\d+)$/);
+  const miniMatch = raw.match(/^(?:mini|manager-mini)-(\d+)$/);
   if (miniMatch) {
     const n = miniMatch[1];
     const row = findInMesh(ctx, (p) => p.mini === n || p.slot === `mini-${n}`);
     if (!row) return { error: `mini-${n} pane not found` };
     return { paneId: row.paneId, row };
+  }
+
+  if (raw === "manager-mini") {
+    const minis = listPanesForMesh(ctx).filter(
+      (p) => p.role === "manager-mini" || (p.mini && p.mini.length > 0),
+    );
+    if (minis.length === 1) {
+      return { paneId: minis[0].paneId, row: minis[0] };
+    }
+    return {
+      error: `bad target: manager-mini (ambiguous — use mini-N or manager-mini-N; ${minis.length} minis live)`,
+    };
   }
 
   const slotMatch = raw.match(/^(?:slot-)?(\d+)$/);
@@ -227,6 +232,6 @@ export function resolvePaneTarget(
   }
 
   return {
-    error: `bad target: ${raw} (want here | self | 1-8 | slot-N | manager | secretary | mini-N | %id)`,
+    error: `bad target: ${raw} (want here | self | slot-N | mini-N | <column-id> | %id)`,
   };
 }

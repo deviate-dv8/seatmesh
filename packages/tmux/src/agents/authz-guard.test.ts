@@ -1,0 +1,68 @@
+import { describe, expect, it, vi, afterEach } from "vitest";
+import type { LoadedProfile } from "@seat-mesh/core";
+
+vi.mock("./whoami.js", () => ({
+  runWhoami: vi.fn(),
+}));
+
+import { runWhoami } from "./whoami.js";
+import { requireCoordRole, requireRole } from "./authz-guard.js";
+
+const loaded = {} as LoadedProfile;
+
+describe("requireRole / requireCoordRole", () => {
+  const originalExit = process.exit;
+  const originalErr = console.error;
+
+  afterEach(() => {
+    process.exit = originalExit;
+    console.error = originalErr;
+    vi.restoreAllMocks();
+  });
+
+  function stubExit(): { errors: string[]; exitCode: () => number | undefined } {
+    const errors: string[] = [];
+    let code: number | undefined;
+    console.error = (msg: string) => errors.push(msg);
+    process.exit = (c?: number): never => {
+      code = c;
+      throw new Error("__exit__");
+    };
+    return { errors, exitCode: () => code };
+  }
+
+  it("allows a role that is in the allowed list (no exit)", () => {
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "manager" });
+    expect(() => requireRole(loaded, ["manager"], "mini spawn")).not.toThrow();
+  });
+
+  it("prints UNAUTHORIZED + exits 2 for a denied role", () => {
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "worker" });
+    const { errors, exitCode } = stubExit();
+    expect(() => requireRole(loaded, ["manager"], "mini spawn")).toThrow("__exit__");
+    expect(exitCode()).toBe(2);
+    expect(errors[0]).toBe("UNAUTHORIZED: mini spawn requires role=manager (you_are=worker)");
+    expect(errors[1]).toBe("hint: ./sm.sh agent");
+  });
+
+  it("requireCoordRole allows manager-2 and secretary, denies worker", () => {
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "manager-2" });
+    expect(() => requireCoordRole(loaded, "peer")).not.toThrow();
+
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "secretary" });
+    expect(() => requireCoordRole(loaded, "peer")).not.toThrow();
+
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "worker" });
+    const { errors } = stubExit();
+    expect(() => requireCoordRole(loaded, "peer")).toThrow("__exit__");
+    expect(errors[0]).toContain("UNAUTHORIZED: peer requires role=");
+    expect(errors[0]).toContain("manager");
+    expect(errors[0]).toContain("secretary");
+    expect(errors[0]).toContain("you_are=worker");
+  });
+});

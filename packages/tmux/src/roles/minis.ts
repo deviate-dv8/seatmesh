@@ -1,7 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { meshRuntimePaths, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
+import {
+  MESH_SECRETARY_PREFIX,
+  meshRuntimePaths,
+  type LoadedProfile,
+  type ProviderRegistry,
+} from "@seat-mesh/core";
 import {
   loadAgentsState,
   loadMeshAgents,
@@ -17,7 +22,7 @@ import { injectPromptDirect } from "../inject/prompt.js";
 import { enqueueColdStart } from "../seats/cold-start-inject.js";
 import { tmux } from "../lib/tmux-run.js";
 
-const SECRETARY_PREFIX = "[mesh-secretary] ";
+const SECRETARY_PREFIX = MESH_SECRETARY_PREFIX;
 const SUPERVISOR_PREFIX = "[mesh-supervisor] ";
 
 export interface MiniManifestEntry {
@@ -182,11 +187,31 @@ export interface MiniCampaignDigest {
   text: string;
 }
 
+/** Rows that belong to the active campaign (not phantom idle slots 1..miniMax). */
+function campaignMiniRows(loaded: LoadedProfile): MiniRow[] {
+  const state = loadMinisState(loaded);
+  const tracked = new Set(Object.keys(state.minis).map((k) => Number(k)));
+  let manifestIds: number[] | null = null;
+  try {
+    manifestIds = loadMiniManifest(loaded).minis.map((m) => m.id);
+  } catch {
+    /* no manifest — tracked state only */
+  }
+  const scope = new Set<number>(tracked);
+  if (manifestIds) {
+    for (const id of manifestIds) {
+      if (tracked.has(id)) scope.add(id);
+    }
+  }
+  if (scope.size === 0) return [];
+  return listMinis(loaded).filter((r) => scope.has(r.id));
+}
+
 /** Mechanical campaign status — secretary must not invent "all done" without this. */
 export function buildMiniCampaignDigest(loaded: LoadedProfile): MiniCampaignDigest {
   const state = loadMinisState(loaded);
-  const total = loaded.profile.session.miniMax;
-  const rows = listMinis(loaded);
+  const rows = campaignMiniRows(loaded);
+  const total = rows.length || Object.keys(state.minis).length;
   let done = 0;
   let open = 0;
   let failed = 0;
@@ -199,7 +224,7 @@ export function buildMiniCampaignDigest(loaded: LoadedProfile): MiniCampaignDige
       openIds.push(r.id);
     }
   }
-  const allDone = open === 0 && failed === 0 && done >= total;
+  const allDone = total > 0 && open === 0 && failed === 0 && done >= total;
 
   const donePath = miniDonePath(loaded);
   let recentDone: string[] = [];
@@ -269,11 +294,15 @@ export function miniSpawn(
 
   const paneId = ensureMiniCli(loaded, registry, n);
   const prefix = opts.viaSecretary === false ? SUPERVISOR_PREFIX : SECRETARY_PREFIX;
-  const brief = `${prefix}MINI-TASK id=${n} role=${role}: ${task}
+  const brief = `${prefix}FRESH SUMMON. First action: run ./sm.sh whoami (no flags). Then this task.
+MINI-TASK id=${n} role=${role}: ${task}
 
 You are mini-${n} (NOT a worker seat). Parallel job for manager only. When done: report via mini done ${n} PASS|FAIL: <evidence>. Then stop.`;
 
-  injectPromptDirect(loaded, registry, `mini-${n}`, brief, { prefix: "" });
+  injectPromptDirect(loaded, registry, `mini-${n}`, brief, {
+    prefix: "",
+    confirmSent: false,
+  });
   try {
     enqueueColdStart(loaded, `mini-${n}`, { mini: String(n) });
   } catch {

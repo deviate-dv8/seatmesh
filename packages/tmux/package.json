@@ -1,6 +1,6 @@
 {
   "name": "@seat-mesh/tmux",
-  "version": "0.1.19",
+  "version": "0.1.21",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,13 +16,17 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@seat-mesh/core": "0.1.18",
-    "@seat-mesh/providers": "0.1.19"
+    "@seat-mesh/core": "0.1.21",
+    "@seat-mesh/providers": "0.1.21",
+    "node-notifier": "^10.0.1"
   },
   "publishConfig": {
     "access": "public"
   },
   "files": [
     "dist"
-  ]
+  ],
+  "devDependencies": {
+    "@types/node-notifier": "^8.0.5"
+  }
 }

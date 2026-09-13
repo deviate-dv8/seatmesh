@@ -28,19 +28,19 @@ export const DEFAULT_UX_RULES: UxRule[] = [
       match:
         "cannot\\s+connect\\s+to\\s+api|unable\\s+to\\s+connect|service\\s+unavailable|connection\\s+error|ECONNREFUSED|socket\\s+connection\\s+was\\s+closed",
       unless:
-        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|OC-LIMIT",
+        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429",
     },
     set: { phase: "limit", kind: "oc-connect", border: "PROXY-DOWN" },
     onRise: "connectivity.proxy-down",
   },
   {
     id: "oc-limit",
-    for: ["opencode", "claude"],
+    for: ["opencode"],
     priority: 85,
     when: {
       scan: { tailLines: 28 },
       match:
-        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|free[ -]?tier.*limit|plan limit|OC-LIMIT|zen.*limit|session\\s*(expired|limit|ended)|expired\\s*session|provider\\s*limit|free\\s*usage\\s*exceed|usage\\s*exceeded|subscribe to go",
+        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|free[ -]?tier.*limit|plan limit|zen.*limit|session\\s*(expired|limit|ended)|expired\\s*session|provider\\s*limit|free\\s*usage\\s*exceed|usage\\s*exceeded|subscribe to go",
     },
     set: { phase: "limit", kind: "oc-limit", border: "OC-LIMIT:oc-limit" },
     onRise: "connectivity.rate-limit",
@@ -50,12 +50,10 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     for: ["claude"],
     priority: 84,
     when: {
-      scan: { full: true },
-      match: "rate limit|usage limit|try again|quota",
-      unless:
-        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|OC-LIMIT|zen.*limit",
+      scan: { tailLines: 16 },
+      match: "rate limit|usage limit|try again later|quota exceeded",
     },
-    set: { phase: "limit", kind: "cc-limit", border: "OC-LIMIT:cc-limit" },
+    set: { phase: "limit", kind: "cc-limit", border: "CC-LIMIT" },
     onRise: "limits.cc-limit",
   },
   {

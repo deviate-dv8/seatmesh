@@ -1,5 +1,13 @@
 import path from "node:path";
-import { buildResolvedPaths, meshRuntimePaths, type LoadedProfile } from "@seat-mesh/core";
+import {
+  buildResolvedPaths,
+  COLUMN_ID_RE,
+  expandColumnAlias,
+  isCoordKind,
+  meshRuntimePaths,
+  seatDirSegment,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 
 export interface SeatTarget {
   role: string;
@@ -7,19 +15,28 @@ export interface SeatTarget {
   mini?: string | null;
 }
 
+/** CLI / peer target -> SeatTarget. slot-N, mini-N, or any profile column id. */
+export function parseSeatTarget(raw: string): SeatTarget {
+  const t = raw.trim().toLowerCase();
+  const mini = t.match(/^(?:mini|manager-mini)-(\d+)$/);
+  if (mini) return { role: "manager-mini", mini: mini[1] };
+  const slot = t.match(/^(?:slot-)?(\d+)$/);
+  if (slot) return { role: "worker", slot: slot[1] };
+  const aliases = expandColumnAlias(t === "master" ? "manager" : t);
+  const id =
+    aliases.find((a) => a.includes("-") && COLUMN_ID_RE.test(a)) ??
+    aliases.find((a) => COLUMN_ID_RE.test(a));
+  if (id && id !== "worker" && id !== "mini") return { role: id };
+  throw new Error(`bad seat target: ${raw} (want <column-id>|slot-N|mini-N)`);
+}
+
 /** Resolve tasks/agent-seats/<dir> for worker, mini, manager, secretary. */
 export function seatDirFor(loaded: LoadedProfile, target: SeatTarget): string | null {
   const root = buildResolvedPaths(loaded).seatsRoot;
   const dirs = loaded.profile.seats.dirs;
 
-  if (target.role === "manager") {
-    return path.join(root, dirs?.manager ?? "manager");
-  }
-  if (target.role === "manager-2") {
-    return path.join(root, dirs?.["manager-2"] ?? "manager-2");
-  }
-  if (target.role === "secretary") {
-    return path.join(root, dirs?.secretary ?? "secretary");
+  if (isCoordKind(target.role)) {
+    return path.join(root, seatDirSegment(dirs, target.role));
   }
   if (target.mini) {
     const pat = dirs?.mini ?? "mini-{n}";

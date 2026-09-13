@@ -88,6 +88,14 @@ export interface AgentProvider extends PromptRecording {
   /** True when the CLI composer accepts a paste (splash done, not generating). */
   composerReady(pane: PaneSnapshot): boolean;
   injectPlan(pane: PaneSnapshot): InjectPlan;
+  /**
+   * Live unsent human composer text this CLI's draft looks like right now, or ""
+   * when there's nothing worth preserving. Every provider that has its own draft
+   * UI implements this itself (each CLI renders drafts differently) instead of a
+   * shared dispatcher switching on provider id — omit when a CLI has no
+   * preservable draft state (e.g. `empty`).
+   */
+  humanDraft?(pane: PaneSnapshot): string;
   limits?: LimitDetector[];
 }
 

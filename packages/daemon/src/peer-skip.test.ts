@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PeerRow } from "./jsonl-store.js";
-import { shouldSkipGlobalWorkerRoomPing } from "./peer-skip.js";
+import { shouldSkipGlobalWorkerRoomPing, shouldSkipManagerStatusRoomPing } from "./peer-skip.js";
 
 const base: PeerRow = {
   id: "x",
@@ -36,6 +36,30 @@ describe("shouldSkipGlobalWorkerRoomPing", () => {
       shouldSkipGlobalWorkerRoomPing({
         ...base,
         msg: "[mesh-inbox-room] global | manager | broadcast\nBROADCAST: smoke",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("shouldSkipManagerStatusRoomPing", () => {
+  it("skips queued rich STATUS to manager", () => {
+    expect(
+      shouldSkipManagerStatusRoomPing({
+        ...base,
+        roomSlug: "managers",
+        targetLabel: "manager",
+        msg: "manager | [mesh-inbox-room] managers | secretary | msg (+7 more unseen)\nSTATUS tick: PROG\nVerify: ./sm.sh room tail -r managers -n 15",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not skip non-status room to manager", () => {
+    expect(
+      shouldSkipManagerStatusRoomPing({
+        ...base,
+        roomSlug: "managers",
+        targetLabel: "manager",
+        msg: "manager | [mesh-inbox-room] managers | manager-2 | done\nDONE: 5.6",
       }),
     ).toBe(false);
   });

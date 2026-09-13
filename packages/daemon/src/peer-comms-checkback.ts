@@ -1,9 +1,11 @@
 import {
   chatRoomConfigForLoaded,
   checkbackTimingForExpect,
+  expectPeerReply,
   expectPeerSlotReply,
   expectRoomCallPending,
   expectRoomPeerReply,
+  isCoordKind,
   parseDurationToSeconds,
 } from "@seat-mesh/core";
 import type { LoadedProfile } from "@seat-mesh/core";
@@ -30,6 +32,9 @@ function expectForPeerRow(row: PeerRow): string | null {
   if (row.kind === "to-slot" || row.kind === "to-mini") {
     return expectPeerSlotReply(row.fromSlot);
   }
+  if (row.kind === "prompt") {
+    return expectPeerReply(row.targetLabel);
+  }
   return null;
 }
 
@@ -39,9 +44,21 @@ export function armRecipientCheckbackAfterPeer(
   loaded: LoadedProfile,
   row: PeerRow,
 ): void {
-  if (row.kind !== "room" && row.kind !== "to-slot" && row.kind !== "to-mini") return;
+  if (
+    row.kind !== "room" &&
+    row.kind !== "to-slot" &&
+    row.kind !== "to-mini" &&
+    row.kind !== "prompt"
+  ) {
+    return;
+  }
   const expect = expectForPeerRow(row);
   if (!expect) return;
+
+  const lab = (row.targetLabel ?? "").toLowerCase();
+  if (isCoordKind(lab) || lab.startsWith("manager")) {
+    return;
+  }
 
   const dup = store
     .readCheckbacks()

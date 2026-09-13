@@ -7,6 +7,7 @@ import {
   resolveDaemonScript,
   type LoadedProfile,
 } from "@seat-mesh/core";
+import { armAfterPeer } from "./chat-checkback.js";
 
 function inboxBase(port: number): string {
   return `http://127.0.0.1:${port}`;
@@ -284,7 +285,9 @@ export function sendToMaster(
   );
   if (r.status !== 0) return null;
   try {
-    return JSON.parse(r.stdout) as Record<string, unknown>;
+    const parsed = JSON.parse(r.stdout) as Record<string, unknown>;
+    armAfterPeer(loaded, "manager", { pane: process.env.TMUX_PANE });
+    return parsed;
   } catch {
     return { raw: r.stdout };
   }
@@ -453,11 +456,23 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
     spawnSync("kill", ["-TERM", String(meta!.pid!)], { stdio: "ignore" });
   }
 
-  spawnSync("sleep", ["0.5"]);
-  const h = inboxHealth(port);
-  if (h?.engine === "@seat-mesh/daemon") {
-    console.log(`WARN: mesh-inbox still answering /health — retry stop or kill listener on :${port}`);
+  for (let i = 0; i < 24; i++) {
+    if (!inboxHealth(port)) break;
+    if (i === 6 || i === 14) {
+      if (pidAlive(meta?.supervisorPid)) {
+        spawnSync("kill", ["-KILL", String(meta!.supervisorPid!)], { stdio: "ignore" });
+      }
+      if (pidAlive(meta?.pid)) {
+        spawnSync("kill", ["-KILL", String(meta!.pid!)], { stdio: "ignore" });
+      }
+      killPortListener(port);
+    }
+    spawnSync("sleep", ["0.25"]);
+  }
+  if (inboxHealth(port)) {
+    console.log(`WARN: mesh-inbox still answering /health — killing listener on :${port}`);
     killPortListener(port);
+    spawnSync("sleep", ["0.5"]);
   }
 
   try {
@@ -470,7 +485,10 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
 
 export function restartMeshInbox(loaded: LoadedProfile): void {
   stopMeshInbox(loaded);
-  spawnSync("sleep", ["0.5"]);
+  for (let i = 0; i < 16; i++) {
+    if (!inboxHealth(meshInboxPort(loaded))) break;
+    spawnSync("sleep", ["0.2"]);
+  }
   startMeshInbox(loaded);
 }
 

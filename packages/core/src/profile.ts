@@ -17,6 +17,12 @@ import {
   workspaceScopeId,
   type MeshRuntimePaths,
 } from "./runtime-paths.js";
+import {
+  managerColumnIds,
+  primaryManagerColumn,
+  primarySecretaryColumn,
+  seatDirSegment,
+} from "./schema/seat-kind.js";
 
 export interface LoadedProfile {
   profile: MeshProfile;
@@ -96,7 +102,11 @@ export function profilePaths(loaded: LoadedProfile) {
   const { profile } = loaded;
   const resolved = buildResolvedPaths(loaded);
   const rt = meshRuntimePaths(loaded);
-  const secretaryDir = profile.seats.dirs?.secretary ?? "secretary";
+  const dirs = profile.seats.dirs;
+  const mgrCols = managerColumnIds(profile.layout);
+  const primaryMgr = primaryManagerColumn(profile.layout);
+  const secondMgr = mgrCols[1];
+  const primarySec = primarySecretaryColumn(profile.layout);
   for (const [label, abs] of [
     ["dataRoot", resolved.dataRoot],
     ["daemonDir", resolved.daemonDir],
@@ -116,15 +126,12 @@ export function profilePaths(loaded: LoadedProfile) {
     chatFilesRoot: resolved.chatFilesRoot,
     rolesDir: resolved.rolesDir,
     contractsDir: resolved.contractsDir,
-    managerDir: path.join(
-      resolved.seatsRoot,
-      profile.seats.dirs?.manager ?? "manager",
-    ),
+    managerDir: path.join(resolved.seatsRoot, seatDirSegment(dirs, primaryMgr)),
     manager2Dir: path.join(
       resolved.seatsRoot,
-      profile.seats.dirs?.["manager-2"] ?? "manager-2",
+      seatDirSegment(dirs, secondMgr ?? "manager-2"),
     ),
-    secretaryDir: path.join(resolved.seatsRoot, secretaryDir),
+    secretaryDir: path.join(resolved.seatsRoot, seatDirSegment(dirs, primarySec)),
     daemonPort: resolveDaemonPort(profile, loaded.workspace),
     pathsManifest: path.join(loaded.profileDir, "paths.json"),
     ...rt,

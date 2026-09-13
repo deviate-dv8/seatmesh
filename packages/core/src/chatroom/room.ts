@@ -248,6 +248,39 @@ export async function sayInRoom(
   return { message, checkback: checkbackResult };
 }
 
+/** Daemon-only: append room line without arming checkback (sync; single writer). */
+export function sayInRoomSync(
+  workspace: string,
+  cfg: ChatRoomConfig,
+  slug: string,
+  from: string,
+  body: string,
+  opts: Pick<SayOptions, "kind" | "expectReply"> = {},
+): RoomMessage {
+  if (isGlobalSlug(cfg, slug)) {
+    ensureGlobalRoom(workspace, cfg);
+  }
+  const dir = roomDir(workspace, cfg, slug);
+  if (!fs.existsSync(dir)) {
+    throw new Error(`room not found: ${slug}`);
+  }
+  const kind = opts.kind ?? inferKind(body);
+  const ts = new Date().toISOString();
+  const message: RoomMessage = RoomMessageSchema.parse({
+    id: randomUUID(),
+    ts,
+    from,
+    kind,
+    body: stampActionableBody(ts, normalizeBody(body, kind), kind),
+    expectReply: opts.expectReply ?? false,
+  });
+  const file = roomLogPath(dir);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (!fs.existsSync(file)) fs.writeFileSync(file, "");
+  fs.appendFileSync(file, `${JSON.stringify(message)}\n`, "utf8");
+  return message;
+}
+
 export async function tailRoom(
   workspace: string,
   cfg: ChatRoomConfig,
@@ -293,7 +326,8 @@ function inferKind(body: string): RoomMessageKind {
   if (u.startsWith("CLAIMED:") || u.startsWith("CLAIM:")) return "claim";
   if (u.startsWith("DONE:")) return "done";
   if (u.startsWith("BLOCKED:")) return "blocked";
-  if (u.startsWith("FYI:") || u.startsWith("STATUS:")) return u.startsWith("STATUS:") ? "status" : "fyi";
+  if (u.startsWith("FYI:")) return "fyi";
+  if (u.startsWith("STATUS:") || /^STATUS\b/.test(u)) return "status";
   return "msg";
 }
 

@@ -20,21 +20,12 @@ function paneOpt(paneId: string, key: string): string {
 }
 
 export function stampBaseColumn(paneId: string, col: BaseColumn): void {
-  if (col === "manager" || col === "manager-2") {
-    setPaneOptions(paneId, {
-      mesh_role: col,
-      mesh_slot: col,
-      mesh_ports: col,
-      mesh_title: col,
-      mesh_lead: "",
-    });
-    return;
-  }
   setPaneOptions(paneId, {
-    mesh_role: "secretary",
-    mesh_slot: "secretary",
-    mesh_ports: "secretary",
-    mesh_title: "secretary",
+    mesh_role: col,
+    mesh_slot: col,
+    mesh_ports: col,
+    mesh_name: col,
+    mesh_title: col,
     mesh_lead: "",
   });
 }
@@ -44,6 +35,7 @@ export function stampWorkerSlot(loaded: LoadedProfile, paneId: string, slot: num
     mesh_role: "worker",
     mesh_slot: String(slot),
     mesh_ports: portsForSlot(loaded.profile.ports.worker, slot),
+    mesh_name: `slot-${slot}`,
     mesh_title: `slot-${slot}`,
     mesh_mini: "",
   });
@@ -59,6 +51,7 @@ export function stampMiniId(
     mesh_role: "manager-mini",
     mesh_slot: `mini-${n}`,
     mesh_ports: isLead ? `mini-${n}·lead` : `mini-${n}`,
+    mesh_name: isLead ? `mini-${n} lead` : `mini-${n}`,
     mesh_mini: String(n),
     mesh_title: `mini-${n}`,
     mesh_lead: isLead ? "1" : "",
@@ -91,9 +84,10 @@ function assignBaseIdentities(loaded: LoadedProfile, session: string): void {
     if (!coordPaneForRole(session, baseWin, cols[0] ?? "manager") && unlabeled[0]) {
       stampBaseColumn(unlabeled[0], cols[0] ?? "manager");
     }
-    if (!coordPaneForRole(session, baseWin, "secretary")) {
+    const secId = cols.find((c) => c !== cols[0]) ?? cols[cols.length - 1];
+    if (secId && !coordPaneForRole(session, baseWin, secId)) {
       const sec = unlabeled.find((p) => p !== unlabeled[0]) ?? unlabeled[1];
-      if (sec) stampBaseColumn(sec, "secretary");
+      if (sec) stampBaseColumn(sec, secId);
     }
   } else if (unlabeled[0]) {
     stampBaseColumn(unlabeled[0], "manager");
@@ -191,11 +185,15 @@ export function stampCoordInboxBorderHealth(loaded: LoadedProfile, session: stri
     const pane = coordPaneForRole(session, baseWin, col);
     if (!pane) continue;
     if (!up) {
-      tmuxSetPaneOpt(pane, "mesh_status", COORD_INBOX_DOWN);
+      tmuxSetPaneOpt(pane, "mesh_inbox", "inbox DOWN");
       continue;
     }
-    const cur = tmux(["display-message", "-t", pane, "-p", "#{@mesh_status}"]).out.trim();
-    if (cur === COORD_INBOX_DOWN) {
+    const cur = tmux(["display-message", "-t", pane, "-p", "#{@mesh_inbox}"]).out.trim();
+    if (cur === "inbox DOWN" || cur === COORD_INBOX_DOWN) {
+      tmuxSetPaneOpt(pane, "mesh_inbox", "inbox 0");
+    }
+    const staleStatus = tmux(["display-message", "-t", pane, "-p", "#{@mesh_status}"]).out.trim();
+    if (staleStatus === COORD_INBOX_DOWN) {
       tmuxSetPaneOpt(pane, "mesh_status", "");
     }
   }

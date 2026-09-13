@@ -4,7 +4,13 @@ import { JsonlStore } from "./jsonl-store.js";
 import { migrateJsonlDirToSqlite, SqliteStore } from "./sqlite-store.js";
 
 export type { CheckbackRow, PeerRow, ToMasterRow, PeerKind } from "./jsonl-store.js";
-export { isInboxDelivered, isPeerDelivered, dedupeJsonlRowsById } from "./jsonl-store.js";
+export {
+  isInboxDelivered,
+  isPeerDelivered,
+  dedupeJsonlRowsById,
+  findDupPeer,
+  findDupInbox,
+} from "./jsonl-store.js";
 
 export type QueueStore = JsonlStore | SqliteStore;
 

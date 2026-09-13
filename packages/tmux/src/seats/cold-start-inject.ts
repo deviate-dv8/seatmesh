@@ -1,9 +1,12 @@
+import { spawnSync } from "node:child_process";
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { waitForCli, waitForComposerReady } from "@seat-mesh/providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";
 import { injectPromptDirect } from "../inject/prompt.js";
+import { capturePaneSnapshot } from "../lib/snapshot.js";
+import { freshSummonWhoamiPrompt, secretaryColdStartBrief } from "@seat-mesh/core";
 import { runWhoami } from "../agents/whoami.js";
-import { buildFullColdStartBrief } from "./cold-start.js";
 import { gateQueuePath, seatFile } from "./seat-paths.js";
 import {
   recordColdStartEnqueue,
@@ -12,6 +15,11 @@ import {
 } from "./cold-start-state.js";
 
 const PREFIX = "[mesh-cold-start] ";
+
+function freshSummonBody(w: ReturnType<typeof runWhoami>): string {
+  if (w.role === "secretary") return PREFIX + secretaryColdStartBrief();
+  return PREFIX + freshSummonWhoamiPrompt(w.role);
+}
 
 function hubPaths(
   loaded: LoadedProfile,
@@ -70,7 +78,7 @@ export function enqueueColdStart(
     return { skipped: true, fingerprint };
   }
 
-  const body = PREFIX + buildFullColdStartBrief(loaded, w, { mini });
+  const body = freshSummonBody(w);
   const resp = enqueuePeer(loaded, {
     kind: "prompt",
     msg: body,
@@ -94,6 +102,95 @@ export function injectColdStartDirect(
 ): void {
   const w = runWhoami(loaded, target);
   const mini = opts.mini ?? null;
-  const body = PREFIX + buildFullColdStartBrief(loaded, w, { mini });
-  injectPromptDirect(loaded, registry, target, body, { prefix: "" });
+  const body = freshSummonBody(w);
+  injectPromptDirect(loaded, registry, target, body, {
+    prefix: "",
+    force: true,
+    confirmSent: false,
+  });
+}
+
+function sleepMs(ms: number): void {
+  if (ms > 0) spawnSync("sleep", [String(ms / 1000)]);
+}
+
+function briefVisible(paneId: string, target?: string): boolean {
+  const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
+  if (target === "secretary") return /FRESH SUMMON|You are SECRETARY/i.test(tail);
+  return /FRESH SUMMON|run \.\/sm\.sh whoami|mesh-cold-start/i.test(tail);
+}
+
+/**
+ * After `launch` pastes the CLI cmd: wait for composer, inject FRESH SUMMON / run whoami.
+ * Claude/Cursor otherwise boot to an empty prompt with no instructions.
+ */
+/** Claude TUI must be up — process detect alone matches the launch cmdline too early. */
+function launchUiReady(registry: ProviderRegistry, paneId: string, providerId: string): boolean {
+  const snap = capturePaneSnapshot(paneId);
+  if (!snap) return false;
+  const prov = registry.detect(snap);
+  if (!prov || prov.id !== providerId) return false;
+  const tail = snap.captureTail;
+  if (providerId === "claude") {
+    return /auto mode on|⏵⏵/i.test(tail) && /❯/.test(tail);
+  }
+  if (providerId === "cursor-agent") {
+    return /Add a follow-up|composer|agent/i.test(tail) || prov.composerReady(snap);
+  }
+  if (providerId === "opencode") {
+    if (/esc exit shell mode/i.test(tail)) return false;
+    return prov.composerReady(snap);
+  }
+  return prov.composerReady(snap);
+}
+
+export function injectAfterLaunch(
+  loaded: LoadedProfile,
+  registry: ProviderRegistry,
+  target: string,
+  paneId: string,
+): { ok: boolean; detail: string } {
+  const live = waitForCli(registry, paneId, capturePaneSnapshot, {
+    maxTries: 40,
+    pollMs: 400,
+  });
+  if (!live) {
+    return { ok: false, detail: `no live CLI on ${paneId} after launch` };
+  }
+  waitForComposerReady(
+    registry,
+    paneId,
+    capturePaneSnapshot,
+    live.providerId,
+    { maxTries: 40, pollMs: 400 },
+  );
+  let ui = false;
+  for (let i = 0; i < 50; i++) {
+    if (launchUiReady(registry, paneId, live.providerId)) {
+      ui = true;
+      break;
+    }
+    sleepMs(400);
+  }
+  if (!ui) {
+    return { ok: false, detail: `TUI not ready (${live.providerId}) on ${paneId} — brief not injected` };
+  }
+  let lastErr = "";
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      injectColdStartDirect(loaded, registry, target);
+      sleepMs(900);
+      if (briefVisible(paneId, target)) {
+        return {
+          ok: true,
+          detail: `brief in ${paneId} provider=${live.providerId} attempt=${attempt}`,
+        };
+      }
+      lastErr = "token missing from scrollback";
+    } catch (e) {
+      lastErr = (e as Error).message;
+    }
+    sleepMs(700);
+  }
+  return { ok: false, detail: `brief failed on ${paneId}: ${lastErr}` };
 }

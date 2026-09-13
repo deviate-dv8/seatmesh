@@ -4,6 +4,7 @@ import {
   parseGridSpec,
   type MeshLayout,
 } from "@seat-mesh/core";
+import { withActivePanePreserved } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 
 /**
@@ -72,7 +73,9 @@ export function ensureSinglePane(session: string, window: string): void {
     const r = tmux(["kill-pane", "-t", paneId]);
     if (!r.ok) throw new Error(`kill-pane ${paneId}: ${r.err || r.out}`);
   }
-  tmux(["select-pane", "-t", keep]);
+  withActivePanePreserved(keep, () => {
+    tmux(["select-pane", "-t", keep]);
+  });
 }
 
 interface PaneArea {
@@ -129,12 +132,14 @@ function ensurePaneCount(session: string, window: string, count: number, cwd: st
 
   while (panes.length < count) {
     const anchor = largestPane(session, window);
-    tmux(["select-pane", "-t", anchor]);
-    let r = tmux(["split-window", "-v", "-p", "50", "-t", target, "-c", cwd]);
-    if (!r.ok) {
-      r = tmux(["split-window", "-h", "-p", "50", "-t", target, "-c", cwd]);
-    }
-    if (!r.ok) throw new Error(`split-window ${target}: ${r.err || r.out}`);
+    withActivePanePreserved(anchor, () => {
+      tmux(["select-pane", "-t", anchor]);
+      let r = tmux(["split-window", "-v", "-p", "50", "-t", target, "-c", cwd]);
+      if (!r.ok) {
+        r = tmux(["split-window", "-h", "-p", "50", "-t", target, "-c", cwd]);
+      }
+      if (!r.ok) throw new Error(`split-window ${target}: ${r.err || r.out}`);
+    });
     panes = listWindowPaneIds(session, window);
   }
 
@@ -195,16 +200,29 @@ function buildEqualGridLayout(
   return `${tmuxLayoutChecksum(body)},${body}`;
 }
 
-function applyEqualGridLayout(
+/** Resize-only equal grid. Returns false if pane count does not already match. */
+export function realignEqualGrid(
   session: string,
   window: string,
   cols: number,
   rows: number,
-  cwd: string,
-): void {
+): boolean {
   const target = `${session}:${window}`;
   const total = cols * rows;
-  const paneIds = ensurePaneCount(session, window, total, cwd);
+  const paneIds = listWindowPaneIds(session, window);
+  if (paneIds.length !== total) return false;
+  applyEqualGridToPanes(session, window, cols, rows, paneIds);
+  return true;
+}
+
+function applyEqualGridToPanes(
+  session: string,
+  window: string,
+  cols: number,
+  rows: number,
+  paneIds: string[],
+): void {
+  const target = `${session}:${window}`;
   const numeric = paneIds.map((id) => Number.parseInt(id.replace("%", ""), 10));
 
   const wr = tmux(["display-message", "-t", target, "-p", "#{window_width}"]);
@@ -222,14 +240,51 @@ function applyEqualGridLayout(
   }
 
   const n = listWindowPaneIds(session, window).length;
-  if (n !== total) {
-    throw new Error(`${target}: ${cols}x${rows} want ${total} panes, have ${n}`);
+  if (n !== cols * rows) {
+    throw new Error(`${target}: ${cols}x${rows} want ${cols * rows} panes, have ${n}`);
   }
+}
+
+function applyEqualGridLayout(
+  session: string,
+  window: string,
+  cols: number,
+  rows: number,
+  cwd: string,
+): void {
+  const paneIds = ensurePaneCount(session, window, cols * rows, cwd);
+  applyEqualGridToPanes(session, window, cols, rows, paneIds);
 }
 
 /** 3x2 worker grid (equal cells, row-major pane_index = slots 1-6). */
 export function layoutWorkers3x2(session: string, window: string, cwd: string): void {
   applyEqualGridLayout(session, window, 3, 2, cwd);
+}
+
+/** Equal worker grid from profile (`layout.workers.grid` + `slots`). */
+export function layoutWorkersGrid(
+  session: string,
+  window: string,
+  cwd: string,
+  workers: MeshLayout["workers"],
+): void {
+  const { cols, rows } = parseGridSpec(workers.grid);
+  if (workers.slots !== cols * rows) {
+    throw new Error(
+      `workers.slots ${workers.slots} must equal ${workers.grid} capacity ${cols * rows}`,
+    );
+  }
+  applyEqualGridLayout(session, window, cols, rows, cwd);
+}
+
+/** Preferred worker layout entry point — replaces hard-coded layoutWorkers3x2. */
+export function layoutWorkersFromProfile(
+  session: string,
+  window: string,
+  cwd: string,
+  workers: MeshLayout["workers"],
+): void {
+  layoutWorkersGrid(session, window, cwd, workers);
 }
 
 /** Equal minis grid from profile (`layout.minis.grid` + `max`). */

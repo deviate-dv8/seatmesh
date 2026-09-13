@@ -3,8 +3,13 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   isSuperviseContractOn,
+  managerColumnIds,
   meshRuntimePaths,
   runtimePathHint,
+  secretaryColumnIds,
+  secretaryDigestPrompt,
+  secretarySuperviseBrief,
+  SUPERVISE_CHECKBACK,
   superviseLockPath,
   type LoadedProfile,
   type ProviderRegistry,
@@ -16,21 +21,23 @@ import {
 } from "@seat-mesh/providers";
 import { guessSecretaryOpenCodeSession } from "@seat-mesh/providers";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
-import { loadLaunchState, resolveLaunchCmd } from "../agents/agents-state.js";
+import { loadLaunchState, loadMeshAgents, resolveLaunchCmd } from "../agents/agents-state.js";
+import { saveMeshAgentsFile } from "../session/save-session.js";
 import { enqueuePeer, ensureMeshInbox, inboxHealth, meshInboxPort } from "../comms/inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import type { MiniCampaignDigest } from "./minis.js";
 import { submitPaneOp } from "../ops/pane-ops-client.js";
 import { buildMiniCampaignDigest, miniPrompt, miniSpawnAll } from "./minis.js";
-import { meshManagerPane } from "../lib/pane-meta.js";
-import { injectPromptDirect } from "../inject/prompt.js";
+import { injectPromptDirect, enqueuePrompt } from "../inject/prompt.js";
+import { injectAfterLaunch } from "../seats/cold-start-inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
+import { selectPaneUnfocused, withActivePanePreserved } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 import { applyMeshBorderFormat } from "../session/borders.js";
-import { listWindowPaneIds } from "../session/window-panes.js";
 
 const MESH_WATCH_ID = "mesh-watch-secretary";
 const MANAGER_NUDGE_ID = "mesh-manager-nudge";
+const MANAGER2_NUDGE_ID = "mesh-manager-2-nudge";
 const SECRETARY_SUPERVISE_ID = "mesh-secretary-supervise";
 
 function superviseMarkerPath(loaded: LoadedProfile): string {
@@ -82,50 +89,6 @@ function sleepMs(ms: number): void {
   spawnSync("sleep", [String(ms / 1000)]);
 }
 
-function secretaryContextSnippet(workspace: string, loaded: LoadedProfile): string {
-  const focusPath = path.join(workspace, "tasks/agent-seats/manager/FOCUS.md");
-  let ctx = "";
-  if (fs.existsSync(focusPath)) {
-    const text = fs.readFileSync(focusPath, "utf8");
-    const nowBlock = text.match(/^## NOW\n([\s\S]*?)(?=\n## |\s*$)/m);
-    ctx = (nowBlock?.[1] ?? "")
-      .split("\n")
-      .filter((l) => l.startsWith("- "))
-      .slice(0, 8)
-      .map((l) => l.replace(/^- /, "").trim())
-      .join("; ");
-  }
-  const nightOn = fs.existsSync(
-    path.join(workspace, "tasks/agent-seats/manager/night.on"),
-  );
-  const nightBit = nightOn ? " night=ON" : "";
-  let nMinis = 0;
-  const layout = loaded.profile.layout;
-  if (layout) {
-    nMinis = listWindowPaneIds(loaded.sessionName, layout.minis.window).length;
-  }
-  const miniMax = loaded.profile.session.miniMax;
-  return `CONTEXT: ${ctx.slice(0, 380)}${nightBit} minis=${nMinis}/${miniMax}. OC: CPE scripts/opencode-cpe.sh :18887; ./sm.sh whoami for mesh seat.`;
-}
-
-function secretaryPovBriefing(
-  workspace: string,
-  loaded: LoadedProfile,
-  typ: string,
-): string {
-  const ctx = secretaryContextSnippet(workspace, loaded);
-  const pov =
-    "you are SECRETARY (NOT mini/master/worker). Run ./sm.sh whoami - must show you_are=SECRETARY; read_first=roles/secretary.yaml read_first. Job: absorb worker ACK/stand-by/mcp-synced/FYI; bulk digest to master (not bit-by-bit); notify operator ~10% via workspace notify script when they must check. Default: spawn 1 mini, wait done, fold digest. May: trivial inbox; seats/contexts/mini list/health; mini spawn tester|code-reviewer|helper when safe; mesh-watch on. Must NOT: prompt/switch workers; merge; board moves; rubber-stamp product MINI-DONE; steal prove toasts.";
-  let b: string;
-  if (typ === "opencode") {
-    b = `You are SECRETARY. ${ctx} ${pov} Standing by - transform noise.`;
-  } else {
-    b = `[agent-manager-secretary] POV: ${ctx} ${pov} Standing by - do not chat operator as primary.`;
-  }
-  if (b.length > 900) b = `${b.slice(0, 900)}…`;
-  return b;
-}
-
 function stampSecretaryMeta(paneId: string): void {
   const pairs: Record<string, string> = {
     mesh_role: "secretary",
@@ -138,7 +101,7 @@ function stampSecretaryMeta(paneId: string): void {
   for (const [k, v] of Object.entries(pairs)) {
     tmux(["set-option", "-p", "-t", paneId, `@${k}`, v]);
   }
-  tmux(["select-pane", "-t", paneId, "-T", "secretary"]);
+  selectPaneUnfocused(["-t", paneId, "-T", "secretary"]);
 }
 
 function ensureSecretaryBanners(loaded: LoadedProfile, paneId: string): void {
@@ -149,10 +112,22 @@ function ensureSecretaryBanners(loaded: LoadedProfile, paneId: string): void {
   stampSecretaryMeta(paneId);
 }
 
+function clearSecretaryResumeOnDisk(loaded: LoadedProfile): void {
+  const rel = loaded.profile.state.meshAgentsJson;
+  const mesh = loadMeshAgents(loaded.workspace, rel);
+  if (!mesh?.secretary) return;
+  saveMeshAgentsFile(loaded.workspace, rel, {
+    ...mesh,
+    secretary: { ...mesh.secretary, resumeId: null, resumeCmd: null },
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 function resolveSecretaryLaunchCmd(
   loaded: LoadedProfile,
   typ: string,
   paneId?: string,
+  fresh = false,
 ): string | null {
   const state = loadLaunchState(
     loaded.workspace,
@@ -160,18 +135,23 @@ function resolveSecretaryLaunchCmd(
     loaded.profile.state.agentsJson,
   );
   const harnessType = typ === "cursor-agent" ? "agent" : typ;
-  let resumeId = state.secretary?.resume_id ?? null;
-  if (!resumeId && paneId) {
-    const stored = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_oc_session}"]).out;
-    if (stored) resumeId = stored;
-  }
-  if (!resumeId && harnessType === "opencode") {
-    resumeId = guessSecretaryOpenCodeSession(loaded.workspace) ?? null;
+  let resumeId: string | null = null;
+  if (!fresh) {
+    resumeId = state.secretary?.resume_id ?? null;
+    if (!resumeId && paneId) {
+      const stored = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_oc_session}"]).out;
+      if (stored) resumeId = stored;
+    }
+    if (!resumeId && harnessType === "opencode") {
+      resumeId = guessSecretaryOpenCodeSession(loaded.workspace) ?? null;
+    }
+  } else if (paneId) {
+    tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", ""]);
   }
   const secEntry = {
     type: harnessType,
     resume_id: resumeId,
-    resume_cmd: state.secretary?.resume_cmd ?? null,
+    resume_cmd: fresh ? null : (state.secretary?.resume_cmd ?? null),
   };
   const cmd =
     resolveLaunchCmd(secEntry, loaded.workspace) ??
@@ -190,6 +170,7 @@ export function secretaryRestart(
   loaded: LoadedProfile,
   registry?: ProviderRegistry,
   typArg?: string,
+  fresh = false,
 ): void {
   const reg = registry ?? createRegistryForProfile(loaded.profile);
   const session = loaded.sessionName;
@@ -218,11 +199,12 @@ export function secretaryRestart(
     throw new Error("refused: secretary restart empty - use secretary stop");
   }
 
-  const masterPane = meshManagerPane(session, layout.base.window);
-  const cmd = resolveSecretaryLaunchCmd(loaded, typ, paneId);
+  const cmd = resolveSecretaryLaunchCmd(loaded, typ, paneId, fresh);
   if (!cmd) throw new Error(`no launch cmd for secretary type ${typ}`);
 
-  tmux(["select-pane", "-e", "-t", paneId]);
+  withActivePanePreserved(paneId, () => {
+    tmux(["select-pane", "-e", "-t", paneId]);
+  });
 
   const respawn = tmux(["respawn-pane", "-k", "-c", workspace, "-t", paneId]);
   if (!respawn.ok) {
@@ -243,7 +225,9 @@ export function secretaryRestart(
 
   ensureSecretaryBanners(loaded, paneId);
   tmux(["set-option", "-p", "-t", paneId, "@mesh_status", "restarting"]);
-  tmux(["select-pane", "-e", "-t", paneId]);
+  withActivePanePreserved(paneId, () => {
+    tmux(["select-pane", "-e", "-t", paneId]);
+  });
 
   tmux(["send-keys", "-t", paneId, cmd, "Enter"]);
   sleepMs(300);
@@ -257,29 +241,31 @@ export function secretaryRestart(
 
   const providerId = live.providerId;
   if (!waitForComposerReady(reg, paneId, capturePaneSnapshot, providerId)) {
-    console.error(
-      "WARN: composer not ready on",
-      paneId,
-      `(${providerId}) - POV inject may fail`,
-    );
+    const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
+    if (/esc exit shell mode/i.test(tail)) {
+      tmux(["send-keys", "-t", paneId, "Escape"]);
+      sleepMs(400);
+    }
+    if (!waitForComposerReady(reg, paneId, capturePaneSnapshot, providerId)) {
+      console.error(
+        "WARN: composer not ready on",
+        paneId,
+        `(${providerId}) - POV inject may fail`,
+      );
+    }
   }
   sleepMs(500);
 
-  const povTyp = providerId === "opencode" ? "opencode" : typ;
-  const msg = secretaryPovBriefing(workspace, loaded, povTyp);
-  injectPromptDirect(loaded, reg, paneId, msg, { prefix: "" });
-  sleepMs(2000);
-
-  const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
-  if (!/SECRETARY|You are SECRETARY|CONTEXT:/i.test(tail)) {
-    console.error(
-      "WARN: secretary POV inject uncertain - retry: ./sm.sh secretary restart",
-    );
+  const pov = injectAfterLaunch(loaded, reg, "secretary", paneId);
+  if (pov.ok) {
+    console.log(`OK: secretary POV ${pov.detail}`);
+  } else {
+    console.error(`WARN: secretary POV: ${pov.detail}`);
   }
 
   tmux(["set-option", "-p", "-t", paneId, "@mesh_status", ""]);
-  tmux(["select-pane", "-d", "-t", paneId]);
-  if (masterPane) tmux(["select-pane", "-t", masterPane]);
+  // Do NOT lock pane input here — the operator must still be able to type into
+  // secretary directly after a restart (operator-reported: was left stuck locked).
 
   console.log(`OK: restarted secretary pane=${paneId} (${providerId}): respawn + POV`);
 }
@@ -298,7 +284,7 @@ export function secretaryLaunch(loaded: LoadedProfile): void {
 export function secretaryMeshWatch(
   loaded: LoadedProfile,
   sub: "on" | "off" | "status",
-  interval = "5m",
+  interval = "10m",
 ): void {
   ensureMeshInbox(loaded, { quiet: true });
   const health = inboxHealth(inboxPort(loaded));
@@ -314,18 +300,7 @@ export function secretaryMeshWatch(
   }
 
   if (sub === "status") {
-    const r = spawnSync(
-      "curl",
-      ["-sS", `${base}/patience?all=1`],
-      { encoding: "utf8" },
-    );
-    if (r.status !== 0) throw new Error("patience list failed");
-    const lines = (r.stdout || "").split("\n").filter((l) => l.includes(MESH_WATCH_ID));
-    if (!lines.length) {
-      console.log("mesh-watch: OFF");
-      return;
-    }
-    console.log(lines.join("\n"));
+    console.log(`mesh-watch: ${secretaryMeshWatchStatusQuiet(loaded)}`);
     return;
   }
 
@@ -341,7 +316,7 @@ export function secretaryMeshWatch(
     id: MESH_WATCH_ID,
     kind: "mesh-watch",
     renewSec: secs,
-    expect: "mesh MINI-DONE / health change / STALE thought-only minis",
+    expect: SUPERVISE_CHECKBACK.meshWatchExpect,
     ownerPane: resolved.paneId,
     expiresAt: expires,
     senderLabel: "inbox",
@@ -437,30 +412,48 @@ export function secretarySupervise(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
   sub: "on" | "off" | "status",
-  interval = "5m",
+  interval = "10m",
 ): void {
   const workspace = loaded.workspace;
   const session = loaded.sessionName;
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
 
-  const secResolved = resolvePaneTarget("secretary", loaded);
-  const mgrResolved = resolvePaneTarget("manager", loaded);
+  const mgrIds = managerColumnIds(layout);
+  const secIds = secretaryColumnIds(layout);
+  const secResolved = resolvePaneTarget(secIds[0] ?? "secretary", loaded);
+  const mgrResolved = resolvePaneTarget(mgrIds[0] ?? "manager", loaded);
+  const extraMgrs = mgrIds.slice(1).map((id) => ({ id, resolved: resolvePaneTarget(id, loaded) }));
   if ("error" in secResolved) {
     throw new Error(`${secResolved.error} — run: ./sm.sh secretary restart`);
   }
   if ("error" in mgrResolved) {
     throw new Error(`${mgrResolved.error} — manager pane missing`);
   }
+  for (const extra of extraMgrs) {
+    if ("error" in extra.resolved) {
+      throw new Error(`${extra.resolved.error} — ${extra.id} pane missing`);
+    }
+  }
+  const extraPanes = extraMgrs.map((e) => ({
+    id: e.id,
+    paneId: (e.resolved as { paneId: string }).paneId,
+  }));
 
   const marker = superviseMarkerPath(loaded);
 
   if (sub === "off") {
     cancelPatience(loaded, MANAGER_NUDGE_ID);
+    cancelPatience(loaded, MANAGER2_NUDGE_ID);
+    for (const extra of extraPanes) {
+      cancelPatience(loaded, `mesh-${extra.id}-nudge`);
+    }
     cancelPatience(loaded, SECRETARY_SUPERVISE_ID);
     cancelPatience(loaded, MESH_WATCH_ID);
     if (fs.existsSync(marker)) fs.unlinkSync(marker);
-    console.log("OK: secretary supervise OFF (manager-nudge + supervise loop cancelled)");
+    console.log(
+      `OK: secretary supervise OFF (manager + ${extraPanes.map((e) => e.id).join("+") || "no-extra"} nudge + supervise loop cancelled)`,
+    );
     return;
   }
 
@@ -473,11 +466,13 @@ export function secretarySupervise(
           since?: string;
           interval?: string;
           managerPane?: string;
+          manager2Pane?: string;
           secretaryPane?: string;
         };
         if (meta.since) console.log(`  since: ${meta.since}`);
         if (meta.interval) console.log(`  interval: ${meta.interval}`);
         if (meta.managerPane) console.log(`  manager: ${meta.managerPane}`);
+        if (meta.manager2Pane) console.log(`  manager-2: ${meta.manager2Pane}`);
         if (meta.secretaryPane) console.log(`  secretary: ${meta.secretaryPane}`);
       } catch {
         /* ignore */
@@ -491,60 +486,77 @@ export function secretarySupervise(
   const expires = new Date(Date.now() + secs * 1000).toISOString();
 
   cancelPatience(loaded, MANAGER_NUDGE_ID);
+  cancelPatience(loaded, MANAGER2_NUDGE_ID);
+  for (const extra of extraPanes) {
+    cancelPatience(loaded, `mesh-${extra.id}-nudge`);
+  }
   cancelPatience(loaded, SECRETARY_SUPERVISE_ID);
 
-  const mgrBody = {
-    id: MANAGER_NUDGE_ID,
-    kind: "manager-nudge",
-    renewSec: secs,
-    expect: "manager idle - continue authorized seatmesh work",
-    ownerPane: mgrResolved.paneId,
-    expiresAt: expires,
-    senderLabel: "secretary",
-    recipientLabel: "manager",
-  };
+  // Primary manager is the hub — no daemon CONTINUE nudge (was spamming the pane).
+  for (const extra of extraPanes) {
+    armPatience(loaded, {
+      id: extra.id === "manager-2" ? MANAGER2_NUDGE_ID : `mesh-${extra.id}-nudge`,
+      kind: extra.id === "manager-2" ? "manager-2-nudge" : "coord-nudge",
+      renewSec: secs,
+      expect: `${extra.id} idle — complete open TASKS.md checkboxes`,
+      ownerPane: extra.paneId,
+      expiresAt: expires,
+      senderLabel: "secretary",
+      recipientLabel: extra.id,
+    });
+  }
   const secBody = {
     id: SECRETARY_SUPERVISE_ID,
     kind: "secretary-supervise",
     renewSec: secs,
-    expect: "supervise manager continuity",
+    expect: SUPERVISE_CHECKBACK.secretarySuperviseExpect,
     ownerPane: secResolved.paneId,
     expiresAt: expires,
     senderLabel: "daemon",
-    recipientLabel: "secretary",
+    recipientLabel: secIds[0] ?? "secretary",
   };
 
-  armPatience(loaded, mgrBody);
   armPatience(loaded, secBody);
+  cancelPatience(loaded, MESH_WATCH_ID);
 
-  armPatienceLocal(loaded, {
-    id: MESH_WATCH_ID,
-    kind: "mesh-watch",
-    renewSec: secs,
-    expect: "mesh MINI-DONE / health change / STALE thought-only minis",
-    ownerPane: secResolved.paneId,
-    expiresAt: expires,
-    senderLabel: "inbox",
-    recipientLabel: "secretary",
-  });
-
-  const brief = `SUPERVISION (operator assigned): You supervise MASTER (manager pane ${mgrResolved.paneId}). Keep master moving without operator saying continue. Daemon manager-nudge is ON (idle master gets CONTINUE every ${interval}). Your loop on each SUPERVISE tick: ./sm.sh contexts; read seats/manager/FOCUS.md; if master idle and work remains, ./sm.sh to-master "CONTINUE: <one-line next step>". mesh-watch ON for minis. Bulk digest only — no ACK spam. Do not ping operator for routine continue.`;
-
-  const enq = enqueuePeer(loaded, {
-    kind: "prompt",
-    msg: brief,
-    targetPane: secResolved.paneId,
-    targetLabel: "secretary",
-    fromSlot: "manager",
-  });
-  if (!enq?.ok) {
+  let skipBrief = false;
+  if (fs.existsSync(marker)) {
     try {
-      injectPromptDirect(loaded, registry, "secretary", brief, { prefix: "" });
-    } catch (e) {
-      console.error(
-        `WARN: secretary brief queued failed (${(e as Error).message}) — checkbacks armed; daemon will inject when idle`,
-      );
+      const prev = JSON.parse(fs.readFileSync(marker, "utf8")) as { interval?: string };
+      skipBrief = prev.interval === interval;
+    } catch {
+      skipBrief = false;
     }
+  }
+
+  if (!skipBrief) {
+    const brief = secretarySuperviseBrief({
+      managerPane: mgrResolved.paneId,
+      manager2Pane: extraPanes[0]?.paneId ?? "",
+      interval,
+    });
+
+    try {
+      const sent = enqueuePrompt(loaded, "secretary", brief, {
+        prefix: "",
+      });
+      console.log(`OK: secretary supervise brief token=${sent.token ?? "-"} via=${sent.via ?? "?"}`);
+    } catch (e) {
+      const enq = enqueuePeer(loaded, {
+        kind: "prompt",
+        msg: brief,
+        targetPane: secResolved.paneId,
+        targetLabel: "secretary",
+        fromSlot: "manager",
+      });
+      if (!enq?.ok) {
+        console.error(
+          `WARN: secretary brief failed (${(e as Error).message}) — nudges still armed; daemon tick posts to secretary only`,
+        );
+      }
+    }
+  } else {
+    console.log("OK: supervise re-arm only (same interval) — skipped duplicate brief inject");
   }
 
   fs.writeFileSync(
@@ -554,6 +566,8 @@ export function secretarySupervise(
         since: new Date().toISOString(),
         interval,
         managerPane: mgrResolved.paneId,
+        manager2Pane: extraPanes[0]?.paneId,
+        extraManagerPanes: extraPanes,
         secretaryPane: secResolved.paneId,
       },
       null,
@@ -561,14 +575,15 @@ export function secretarySupervise(
     ) + "\n",
   );
 
+  const extraLabel = extraPanes.map((e) => `${e.id}=${e.paneId}`).join(" ") || "none";
   console.log(
-    `OK: secretary supervise ON interval=${interval} manager=${mgrResolved.paneId} secretary=${secResolved.paneId}`,
+    `OK: secretary supervise ON interval=${interval} manager=${mgrResolved.paneId} extras=${extraLabel} secretary=${secResolved.paneId}`,
   );
-  console.log("  supervisee: MANAGER ONLY (not worker slot-1..8, not mini-1..8)");
-  console.log("  mini campaign room: tasks/chat-rooms/supervise (separate contract)");
-  console.log("  manager-nudge: daemon CONTINUE when master idle");
-  console.log("  secretary-supervise: secretary polls manager each tick");
-  console.log("  off: ./sm.sh secretary supervise off");
+  console.log(`  supervisees: ${mgrIds.join(" + ")} (not workers, not minis)`);
+  console.log("  mesh-watch: OFF (stale mini DIGEST does not run)");
+  console.log("  extra-manager nudge only (no daemon nudge to primary manager)");
+  console.log("  secretary-supervise: poll lead TASKS each tick");
+  console.log("  off: seatmesh secretary supervise off");
 }
 
 export function secretaryStatus(loaded: LoadedProfile): void {
@@ -599,17 +614,16 @@ export function secretaryCollect(
   console.log(digest.text);
 
   if (opts.sendManager) {
-    const session = loaded.sessionName;
-    const base = loaded.profile.layout?.base.window;
-    const mgrPane = base ? meshManagerPane(session, base) : null;
-    if (mgrPane) {
-      injectPromptDirect(
-        loaded,
-        registry,
-        "manager",
-        `SECRETARY-DIGEST (mechanical — do not trust chat "all done"):\n${digest.text}`,
-        { manager: true },
-      );
+    const digestMsg = secretaryDigestPrompt(digest.text);
+    for (const role of managerColumnIds(loaded.profile.layout)) {
+      try {
+        injectPromptDirect(loaded, registry, role, digestMsg, {
+          manager: true,
+          confirmSent: false,
+        });
+      } catch (e) {
+        console.error(`digest to ${role} failed: ${(e as Error).message}`);
+      }
     }
   }
 
@@ -660,5 +674,15 @@ function secretaryMeshWatchStatusQuiet(loaded: LoadedProfile): string {
     encoding: "utf8",
   });
   if (r.status !== 0) return "?";
-  return (r.stdout || "").includes(MESH_WATCH_ID) ? "ON" : "OFF";
+  try {
+    const parsed = JSON.parse(r.stdout || "{}") as {
+      entries?: Array<{ id?: string; status?: string }>;
+    };
+    const on = (parsed.entries ?? []).some(
+      (e) => e.id === MESH_WATCH_ID && e.status === "active",
+    );
+    return on ? "ON" : "OFF";
+  } catch {
+    return "?";
+  }
 }

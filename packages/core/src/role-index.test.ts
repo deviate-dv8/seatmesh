@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadRoleIndex, validateRoleIndex } from "./role-index.js";
+import { loadRoleIndex, roleAllows, validateRoleIndex } from "./role-index.js";
 
 describe("role-index", () => {
   it("merges common + role and validates paths", () => {
@@ -45,6 +45,36 @@ describe("role-index", () => {
     const result = validateRoleIndex(index, root);
     expect(result.ok).toBe(false);
     expect(result.missing).toEqual(["missing/playbook.md"]);
+  });
+
+  it("merges funcs/guards — common deny accumulates, role's own allow wins", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "sm-role-"));
+    const rolesDir = path.join(root, "roles");
+    fs.mkdirSync(rolesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(rolesDir, "common.yaml"),
+      `guards:\n  deny: [merge, board.mutate]\nfuncs:\n  allow: [dc-sh, notify]\n`,
+    );
+    fs.writeFileSync(
+      path.join(rolesDir, "worker.yaml"),
+      `kind: worker\nfuncs:\n  allow: [dc-sh]\n  deny: [docker-exec]\n`,
+    );
+
+    const index = loadRoleIndex(rolesDir, "worker");
+    // common's deny accumulates even though worker's own funcs has no deny for it
+    expect(index.guards?.deny).toEqual(["merge", "board.mutate"]);
+    // worker's own allow list wins over common's broader one
+    expect(index.funcs?.allow).toEqual(["dc-sh"]);
+    expect(index.funcs?.deny).toEqual(["docker-exec"]);
+
+    expect(roleAllows(index.funcs, "dc-sh")).toBe(true);
+    expect(roleAllows(index.funcs, "notify")).toBe(false); // not in worker's own allow list
+    expect(roleAllows(index.funcs, "docker-exec")).toBe(false); // denied
+  });
+
+  it("roleAllows defaults to true with no rule and true with an empty rule", () => {
+    expect(roleAllows(undefined, "anything")).toBe(true);
+    expect(roleAllows({}, "anything")).toBe(true);
   });
 
   it("normalizes master alias to manager", () => {

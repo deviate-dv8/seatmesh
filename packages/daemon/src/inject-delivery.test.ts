@@ -23,4 +23,11 @@ describe("isCursorFollowUpSteer", () => {
       isCursorFollowUpSteer({ phase: "busy", busyLabel: "Thinking" }, "", "opencode"),
     ).toBe(false);
   });
+
+  it("false for claude, even mid-generate (FQ-inject-co-typed-pane: never steer-inject a co-typed pane)", () => {
+    expect(isCursorFollowUpSteer({ phase: "busy" }, "· thinking", "claude")).toBe(false);
+    expect(
+      isCursorFollowUpSteer({ phase: "busy" }, "esc to interrupt", "claude"),
+    ).toBe(false);
+  });
 });

@@ -6,6 +6,7 @@ import {
   formatRoomDirectPm,
   formatRoomPeerNotify,
   isGlobalSlug,
+  isSuperviseStatusBroadcast,
   loadRoomProfile,
   normalizeMinisLeads,
   normalizeRoomAgentId,
@@ -18,6 +19,7 @@ import {
 } from "@seat-mesh/core";
 import {
   listMeshMonitorPanes,
+  coordPaneForRole,
   meshManagerPane,
   meshSecretaryPane,
   paneMetaForPane,
@@ -99,6 +101,8 @@ export function resolveAgentPaneId(loaded: LoadedProfile, agentId: string): stri
   const session = loaded.sessionName;
   const id = normalizeRoomAgentId(agentId);
 
+  const coord = coordPaneForRole(session, layout.base.window, id);
+  if (coord) return coord;
   if (id === "manager") return meshManagerPane(session, layout.base.window);
   if (id === "secretary") return meshSecretaryPane(session, layout.base.window);
 
@@ -143,8 +147,9 @@ function contractAudienceSet(loaded: LoadedProfile, slug: string): Set<string> |
     for (const w of profile.leadWorkers) add(w);
   }
   add(profile.supervisor);
-  audience.add("manager");
-  audience.add("manager-2");
+  for (const col of loaded.profile.layout?.base.columns ?? ["manager", "secretary"]) {
+    audience.add(col);
+  }
 
   const gridLeads = loaded.profile.layout?.minis?.leads ?? [];
   for (const n of gridLeads) add(`mini-${n}`);
@@ -155,7 +160,9 @@ function contractAudienceSet(loaded: LoadedProfile, slug: string): Set<string> |
 /** Manager, secretary, contract leads, grid mini-leads, leadWorkers get rich body pings. */
 function coordAudienceSet(loaded: LoadedProfile, slug: string): Set<string> {
   const cfg = chatRoomConfigForLoaded(loaded);
-  const out = new Set<string>(["manager", "manager-2", "secretary"]);
+  const out = new Set<string>(
+    loaded.profile.layout?.base.columns ?? ["manager", "secretary"],
+  );
   if (isGlobalSlug(cfg, slug)) return out;
 
   const profile = loadRoomProfile(roomDir(loaded.workspace, cfg, slug));
@@ -258,8 +265,15 @@ export function fanOutRoomMessage(
   let enqueued = 0;
   let failed = 0;
 
+  const isStatusBroadcast = isSuperviseStatusBroadcast(input.kind, input.body);
+
   for (const t of targets) {
     const agentId = agentIdForPane(t.paneId);
+    // Supervise STATUS ledger posts must not inject the manager lead (operator: pane flooded).
+    if (isStatusBroadcast && agentId === "manager") {
+      skipped++;
+      continue;
+    }
     const ctx = peerContextForPane(t.paneId, loaded);
     const mentioned = mentions.includes(agentId);
     const directPm = mentioned || memberCount === 2;
@@ -267,6 +281,14 @@ export function fanOutRoomMessage(
     let delivery: "rich" | "thin" | "skip" = "thin";
     if (directPm) {
       delivery = "rich";
+    } else if (isStatusBroadcast) {
+      // High-frequency, low-value-per-instance (supervise ticks etc.) — the room ledger
+      // is the source of truth; a full 480-char rich snippet on every tick floods coord
+      // panes (operator-reported: manager pane flooded with repeated near-identical STATUS
+      // blocks, e.g. "STATUS tick: ..." posted as plain kind=msg). Body-prefix check
+      // catches those even when the sender didn't pass --kind status. Always thin-ping
+      // regardless of recipient, even coordinators.
+      delivery = "thin";
     } else if (roomProfile) {
       delivery = resolveFanoutDelivery({
         targetId: agentId,

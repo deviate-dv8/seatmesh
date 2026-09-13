@@ -3,6 +3,8 @@ import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import { composerFromCapture } from "@seat-mesh/providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
+import { bannerNameFromMeta } from "../session/borders.js";
+import { readSeatSnapshot } from "../seats/seat-update.js";
 
 function tmux(args: string[]): string | null {
   const r = spawnSync("tmux", args, { encoding: "utf8" });
@@ -50,6 +52,7 @@ export function runPeek(
 
   const role = opt(snap, "mesh_role") || row.role || "?";
   const slot = opt(snap, "mesh_slot") || row.slot || "-";
+  const mini = opt(snap, "mesh_mini") || row.mini || "";
   const ports = opt(snap, "mesh_ports") || row.ports || "-";
   const title = opt(snap, "mesh_title") || "";
   const border = opt(snap, "mesh_status") || "";
@@ -63,7 +66,28 @@ export function runPeek(
   ];
   if (title) lines.push(`title=${title}`);
   if (border) lines.push(`border=${border}`);
+  const banner = [
+    opt(snap, "mesh_name") || bannerNameFromMeta({ role, slot: slot === "-" ? "" : slot, mini }),
+    opt(snap, "mesh_tasks"),
+    opt(snap, "mesh_inbox"),
+    opt(snap, "mesh_checkbacks"),
+    opt(snap, "mesh_status") || border,
+  ].filter(Boolean);
+  if (banner.length) lines.push(`banner=${banner.join(" | ")}`);
   if (composer.draftFingerprint) lines.push(`draft=${composer.draftFingerprint}`);
+
+  // composer=empty means "nothing typed right now", NOT "no work queued" — surface
+  // the seat's actual TASKS.md count too, else an idle composer reads as no task.
+  const seatSnap = readSeatSnapshot(loaded, {
+    role,
+    slot: slot === "-" ? null : slot,
+    mini: mini || null,
+  });
+  if (seatSnap) {
+    lines.push(
+      `tasks=${seatSnap.tasks.open} open (${seatSnap.tasks.done} done) mark=${seatSnap.focus.mark ?? "?"}`,
+    );
+  }
 
   const tailLines = snap.captureTail.split("\n").filter((l) => l.trim());
   const preview = tailLines.slice(-6).join("\n");

@@ -99,13 +99,7 @@ export const MeshProfileSchema = z.object({
     root: z.string().default("seats"),
     templates: z.array(z.string()).default(["FOCUS", "TASKS", "REMINDER"]),
     dirs: z
-      .object({
-        manager: z.string().default("manager"),
-        "manager-2": z.string().optional(),
-        secretary: z.string().default("secretary"),
-        worker: z.string().default("slot-{n}"),
-        mini: z.string().default("mini-{n}"),
-      })
+      .record(z.string(), z.string())
       .default({
         manager: "manager",
         secretary: "secretary",
@@ -150,6 +144,13 @@ export const MeshProfileSchema = z.object({
   roles: z.object({
     dir: z.string().default("roles"),
   }),
+  /** AGENT-FUNC-GUARDS.md func registry — `./sm.sh func <id> <args>` attached externals. */
+  external: z
+    .object({
+      default: z.enum(["allow", "deny"]).default("allow"),
+    })
+    .default({}),
+  funcs: z.record(z.string(), z.object({ command: z.string() })).default({}),
   data: DataRootSchema,
   connectivity: z
     .object({

@@ -22,7 +22,7 @@ import {
   saveMeshSession,
 } from "@seat-mesh/tmux";
 import { createQueueStore } from "./create-queue-store.js";
-import type { CheckbackRow } from "./jsonl-store.js";
+import { findDupInbox, findDupPeer, type CheckbackRow } from "./jsonl-store.js";
 import {
   orchestratorDrainTickAsync,
   type MeshOrchestratorCtx,
@@ -40,6 +40,11 @@ import {
   type ResumeWaveMeta,
 } from "./oc-resume.js";
 import { armResumeAckWave, pollResumeAcks } from "./oc-resume-ack.js";
+import {
+  armCcLimitRetryCheckback,
+  paneSessionFingerprint,
+  parseCcLimitRetryAtMs,
+} from "./cc-limit-retry.js";
 import {
   drainPaneOpsOnce,
   enqueuePaneOp,
@@ -281,6 +286,12 @@ async function main(): Promise<void> {
       state: connectivity,
       log,
       resumeOpenCodePanes,
+      onCcLimitRise: (paneId, snap) => {
+        const fp = paneSessionFingerprint(registry, snap);
+        const at =
+          parseCcLimitRetryAtMs(snap.captureTail) ?? Date.now() + 30 * 60_000;
+        armCcLimitRetryCheckback(store, paneId, fp, at, log);
+      },
     });
   }
 
@@ -449,6 +460,11 @@ async function main(): Promise<void> {
           return json(res, 400, { ok: false, error: "msg and targetPane required" });
         }
         const now = new Date().toISOString();
+        const dup = findDupPeer(store.readPeer(), { targetPane, msg, kind });
+        if (dup) {
+          log(`TO-PEER dedupe ${kind} -> ${dup.targetLabel} id=${dup.id.slice(0, 8)}`);
+          return json(res, 200, { ok: true, entry: dup, deduped: true });
+        }
         const row: import("./jsonl-store.js").PeerRow = {
           id: crypto.randomUUID(),
           at: now,
@@ -489,6 +505,7 @@ async function main(): Promise<void> {
           if (!targetPane.startsWith("%")) continue;
           if (!rowMsg) continue;
           if (exclude && targetPane === exclude) continue;
+          if (findDupPeer(store.readPeer(), { targetPane, msg: rowMsg, kind: "room" })) continue;
           rows.push({
             id: crypto.randomUUID(),
             at: now,
@@ -541,12 +558,18 @@ async function main(): Promise<void> {
         };
         const msg = String(body.msg ?? body.message ?? "").trim();
         if (!msg) return json(res, 400, { ok: false, error: "msg required" });
+        const slot = body.slot != null ? String(body.slot) : null;
+        const dup = findDupInbox(store.readInbox(), { msg, slot });
+        if (dup) {
+          log(`TO-MASTER dedupe slot=${slot ?? "-"} id=${dup.id.slice(0, 8)}`);
+          return json(res, 200, { ok: true, entry: dup, deduped: true });
+        }
         const now = new Date().toISOString();
         const row = {
           id: crypto.randomUUID(),
           at: now,
           from: body.from || "worker",
-          slot: body.slot != null ? String(body.slot) : null,
+          slot,
           ports: body.ports || null,
           msg,
           sent: false,
@@ -616,6 +639,7 @@ async function main(): Promise<void> {
         "",
         stateDir,
         uxResolved,
+        loaded,
       );
       log(`OC-RESUME ack removed OC-LIMIT banner ${paneId}`);
       if (connectivity.ocLimited.size === 0) {
@@ -633,6 +657,7 @@ async function main(): Promise<void> {
             "secretary",
             stateDir,
             uxResolved,
+            loaded,
           );
         }
       }

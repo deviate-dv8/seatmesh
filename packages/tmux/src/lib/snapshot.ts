@@ -48,6 +48,10 @@ export function capturePaneSnapshot(paneId: string): PaneSnapshot | null {
     "mesh_slot",
     "mesh_ports",
     "mesh_title",
+    "mesh_name",
+    "mesh_tasks",
+    "mesh_inbox",
+    "mesh_checkbacks",
     "mesh_status",
     "mesh_oc_session",
   ]) {

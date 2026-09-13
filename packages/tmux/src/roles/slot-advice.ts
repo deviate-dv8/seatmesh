@@ -200,7 +200,7 @@ export function runSlotAdvice(
 
   const report = buildSlotAdviceReport(loaded, slot);
   console.log(report);
-  if (opts.note) console.log(`Dan note: ${opts.note}`);
+  if (opts.note) console.log(`operator note: ${opts.note}`);
 
   if (!opts.send) {
     console.log("(pass --send to prompt the worker with this advice)");
@@ -214,7 +214,7 @@ export function runSlotAdvice(
     `${prefix} slot-${slot} ports ${ports} - SLOT-ADVICE (from operator via manager): ` +
     "Review dc.sh / worktree conventions for your seat and fix if needed.\n\n" +
     report;
-  if (opts.note) msg += `\n\nDan note: ${opts.note}`;
+  if (opts.note) msg += `\n\noperator note: ${opts.note}`;
   msg +=
     `\n\nIf advice says RISK/WARN: correct the worktree (clone-feature-db / pairing / nested -D-R) ` +
     `before migrations or Redis experiments. Update slot-${slot} FOCUS.md (NOW) + TASKS.md if needed. ` +

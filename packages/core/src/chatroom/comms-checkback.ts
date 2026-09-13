@@ -1,5 +1,5 @@
 import type { ChatRoomConfig } from "./room.js";
-import { armCheckback, type ArmCheckbackResult } from "./inbox-client.js";
+import { armCheckback, armCheckbackSync, type ArmCheckbackResult } from "./inbox-client.js";
 
 export interface ArmCommsCheckbackInput {
   cfg: ChatRoomConfig;
@@ -48,8 +48,28 @@ export async function armCommsCheckback(
   });
 }
 
+/** Blocking arm for CLI send (peer/assign/to-slot) — default 5m / renew 3m from profile. */
+export function armCommsCheckbackSync(input: ArmCommsCheckbackInput): ArmCheckbackResult {
+  const timing = checkbackTimingForExpect(input.cfg, input.expect);
+  return armCheckbackSync({
+    inboxBase: input.cfg.inboxBase,
+    ownerPane: input.ownerPane,
+    expect: input.expect,
+    duration: input.duration ?? timing.duration,
+    renew: input.renew ?? timing.renew,
+    kind: input.kind ?? "comms",
+    senderPane: input.senderPane ?? input.ownerPane,
+    ownerSlot: input.ownerSlot,
+    ownerMini: input.ownerMini,
+  });
+}
+
 export function expectPeerSlotReply(fromSlot: string): string {
   return `peer slot-${fromSlot} reply`;
+}
+
+export function expectPeerReply(target: string): string {
+  return `peer:${target} reply`;
 }
 
 export function expectRoomPeerReply(slug: string): string {

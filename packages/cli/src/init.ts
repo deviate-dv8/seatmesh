@@ -92,3 +92,14 @@ export function runInit(opts: InitOptions = {}): InitResult {
 
   return { smDir, configPath, created, skipped };
 }
+
+/** Copy missing role yaml templates from engine init (never overwrite existing). */
+export function ensureMissingRoleTemplates(smDir: string): { created: string[] } {
+  const rolesSrc = path.join(TEMPLATE_ROOT, "roles");
+  const rolesDest = path.join(smDir, "roles");
+  const created: string[] = [];
+  if (!fs.existsSync(rolesSrc)) return { created };
+  fs.mkdirSync(rolesDest, { recursive: true });
+  copyTree(rolesSrc, rolesDest, created, [], false);
+  return { created };
+}

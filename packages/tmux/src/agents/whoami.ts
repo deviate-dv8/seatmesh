@@ -5,6 +5,7 @@ import {
   renderRoleIndex,
   validateRoleIndex,
   portsForSlot,
+  seatKindFromId,
   type LoadedProfile,
 } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
@@ -98,11 +99,7 @@ export function runWhoami(loaded: LoadedProfile, target?: string): WhoamiResult 
 export const runWhere = runWhoami;
 
 export function roleKindFromWhoami(role: string): string {
-  if (role === "manager-mini") return "mini";
-  if (role === "secretary") return "secretary";
-  if (role === "manager-2") return "manager-2";
-  if (role === "manager") return "manager";
-  return "worker";
+  return seatKindFromId(role);
 }
 
 export function validateWhoamiRoleIndex(
@@ -112,7 +109,7 @@ export function validateWhoamiRoleIndex(
   const w = runWhoami(loaded, target);
   const paths = profilePaths(loaded);
   const kind = roleKindFromWhoami(w.role);
-  const index = loadRoleIndex(paths.rolesDir, kind);
+  const index = loadRoleIndex(paths.rolesDir, w.role);
   const result = validateRoleIndex(index, loaded.workspace);
   return { ...result, kind };
 }
@@ -166,7 +163,7 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
   const kind = roleKindFromWhoami(w.role);
 
   try {
-    const index = loadRoleIndex(paths.rolesDir, kind);
+    const index = loadRoleIndex(paths.rolesDir, w.role);
     for (const line of index.banner ?? []) {
       console.log(line);
     }
@@ -192,7 +189,7 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
   console.log("--- index ---");
 
   try {
-    const index = loadRoleIndex(paths.rolesDir, kind);
+    const index = loadRoleIndex(paths.rolesDir, w.role);
     const jobRole = tmuxDisplay(w.paneId ?? "", "#{@mesh_job_role}") ?? "";
     console.log(
       renderRoleIndex(
@@ -201,7 +198,7 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
           jobRole,
           mini: tmuxDisplay(w.paneId ?? "", "#{@mesh_mini}") ?? "",
         },
-        { skipBanner: true },
+        { skipBanner: true, skipFiles: true },
       ),
     );
   } catch (e) {

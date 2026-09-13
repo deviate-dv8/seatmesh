@@ -12,6 +12,8 @@ export interface CheckbackRow {
   expiresAt?: string;
   senderLabel?: string;
   recipientLabel?: string;
+  /** When set, cc-limit-retry fires only if pane session still matches. */
+  sessionFingerprint?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -333,4 +335,44 @@ export function dedupeJsonlRowsById<T extends { id: string; sent?: boolean; sent
     else byId.set(row.id, row);
   }
   return [...byId.values()];
+}
+
+/** Retry window for to-master / to-peer / to-slot same target+body. */
+export const DUP_ENQUEUE_WINDOW_MS = 120_000;
+
+export function findDupPeer(
+  rows: PeerRow[],
+  key: { targetPane: string; msg: string; kind?: PeerKind },
+  nowMs = Date.now(),
+): PeerRow | null {
+  const msg = key.msg.trim();
+  const pane = key.targetPane.trim();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i]!;
+    if (r.targetPane !== pane) continue;
+    if (r.msg.trim() !== msg) continue;
+    if (key.kind && r.kind !== key.kind) continue;
+    const at = Date.parse(r.at);
+    if (!Number.isFinite(at) || nowMs - at > DUP_ENQUEUE_WINDOW_MS) continue;
+    return r;
+  }
+  return null;
+}
+
+export function findDupInbox(
+  rows: ToMasterRow[],
+  key: { msg: string; slot?: string | null },
+  nowMs = Date.now(),
+): ToMasterRow | null {
+  const msg = key.msg.trim();
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i]!;
+    if (r.resolved) continue;
+    if (r.msg.trim() !== msg) continue;
+    if (key.slot != null && String(r.slot ?? "") !== String(key.slot)) continue;
+    const at = Date.parse(r.at);
+    if (!Number.isFinite(at) || nowMs - at > DUP_ENQUEUE_WINDOW_MS) continue;
+    return r;
+  }
+  return null;
 }

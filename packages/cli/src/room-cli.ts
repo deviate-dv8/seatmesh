@@ -8,6 +8,7 @@ import {
   markRoomRead,
   sayInRoom,
   tailRoom,
+  readRoom,
   listRooms,
   resolveAgentId,
   resolveRoomSlug,
@@ -64,10 +65,11 @@ async function runSay(
   const cfg = chatRoomConfigForLoaded(loaded);
   const slug = resolveRoomSlug(cfg, roomSlug);
   const { w, mini } = paneContext(loaded);
-  const ownerPane = resolvePane(opts.pane);
+  const ownerPane = resolvePane(opts.pane) ?? w.paneId ?? undefined;
+  const statusLine = body.trimStart().startsWith("STATUS");
   const result = await sayInRoom(loaded.workspace, cfg, slug, resolveFrom(loaded, opts.from), body, {
     kind: opts.kind,
-    armCheckback: opts.checkback !== false,
+    armCheckback: opts.checkback !== false && !statusLine,
     ownerPane,
     senderPane: ownerPane,
     ownerMini: mini || null,
@@ -203,12 +205,9 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
         process.exit(2);
       }
       const cfg = chatRoomConfigForLoaded(loaded);
-      // Broadcast is fan-out FYI — do not arm sender checkback (was spamming Check: on
-      // manager and agents misread it as supervise targeting slots 1-8).
       await runSay(loaded, cfg.globalSlug, body, {
         ...opts,
         kind: "broadcast",
-        checkback: false,
       });
     });
 
@@ -301,11 +300,29 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
       const n = Number.parseInt(String(opts.lines), 10) || 50;
       const lines = await tailRoom(loaded.workspace, cfg, slug, n);
       for (const row of lines) {
-        console.log(`${row.ts}\t${row.from}\t${row.kind}\t${row.body}`);
+        console.log(`${row.ts}\t${row.id.slice(0, 8)}\t${row.from}\t${row.kind}\t${row.body}`);
       }
       if (opts.read !== false) {
         markRoomRead(loaded.workspace, cfg, slug, agentId);
       }
+    });
+
+  room
+    .command("get")
+    .description("Look up one room message by id (full or 8-char prefix, from `room tail`)")
+    .argument("<id>", "message id or 8-char prefix")
+    .option("-r, --room <slug>", "room slug (default: global)")
+    .action(async (id: string, opts) => {
+      const loaded = getLoaded();
+      const cfg = chatRoomConfigForLoaded(loaded);
+      const slug = resolveRoomSlug(cfg, opts.room);
+      const all = await readRoom(loaded.workspace, cfg, slug);
+      const row = all.find((r) => r.id === id || r.id.startsWith(id));
+      if (!row) {
+        console.error(`room get: no message ${id} in room=${slug}`);
+        process.exit(1);
+      }
+      console.log(`${row.ts}\t${row.id}\t${row.from}\t${row.kind}\t${row.body}`);
     });
 
   return room;

@@ -51,6 +51,15 @@ Secretary: reads ledger, `./sm.sh secretary collect`, bulk digest to **both** ma
 
 ---
 
+## Anti-pattern: manager-3 / manager-N enum (hard no)
+
+Adding **`manager-3`** (or more) to **`BaseColumnSchema`** / resolve-pane / layout stamps is
+**out of scope** and has **broken delivery** in production mesh (peer backlog, "inbox dead").
+Extra coord leads use **layout engine + agent apply**, not enum sprawl. Canonical:
+[ARCHITECTURE.md](ARCHITECTURE.md) "Coordinator columns".
+
+---
+
 ## Layout: manager + manager-2
 
 Consumer `.sm/mesh.config.yaml` (target):

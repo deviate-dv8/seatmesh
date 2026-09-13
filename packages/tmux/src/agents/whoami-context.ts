@@ -9,6 +9,7 @@ import {
   roomDir,
   runtimePathHint,
   unseenSummaryForAgent,
+  isManagerKind,
   type LoadedProfile,
 } from "@seat-mesh/core";
 import type { WhoamiResult } from "./whoami.js";
@@ -90,7 +91,7 @@ function roomMembership(
 }
 
 function commsOneLiner(role: string, mini: string | null, workerCount: number): string {
-  if (role === "manager" || role === "manager-2") {
+  if (isManagerKind(role)) {
     return "comms: room say -r supervise|-r managers | checkback list | peer workers";
   }
   if (role === "secretary") {
@@ -118,6 +119,7 @@ export function buildWhoamiContextLines(
 
   lines.push("--- context ---");
   lines.push(`agent_id=${agentId}`);
+  lines.push("fresh_summon=run ./sm.sh whoami first; hub is that dump; later peer is a task");
   if (mini) lines.push(`mini=${mini}`);
   if (opts.jobRole) lines.push(`job_role=${opts.jobRole}`);
 
@@ -226,6 +228,7 @@ export function buildWhoamiContextLines(
 
   if (w.role === "worker" && w.slot != null) {
     lines.push(`gate_queue=${runtimePathHint(loaded.workspace, rt.gateQueue)}`);
+    lines.push("fresh_summon=run ./sm.sh whoami first; hub is that dump; later peer is a task");
     lines.push("cold_start=./sm.sh whoami (includes GATE-QUEUE + open TASKS inline)");
   }
 

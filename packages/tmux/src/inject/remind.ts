@@ -1,6 +1,6 @@
 import { portsForSlot, type LoadedProfile } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
-import { runWhoami } from "../agents/whoami.js";
+import { requireRole } from "../agents/authz-guard.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";
 
 export interface RemindResult {
@@ -16,12 +16,7 @@ export interface RemindOptions {
 
 /** Manager-only gate: run from the manager pane in the mesh session. */
 export function requireMeshManager(loaded: LoadedProfile): void {
-  const w = runWhoami(loaded);
-  if (w.role !== "manager") {
-    throw new Error(
-      `refused: remind is manager-only - run ./sm.sh remind from the manager pane (you_are=${w.role})`,
-    );
-  }
+  requireRole(loaded, ["manager"], "remind");
 }
 
 function buildRemindMessage(

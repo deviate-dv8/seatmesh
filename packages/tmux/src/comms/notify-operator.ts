@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import type { LoadedProfile } from "@seat-mesh/core";
+import notifier from "node-notifier";
+import { isManagerKind, type LoadedProfile } from "@seat-mesh/core";
 import { runWhoami, type WhoamiResult } from "../agents/whoami.js";
 
 function tmuxMini(paneId: string | null): string {
@@ -14,7 +15,7 @@ function tmuxMini(paneId: string | null): string {
 
 /** `--slot` value for workspace notify.sh from live pane identity. */
 export function notifySlotArg(w: WhoamiResult, mini?: string | null): string {
-  if (w.role === "manager" || w.role === "manager-2") return "manager";
+  if (isManagerKind(w.role)) return "manager";
   if (w.role === "secretary") return "secretary";
   if (w.role === "manager-mini") {
     const n = mini || w.slotLabel?.replace(/^mini-/, "") || "";
@@ -40,6 +41,27 @@ export function notifySendAvailable(): boolean {
   return r.status === 0;
 }
 
+function commandExists(cmd: string): boolean {
+  return spawnSync("sh", ["-c", `command -v ${cmd} >/dev/null`]).status === 0;
+}
+
+/** Whether this OS has a toast mechanism this module knows how to drive. */
+export function desktopNotifyAvailable(): boolean {
+  if (process.platform === "darwin") return commandExists("osascript");
+  if (process.platform === "win32") return true; // powershell ships with Windows
+  return notifySendAvailable();
+}
+
+/** macOS/Windows toast via node-notifier (bundles terminal-notifier / SnoreToast). */
+function sendNativeNotification(title: string, message: string): Promise<{ ok: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    notifier.notify({ title, message }, (err) => {
+      if (err) resolve({ ok: false, error: err.message });
+      else resolve({ ok: true });
+    });
+  });
+}
+
 export interface MeshNotifyInput {
   session: string;
   check: string;
@@ -53,7 +75,10 @@ export interface MeshNotifyResult {
   exitCode: number;
 }
 
-export function runMeshNotify(loaded: LoadedProfile, input: MeshNotifyInput): MeshNotifyResult {
+export async function runMeshNotify(
+  loaded: LoadedProfile,
+  input: MeshNotifyInput,
+): Promise<MeshNotifyResult> {
   const session = input.session.trim();
   const check = input.check.trim();
   if (!session) {
@@ -63,13 +88,14 @@ export function runMeshNotify(loaded: LoadedProfile, input: MeshNotifyInput): Me
     return { ok: false, seatDisplay: "-", error: "need check text", exitCode: 2 };
   }
 
-  if (!notifySendAvailable()) {
-    return {
-      ok: false,
-      seatDisplay: "-",
-      error: "no display (notify-send missing)",
-      exitCode: 1,
-    };
+  if (!desktopNotifyAvailable()) {
+    const missing =
+      process.platform === "darwin"
+        ? "osascript missing"
+        : process.platform === "win32"
+          ? "powershell missing"
+          : "no display (notify-send missing)";
+    return { ok: false, seatDisplay: "-", error: missing, exitCode: 1 };
   }
 
   let who: WhoamiResult;
@@ -87,6 +113,17 @@ export function runMeshNotify(loaded: LoadedProfile, input: MeshNotifyInput): Me
   const mini = tmuxMini(who.paneId);
   const slotArg = notifySlotArg(who, mini || null);
   const seatDisplay = notifySeatDisplay(slotArg);
+
+  if (process.platform === "darwin" || process.platform === "win32") {
+    const title = notifySeatDisplay(slotArg);
+    const body = input.url ? `${session}\n\nCheck: ${check}\n${input.url}` : `${session}\n\nCheck: ${check}`;
+    const sent = await sendNativeNotification(title, body);
+    if (!sent.ok) {
+      return { ok: false, seatDisplay, error: sent.error ?? "toast failed", exitCode: 1 };
+    }
+    return { ok: true, seatDisplay, exitCode: 0 };
+  }
+
   const notifySh = path.join(loaded.workspace, "scripts/notify.sh");
 
   const args = input.url

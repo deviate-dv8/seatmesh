@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LayoutSchema } from "./layout.js";
 
-describe("layout manager-2 column", () => {
+describe("layout open column ids", () => {
   it("accepts manager + manager-2 + secretary", () => {
     const layout = LayoutSchema.parse({
       base: {

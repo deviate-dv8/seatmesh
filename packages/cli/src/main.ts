@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import { findDotSmConfig } from "@seat-mesh/core";
 import {
   loadProfile,
@@ -8,6 +9,9 @@ import {
   renderRoleIndex,
   validateRoleIndex,
   runStackPassthrough,
+  roleAllows,
+  isCoordKind,
+  isManagerKind,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import { createRegistryForProfile } from "@seat-mesh/providers";
@@ -17,13 +21,18 @@ import {
   whoamiJsonWithValidate,
   validateWhoamiRoleIndex,
   printAgentCard,
+  printAgentContext,
+  printAgentContextAllRoles,
   runWhoami,
+  roleKindFromWhoami,
+  requireCoordRole,
   capturePaneSnapshot,
   listSessionPanes,
   sessionAttach,
   sessionUp,
   sessionStatus,
   relayoutMeshSession,
+  realignAllLayouts,
   reloadMesh,
   ensureMeshInbox,
   startMeshInbox,
@@ -38,7 +47,6 @@ import {
   inboxStatusArgv,
   listInbox,
   resolveInbox,
-  sendToMaster,
   secretaryLaunch,
   secretaryRestart,
   secretaryDispatch,
@@ -56,6 +64,9 @@ import {
   launchSession,
   printLaunchResults,
   enqueuePrompt,
+  injectPromptDirect,
+  printPeerVerify,
+  runPeerVerify,
   runRemind,
   printRemindResults,
   runNight,
@@ -67,6 +78,7 @@ import {
   labelMeshSession,
   liveMeshSession,
   ensureBaseLayout,
+  realignBaseLayout,
   applyMeshSessionBorders,
   runFlush,
   printFlushResults,
@@ -77,6 +89,7 @@ import {
   setPaneStatus,
   printSeatContexts,
   runPeek,
+  runPaneMeta,
   runPpa,
   runToSlot,
   runToMini,
@@ -94,7 +107,10 @@ import {
   buildFullColdStartBrief,
   enqueueColdStart,
   runSeatInit,
+  applyAgentContractBundle,
+  balanceLeadCommand,
 } from "@seat-mesh/tmux";
+import { parseAgentApplyArgs } from "@seat-mesh/core";
 import { buildChatCommands } from "./chat-cli.js";
 import { buildCheckbackCommands } from "./checkback-cli.js";
 import { buildNotifyCommand } from "./notify-cli.js";
@@ -102,6 +118,8 @@ import { buildPreviewCommand } from "./preview-cli.js";
 import { buildContractLockCommands } from "./contract-lock-cli.js";
 import { buildRoomCommands } from "./room-cli.js";
 import { runInit } from "./init.js";
+import { runAgentContextInit } from "./agent-context-init.js";
+import { runSeatCommand } from "./seat-cli.js";
 
 function parseArgs(argv: string[]) {
   const profileFlag: string[] = [];
@@ -133,18 +151,20 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
 
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
   sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
-  update [--dry-run] [--migrate]        refresh _vendor templates + paths.json
+  update [--dry-run] [--migrate]        refresh _vendor templates + paths.json (not npm upgrade)
   report [--json]         full stack report (same as bare npx seatmesh)
   session attach|up|status
   verify              layout + labels health
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
   layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
+  realign               resize-only: base ratio + worker/mini equal grids
   ops list|clear                pane-op queue (serial)
   save|auto [--json] [--no-labels]   scrape session -> mesh-agents.json (+ labels; daemon auto-scrapes every 10m)
   labels                        re-apply @mesh_* + border strip
   inbox [--json] [--wait N] [--meta] | inbox list|resolve|log|instances|stop|restart
-  peer <target> <msg...>        manager -> any pane (one path; alias: prompt -m)
-  to-master | to-slot | to-mini <msg...>    enqueue (daemon injects)
+  assign <target> <text...>     FOCUS NOW + TASK + peer SENT (do not hand-edit FOCUS)
+  peer <target> <msg...>        FYI/ACK only — work goes through assign
+  to-slot | to-mini <msg...>    enqueue (daemon injects) — to-master retired, use room say
   secretary start|dispatch|collect|status|watch …
   mini list|spawn|prompt|done|dispatch-all
   checkback start|list|cancel|cancel-all|reset|ack  (alias: patience)
@@ -153,12 +173,14 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   test                          smoke: layout, providers, inbox, proxy
   launch [--now] [targets…]
   prompt | remind | flush
-  contexts [--json] | peek | ppa
+  contexts [--json] | peek | pane-meta | ppa
   switch | handoff | set | tag <target|self> <id|--auto> | title | status
   night on|off|status | continue <slot|all>   (manager + night on)
   slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
   agent [target]              scoped can/cannot for this pane (profile role)
-  whoami [target] [--validate] | cold-start [--inject] | seat init
+  agent context [roles|init]  registered read_first/files; init scaffolds .sm + validates
+  func <id> <args...>         attached external (funcs: in mesh.config.yaml)
+  whoami [target] [--validate] | cold-start [--inject] | seat init|now|assign|mark|task|remind
   room | chat | index | proxy | providers | manager | stack | profile show
 
   --profile <dir|yaml>   override config (default: .sm/ walk-up or bundled profile)
@@ -166,6 +188,9 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
 }
 
 async function main(): Promise<void> {
+  const { maybePrintVersionNudge } = await import("./version-nudge.js");
+  maybePrintVersionNudge();
+
   const { profile: profileArg, rest } = parseArgs(process.argv.slice(2));
   const [cmd, sub, ...tail] = rest;
 
@@ -313,6 +338,22 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "realign" || (cmd === "layout" && sub === "realign")) {
+    const loaded = meshLoaded(profileArg);
+    try {
+      const r = realignAllLayouts(loaded);
+      const fmt = (v: boolean | "skip") =>
+        v === "skip" ? "skip" : v ? "applied" : "already-aligned";
+      console.log(
+        `OK: realign base=${fmt(r.base)} workers=${fmt(r.workers)} minis=${fmt(r.minis)} secretaryWidthPct=${loaded.profile.layout?.base.secretaryWidthPct ?? 50}`,
+      );
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (cmd === "layout") {
     const loaded = meshLoaded(profileArg);
     const skipLeads = rest.includes("--no-leads");
@@ -435,29 +476,9 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "to-master") {
-    const loaded = meshLoaded(profileArg);
-    let from: string | undefined;
-    let slot: string | undefined;
-    const parts: string[] = [];
-    const args = [sub, ...tail].filter((a): a is string => a != null && a !== "");
-    for (let i = 0; i < args.length; i++) {
-      const a = args[i];
-      if (a === "--from" && args[i + 1]) from = args[++i];
-      else if (a === "--slot" && args[i + 1]) slot = args[++i];
-      else parts.push(a);
-    }
-    const msg = parts.join(" ").trim();
-    if (!msg) {
-      console.error("usage: to-master [--from <who>] [--slot <N|label>] <msg...>");
-      process.exit(2);
-    }
-    const entry = sendToMaster(loaded, msg, { from, slot });
-    if (!entry || entry.ok !== true) {
-      console.error("FAIL: to-master enqueue (inbox down?) — run: ./sm.sh inbox");
-      process.exit(1);
-    }
-    console.log(JSON.stringify(entry, null, 2));
-    return;
+    // FRAMEWORK-QUEUE #1 (AGENT-FUNC-GUARDS.md): to-master retired — chat-first comms.
+    console.error('DEPRECATED: use ./sm.sh room say [-r managers] "DONE|BLOCKED|…"');
+    process.exit(2);
   }
 
   if (cmd === "to-slot") {
@@ -486,17 +507,72 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cmd === "peer") {
+  if (cmd === "assign") {
     const loaded = meshLoaded(profileArg);
     const target = sub;
-    const msg = tail.join(" ").trim();
-    if (!target || !msg) {
-      console.error("usage: peer <manager|secretary|slot-N|mini-N|pane> <msg...>");
+    const text = tail.join(" ").trim();
+    if (!target || !text) {
+      console.error("usage: assign <column-id|slot-N|mini-N> <text...>");
       process.exit(2);
     }
     try {
-      const { paneId, targetLabel } = enqueuePrompt(loaded, target, msg, { manager: true });
-      console.log(`OK: peer -> ${targetLabel} pane=${paneId} (daemon inject when idle)`);
+      runSeatCommand(loaded, ["assign", target, ...tail]);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "peer") {
+    const loaded = meshLoaded(profileArg);
+    let direct = false;
+    const args: string[] = [];
+    for (const a of [sub, ...tail].filter((x): x is string => x != null && x !== "")) {
+      if (a === "--direct" || a === "--now") direct = true;
+      else args.push(a);
+    }
+    if (args[0] === "verify") {
+      const target = args[1] ?? "manager-2";
+      const reg = createRegistryForProfile(loaded.profile);
+      const r = runPeerVerify(loaded, reg, target);
+      printPeerVerify(r);
+      process.exit(r.pass ? 0 : 1);
+    }
+    const [target, ...textParts] = args;
+    const rawMsg = textParts.join(" ").trim();
+    if (!target || !rawMsg) {
+      console.error(
+        "usage: peer verify [target] | peer [--direct] <manager|secretary|slot-N|mini-N|pane> <msg...>",
+      );
+      process.exit(2);
+    }
+    try {
+      if (direct) {
+        const reg = createRegistryForProfile(loaded.profile);
+        const { paneId, providerId, token, via } = injectPromptDirect(
+          loaded,
+          reg,
+          target,
+          rawMsg,
+          { manager: true },
+        );
+        console.log(
+          `SENT: peer --direct -> ${target} pane=${paneId} provider=${providerId} token=${token ?? "-"} via=${via ?? "direct"}`,
+        );
+      } else {
+        const coord = isCoordKind(
+          target.replace(/^slot-/, "").toLowerCase(),
+          loaded.profile.layout?.base.kinds,
+        );
+        const { paneId, targetLabel, token, via } = enqueuePrompt(loaded, target, rawMsg, {
+          manager: true,
+          armCheckback: !coord,
+        });
+        console.log(
+          `SENT: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`,
+        );
+      }
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -512,10 +588,12 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "dispatch-all") {
+      requireCoordRole(loaded, "mini dispatch-all");
       miniSpawnAll(loaded, reg);
       return;
     }
     if (sub === "spawn") {
+      requireCoordRole(loaded, "mini spawn");
       const args = tail.filter((a) => a !== "--");
       let role = "helper";
       const ids: number[] = [];
@@ -589,7 +667,10 @@ async function main(): Promise<void> {
     }
     if (sub === "restart") {
       const reg = createRegistryForProfile(loaded.profile);
-      secretaryRestart(loaded, reg);
+      const fresh = rest.includes("--fresh") || tail.includes("--fresh");
+      const typeFlagIdx = tail.indexOf("--type");
+      const typeArg = typeFlagIdx >= 0 ? tail[typeFlagIdx + 1] : undefined;
+      secretaryRestart(loaded, reg, typeArg, fresh);
       saveMeshSession(loaded, reg);
       return;
     }
@@ -626,7 +707,7 @@ async function main(): Promise<void> {
       const reg = createRegistryForProfile(loaded.profile);
       const action = (tail[0] ?? "status").toLowerCase();
       if (action === "on") {
-        secretarySupervise(loaded, reg, "on", tail[1] ?? "5m");
+        secretarySupervise(loaded, reg, "on", tail[1] ?? "10m");
         return;
       }
       if (action === "off") {
@@ -637,7 +718,7 @@ async function main(): Promise<void> {
       return;
     }
     console.error(
-      "usage: secretary start|restart|status|supervise on [5m]|supervise off|watch on [5m]|watch off",
+      "usage: secretary start|restart [--fresh]|status|supervise on [10m]|supervise off|watch on [5m]|watch off",
     );
     process.exit(2);
   }
@@ -650,6 +731,17 @@ async function main(): Promise<void> {
     const mode = modeRaw === "full" ? "full" : "status";
     try {
       runPeek(loaded, reg, target, mode);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "pane-meta") {
+    const loaded = meshLoaded(profileArg);
+    try {
+      runPaneMeta(loaded, [sub, ...tail].filter((a): a is string => Boolean(a)));
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -705,14 +797,18 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cmd === "seat" && sub === "init") {
+  if (cmd === "seat") {
     const loaded = meshLoaded(profileArg);
-    const { created, ensured } = runSeatInit(loaded);
-    console.log(
-      `OK: seat init (ensured=${ensured.length} created=${created.length} — idempotent, never overwrites FOCUS/TASKS)`,
-    );
-    for (const p of created.slice(0, 12)) console.log(`  + ${p}`);
-    if (created.length > 12) console.log(`  ... +${created.length - 12} more`);
+    if (sub === "init" || !sub) {
+      const { created, ensured } = runSeatInit(loaded);
+      console.log(
+        `OK: seat init (ensured=${ensured.length} created=${created.length} — idempotent, never overwrites FOCUS/TASKS)`,
+      );
+      for (const p of created.slice(0, 12)) console.log(`  + ${p}`);
+      if (created.length > 12) console.log(`  ... +${created.length - 12} more`);
+      return;
+    }
+    runSeatCommand(loaded, [sub, ...tail]);
     return;
   }
 
@@ -786,8 +882,12 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     const text = textParts.join(" ");
-    const { paneId, targetLabel } = enqueuePrompt(loaded, target, text, { manager });
-    console.log(`OK: queued -> ${targetLabel} pane=${paneId} (daemon inject when idle)`);
+    const { paneId, targetLabel, token, via } = enqueuePrompt(loaded, target, text, {
+      manager,
+    });
+    console.log(
+      `SENT: prompt -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`,
+    );
     return;
   }
 
@@ -990,8 +1090,92 @@ async function main(): Promise<void> {
 
   if (cmd === "agent") {
     const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    if (sub === "apply") {
+      const { bundle, opts } = parseAgentApplyArgs(tail);
+      applyAgentContractBundle(loaded, reg, bundle, opts);
+      return;
+    }
+    if (sub === "preflight") {
+      const { bundle, opts } = parseAgentApplyArgs(tail);
+      applyAgentContractBundle(loaded, reg, bundle, { ...opts, preflight: true, dryRun: true });
+      return;
+    }
+    if (sub === "context") {
+      if (tail[0] === "init") {
+        const code = runAgentContextInit(loaded, { coldStartInject: tail.includes("--inject") });
+        process.exit(code);
+      }
+      if (tail[0] === "roles") {
+        process.exit(printAgentContextAllRoles(loaded));
+      }
+      const targetArg = tail.find((a) => !a.startsWith("-"));
+      process.exit(printAgentContext(loaded, targetArg));
+    }
     const w = runWhoami(loaded, sub || tail[0]);
     printAgentCard(w);
+    return;
+  }
+
+  if (cmd === "func") {
+    // AGENT-FUNC-GUARDS.md func registry: attached external, guarded by profile
+    // external.default (global) + role yaml funcs allow/deny (per-role, ROLE-YAML.md).
+    const loaded = meshLoaded(profileArg);
+    const id = sub;
+    if (!id) {
+      console.error("usage: func <id> <args...>");
+      process.exit(2);
+    }
+    const entry = loaded.profile.funcs?.[id];
+    if (!entry) {
+      console.error(`func not found: ${id} (check funcs: in mesh.config.yaml)`);
+      process.exit(2);
+    }
+    if (loaded.profile.external.default === "deny") {
+      console.error(`UNAUTHORIZED: func ${id} denied (external.default=deny)`);
+      console.error("hint: ./sm.sh agent");
+      process.exit(2);
+    }
+    try {
+      const w = runWhoami(loaded, "here");
+      const kind = roleKindFromWhoami(w.role);
+      const paths = profilePaths(loaded);
+      const index = loadRoleIndex(paths.rolesDir, kind);
+      if (!roleAllows(index.funcs, id)) {
+        console.error(`UNAUTHORIZED: func ${id} denied for role=${kind}`);
+        console.error("hint: ./sm.sh agent");
+        process.exit(2);
+      }
+    } catch {
+      // No role yaml for this pane/kind yet — fall through to the global gate only.
+    }
+    const r = spawnSync(entry.command, tail, {
+      stdio: "inherit",
+      shell: true,
+      cwd: loaded.workspace,
+    });
+    process.exit(r.status ?? 1);
+  }
+
+  if (cmd === "balance") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const action = (sub ?? "status").toLowerCase();
+    if (action === "on") {
+      balanceLeadCommand(loaded, reg, "on", tail[0] ?? "10m");
+      return;
+    }
+    if (action === "off") {
+      balanceLeadCommand(loaded, reg, "off");
+      return;
+    }
+    if (action === "run") {
+      balanceLeadCommand(loaded, reg, "run", undefined, {
+        dryRun: rest.includes("--dry-run"),
+      });
+      return;
+    }
+    balanceLeadCommand(loaded, reg, "status");
     return;
   }
 
@@ -1118,13 +1302,8 @@ async function main(): Promise<void> {
   if (cmd === "manager") {
     const loaded = meshLoaded(profileArg);
     const w = runWhoami(loaded);
-    const isManager = w.role === "manager" || w.role === "manager-2";
-    const label =
-      w.role === "manager-2"
-        ? "yes: manager-2"
-        : isManager
-          ? "yes: manager"
-          : `no: role=${w.role}`;
+    const isManager = isManagerKind(w.role, loaded.profile.layout?.base.kinds);
+    const label = isManager ? `yes: ${w.role}` : `no: role=${w.role}`;
     console.log(label);
     process.exit(isManager ? 0 : 1);
   }
@@ -1138,7 +1317,15 @@ async function main(): Promise<void> {
       console.log(`OK: base panes=${panes.length} columns=${loaded.profile.layout?.base.columns?.join("|") ?? "?"}`);
       return;
     }
-    console.error("usage: base ensure");
+    if (sub === "realign") {
+      const session = liveMeshSession(loaded);
+      const changed = realignBaseLayout(loaded, session);
+      console.log(
+        `OK: base realign ${changed ? "applied" : "already-aligned"} secretaryWidthPct=${loaded.profile.layout?.base.secretaryWidthPct ?? 50} columns=${loaded.profile.layout?.base.columns?.join("|") ?? "?"}`,
+      );
+      return;
+    }
+    console.error("usage: base ensure|realign");
     process.exit(2);
   }
 

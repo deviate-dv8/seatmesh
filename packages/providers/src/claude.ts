@@ -8,6 +8,7 @@ import type {
   PaneSnapshot,
 } from "@seat-mesh/core";
 import {
+  claudeInputDraft,
   cmdlines,
   composerFromCapture,
   defaultComposerReady,
@@ -77,5 +78,9 @@ export const claudeProvider: AgentProvider = {
 
   scrapePromptTurn(pane) {
     return scrapePromptTurnGeneric(pane);
+  },
+
+  humanDraft(pane: PaneSnapshot): string {
+    return claudeInputDraft(pane.captureTail);
   },
 };

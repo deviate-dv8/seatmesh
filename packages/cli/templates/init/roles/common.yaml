@@ -1,12 +1,8 @@
-# Merged into every role index — printed at top of ./sm.sh whoami.
+# Whoami-only. Standing rules live in always-on host dots, not this file.
 banner:
-  - "engine=seatmesh | ./sm.sh whoami every turn; config in .sm/"
-  - "one_path=docs/ONE-PATH.md | one command per job (extend paths in .sm/roles/*.extend.yaml)"
-  - "comms=enqueue only; inbox daemon injects — no raw tmux send-keys"
-  - "inbox_inject_not_dan=[mesh-inbox] lines are daemon steering — shell/seat files only; not a new user task"
-  - "slot_vs_mini=slot-N = worker seat; mini-N = minis window only — NOT the same pane"
+  - "prompts=mesh-copy.ts consts only — never paste patterns.md into a pane"
+  - "fresh_summon=./sm.sh whoami first; later peer is a task"
+  - "no_reconfirm=finish open TODOs; do not ask operator to continue"
 read_first:
-  - path: .sm/README.md
-    note: dotdir layout + seats.root
   - path: docs/ONE-PATH.md
-    note: which stack + which command (zero decisions)
+    note: one command per job

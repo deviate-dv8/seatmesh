@@ -1,3 +1,4 @@
+import { isManagerKind, isSecretaryKind } from "@seat-mesh/core";
 import { tmux } from "./tmux-run.js";
 
 /** Tab-separated — tmux collapses empty space-separated fields. */
@@ -66,10 +67,14 @@ export function listMeshMinis(session: string, minisWindow: string): MeshPaneMet
 }
 
 export function meshManagerPane(session: string, baseWindow: string): string | null {
-  for (const m of listWindowMeta(session, baseWindow)) {
+  const rows = listWindowMeta(session, baseWindow);
+  for (const m of rows) {
     if (m.role === "manager") return m.paneId;
   }
-  return listWindowMeta(session, baseWindow)[0]?.paneId ?? null;
+  for (const m of rows) {
+    if (isManagerKind(m.role)) return m.paneId;
+  }
+  return rows[0]?.paneId ?? null;
 }
 
 /** Resolve a base-window coord pane by @mesh_role (profile layout driven). */
@@ -87,14 +92,14 @@ export function coordPaneForRole(
 export function meshManagerPanes(session: string, baseWindow: string): string[] {
   const out: string[] = [];
   for (const m of listWindowMeta(session, baseWindow)) {
-    if (m.role === "manager") out.push(m.paneId);
+    if (isManagerKind(m.role)) out.push(m.paneId);
   }
   return out;
 }
 
 export function meshSecretaryPane(session: string, baseWindow: string): string | null {
   for (const m of listWindowMeta(session, baseWindow)) {
-    if (m.role === "secretary") return m.paneId;
+    if (isSecretaryKind(m.role)) return m.paneId;
   }
   return null;
 }
@@ -126,9 +131,8 @@ export function listMeshMonitorPanes(
   for (const m of listMeshMinis(session, minisWindow)) {
     add(m.paneId, `mini-${m.mini}`);
   }
-  const mgr = meshManagerPane(session, baseWindow);
-  if (mgr) add(mgr, "manager");
-  const sec = meshSecretaryPane(session, baseWindow);
-  if (sec) add(sec, "secretary");
+  for (const m of listWindowMeta(session, baseWindow)) {
+    if (m.role) add(m.paneId, m.role);
+  }
   return out;
 }

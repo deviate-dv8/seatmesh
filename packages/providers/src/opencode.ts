@@ -15,6 +15,7 @@ import {
   modelFromCmdlines,
   normalizeOpenCodeSessionId,
   opencodeComposerReady,
+  opencodeInputDraft,
   paneStoredOpenCodeSession,
   scrapeOpenCodeSessionFromCapture,
   scrapePromptTurnGeneric,
@@ -99,5 +100,9 @@ export const opencodeProvider: AgentProvider = {
 
   scrapePromptTurn(pane) {
     return scrapePromptTurnGeneric(pane);
+  },
+
+  humanDraft(pane: PaneSnapshot): string {
+    return opencodeInputDraft(pane.captureTail);
   },
 };

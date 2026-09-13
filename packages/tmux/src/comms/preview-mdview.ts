@@ -71,7 +71,10 @@ export function publishOneMdview(
   return { file, ok: true, url };
 }
 
-export function runMeshPreview(loaded: LoadedProfile, input: PreviewMdviewInput): PreviewMdviewResult {
+export async function runMeshPreview(
+  loaded: LoadedProfile,
+  input: PreviewMdviewInput,
+): Promise<PreviewMdviewResult> {
   const results: PreviewMdviewFileResult[] = [];
 
   if (!input.files.length) {
@@ -95,7 +98,7 @@ export function runMeshPreview(loaded: LoadedProfile, input: PreviewMdviewInput)
 
     if (row.ok && row.url && input.notify) {
       const session = path.basename(file, path.extname(file));
-      const notify = runMeshNotify(loaded, {
+      const notify = await runMeshNotify(loaded, {
         session: `mdview: ${session}`,
         check: "Open mdview preview link",
         url: row.url,

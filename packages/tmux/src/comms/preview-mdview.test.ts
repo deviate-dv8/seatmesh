@@ -46,8 +46,8 @@ describe("runMeshPreview", () => {
     profile: { name: "test" },
   } as LoadedProfile;
 
-  it("requires files", () => {
-    const r = runMeshPreview(loaded, { files: [], days: 1 });
+  it("requires files", async () => {
+    const r = await runMeshPreview(loaded, { files: [], days: 1 });
     expect(r.exitCode).toBe(2);
   });
 });

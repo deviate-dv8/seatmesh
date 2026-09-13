@@ -57,6 +57,19 @@ export function listRoomMessages(workspace: string, cfg: ChatRoomConfig, slug: s
   return listRoomMessagesSync(file);
 }
 
+/** Latest ledger `from` that is not `excludeFrom` (Check paste names this sender). */
+export function lastInboundRoomFrom(
+  messages: RoomMessage[],
+  excludeFrom: string,
+): string | null {
+  const self = excludeFrom.trim();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const from = messages[i]?.from?.trim();
+    if (from && from !== self) return from;
+  }
+  return null;
+}
+
 export function countUnseenMessages(
   messages: RoomMessage[],
   agentId: string,

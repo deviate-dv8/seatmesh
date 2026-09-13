@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "@seat-mesh/core";
-import { managerStack } from "./base-layout.js";
+import fs from "node:fs";
+import path from "node:path";
+import { parseGridSpec, type LoadedProfile } from "@seat-mesh/core";
+import { managerStack, realignBaseLayout } from "./base-layout.js";
 import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
 import { ensureMeshInbox } from "../comms/inbox-bridge.js";
@@ -12,8 +14,9 @@ import { assertRelayoutSafe } from "./layout-guard.js";
 import {
   applyMinisLeadsFromProfile,
   layoutMinisFromProfile,
-  layoutWorkers3x2,
+  layoutWorkersFromProfile,
   listWindowPaneIds,
+  realignEqualGrid,
 } from "./window-panes.js";
 import { ensureSeatFiles } from "../seats/seat-init.js";
 import { ensureBaseLayout } from "./base-layout.js";
@@ -62,9 +65,19 @@ export function sessionUp(loaded: LoadedProfile): void {
     tmuxBatch([["new-session", "-d", "-s", session, "-n", base, "-c", wd]]);
   }
 
+  // Every shell in this session (interactive, non-interactive, or an agent's tool-exec
+  // bash -c) gets a working PATH for node/npm/npx with zero manual export — .bashrc alone
+  // can't do this (skipped by non-interactive shells; nvm.sh itself refuses to load when
+  // npm_config_prefix is already set, which is common here).
+  const pathFix = path.join(wd, "scripts/ensure-node-path.sh");
+  if (fs.existsSync(pathFix)) {
+    tmux(["set-environment", "-t", session, "-g", "BASH_ENV", pathFix]);
+    tmux(["set-environment", "-t", session, "-g", "ENV", pathFix]);
+  }
+
   if (flags.workers) {
     ensureSessionWindow(session, workers, wd);
-    layoutWorkers3x2(session, workers, wd);
+    layoutWorkersFromProfile(session, workers, wd, layout.workers);
   }
 
   if (flags.minis) {
@@ -155,7 +168,7 @@ export function relayoutMeshSession(
   ensureSessionWindow(session, layout.workers.window, wd);
   ensureSessionWindow(session, layout.minis.window, wd);
 
-  layoutWorkers3x2(session, layout.workers.window, wd);
+  layoutWorkersFromProfile(session, layout.workers.window, wd, layout.workers);
   layoutMinisFromProfile(session, layout.minis.window, wd, layout.minis);
   ensureBaseLayout(loaded, session);
   labelMeshSession(loaded, session);
@@ -163,6 +176,35 @@ export function relayoutMeshSession(
     applyMinisLeadsFromProfile(session, layout.minis.window, layout.minis);
   }
   applyMeshSessionBorders(session, activeSessionWindows(loaded, session));
+}
+
+export type RealignPart = boolean | "skip";
+
+/** Resize-only: base ratio + worker/mini equal grids. No create/kill. */
+export function realignAllLayouts(loaded: LoadedProfile): {
+  base: RealignPart;
+  workers: RealignPart;
+  minis: RealignPart;
+} {
+  const session = loaded.sessionName;
+  const layout = loaded.profile.layout;
+  if (!layout) throw new Error("profile missing layout");
+  if (!tmuxHasSession(session)) {
+    throw new Error(`session '${session}' does not exist — ./sm.sh session up`);
+  }
+
+  const base = realignBaseLayout(loaded, session);
+  let workers: RealignPart = "skip";
+  if (layout.workers.enabled) {
+    const { cols, rows } = parseGridSpec(layout.workers.grid);
+    workers = realignEqualGrid(session, layout.workers.window, cols, rows);
+  }
+  let minis: RealignPart = "skip";
+  if (layout.minis.enabled) {
+    const { cols, rows } = parseGridSpec(layout.minis.grid);
+    minis = realignEqualGrid(session, layout.minis.window, cols, rows);
+  }
+  return { base, workers, minis };
 }
 
 export function sessionStatus(loaded: LoadedProfile): void {

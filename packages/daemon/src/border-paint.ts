@@ -1,15 +1,28 @@
 import { spawnSync } from "node:child_process";
 import type { ComposerState, LoadedProfile, ProviderRegistry, ResolvedUxConfig } from "@seat-mesh/core";
-import { evaluateUxRules, resolveUxConfig } from "@seat-mesh/core";
 import {
+  baseColumnIds,
+  evaluateUxRules,
+  isManagerKind,
+  isSecretaryKind,
+  resolveUxConfig,
+} from "@seat-mesh/core";
+import {
+  applyMeshSessionBorders,
+  bannerNameFromMeta,
   capturePaneSnapshot,
+  coordPaneForRole,
+  formatBannerCheckbacks,
+  formatBannerInbox,
+  formatBannerTasks,
   listMeshMinis,
   listMeshWorkers,
-  meshManagerPane,
-  meshSecretaryPane,
+  paneMetaForPane,
+  readSeatSnapshot,
 } from "@seat-mesh/tmux";
 import { classifyCoordDelivery } from "./compose-gate.js";
 import type { QueueStore } from "./create-queue-store.js";
+import { isInboxDelivered, isPeerDelivered } from "./create-queue-store.js";
 import { PpaStateStore } from "./ppa-state.js";
 
 let ppaStore: PpaStateStore | null = null;
@@ -65,7 +78,33 @@ function borderFromState(
   return phaseLabel(st.phase, st.busyLabel, st.limitKind);
 }
 
+function inboxWaitSuffix(
+  paneId: string,
+  registry: ProviderRegistry,
+  unsent: number,
+): string | undefined {
+  if (unsent <= 0) return undefined;
+  const snap = capturePaneSnapshot(paneId);
+  const prov = snap ? registry.detect(snap) : null;
+  const st = prov && snap ? prov.composerState(snap) : null;
+  if (!prov || !snap || !st) return "pending";
+  const gate = classifyCoordDelivery(paneId, st, snap.captureTail, prov.id);
+  if (gate.phase === "wait-typing") return "wait";
+  if (gate.phase === "wait-busy") return "wait";
+  if (gate.phase === "wait-settle") return "settle";
+  return "pending";
+}
+
+function pendingPeerForPane(store: QueueStore, paneId: string): number {
+  return store.readPeer().filter((r) => {
+    if (r.targetPane !== paneId) return false;
+    if (r.deliverPane === "backlog" || r.deliverPane === "skipped") return true;
+    return !isPeerDelivered(r);
+  }).length;
+}
+
 function paintOnePaneBorder(
+  loaded: LoadedProfile,
   registry: ProviderRegistry,
   store: QueueStore,
   paneId: string,
@@ -73,11 +112,39 @@ function paintOnePaneBorder(
   inheritGlobal: boolean,
   label: string,
   ppa: PpaStateStore | null,
-  activeCb: number,
+  counts: { unsent: number; unresolved: number },
   ux: ResolvedUxConfig | null | undefined,
+  coordInbox: boolean,
 ): void {
+  const meta = paneMetaForPane(paneId);
+  const name = bannerNameFromMeta(meta, label);
+  tmuxSet(paneId, "@mesh_name", name);
+
+  const seat = readSeatSnapshot(loaded, {
+    role: meta?.role || label,
+    slot: meta?.slot || null,
+    mini: meta?.mini || null,
+  });
+  tmuxSet(paneId, "@mesh_tasks", formatBannerTasks(seat?.tasks.open ?? 0));
+
+  let inboxN = pendingPeerForPane(store, paneId);
+  let wait: string | undefined;
+  if (coordInbox) {
+    inboxN += counts.unsent + (counts.unsent === 0 ? counts.unresolved : 0);
+    wait = inboxWaitSuffix(paneId, registry, counts.unsent);
+  }
+  const ownerCb = store
+    .readCheckbacks()
+    .filter((r) => r.status === "active" && r.ownerPane === paneId).length;
+  tmuxSet(paneId, "@mesh_inbox", formatBannerInbox(inboxN, wait, ownerCb));
+  tmuxSet(paneId, "@mesh_checkbacks", formatBannerCheckbacks(ownerCb));
+  tmuxSet(paneId, "@mesh_patience", ownerCb > 0 ? `PS:${ownerCb}` : "");
+
   const snap = capturePaneSnapshot(paneId);
-  if (!snap) return;
+  if (!snap) {
+    tmuxSet(paneId, "@mesh_status", "empty");
+    return;
+  }
   const prov = registry.detect(snap);
   if (!prov) {
     tmuxSet(paneId, "@mesh_status", "empty");
@@ -104,16 +171,27 @@ function paintOnePaneBorder(
       composerLabel: st.busyLabel ?? st.limitKind ?? "",
     });
   }
-  const ownerCb = store
-    .readCheckbacks()
-    .filter((r) => r.status === "active" && r.ownerPane === paneId).length;
-  if (ownerCb > 0) {
-    tmuxSet(paneId, "@mesh_patience", `PS:${ownerCb}`);
-  } else if (activeCb > 0) {
-    tmuxSet(paneId, "@mesh_patience", `PO:${activeCb}`);
-  } else {
-    tmuxSet(paneId, "@mesh_patience", "");
-  }
+}
+
+function sessionWindows(
+  loaded: LoadedProfile,
+  session: string,
+  baseWindow: string,
+  workersWindow: string,
+  minisWindow: string,
+): string[] {
+  const wins = [baseWindow, workersWindow, minisWindow];
+  const nvim = loaded.profile.layout?.nvim?.window;
+  if (nvim) wins.push(nvim);
+  applyMeshSessionBorders(session, [...new Set(wins.filter(Boolean))]);
+  return wins;
+}
+
+function paintCounts(store: QueueStore): { unsent: number; unresolved: number } {
+  const inbox = store.readInbox();
+  const unresolved = inbox.filter((r) => !r.resolved).length;
+  const unsent = inbox.filter((r) => !r.resolved && !isInboxDelivered(r)).length;
+  return { unsent, unresolved };
 }
 
 /** Immediate border refresh for one pane (e.g. after resume ack clears OC-LIMIT). */
@@ -126,13 +204,47 @@ export function repaintMeshPaneBorder(
   label = "",
   stateDir?: string,
   ux?: ResolvedUxConfig | null,
+  loaded?: LoadedProfile,
 ): void {
   const ppa = stateDir ? ppaForStateDir(stateDir) : null;
-  const activeCb = store.readCheckbacks().filter((r) => r.status === "active").length;
-  paintOnePaneBorder(registry, store, paneId, connectivity, inheritGlobal, label, ppa, activeCb, ux);
+  const counts = paintCounts(store);
+  if (!loaded) {
+    tmuxSet(paneId, "@mesh_status", "idle");
+    return;
+  }
+  paintOnePaneBorder(
+    loaded,
+    registry,
+    store,
+    paneId,
+    connectivity,
+    inheritGlobal,
+    label,
+    ppa,
+    counts,
+    ux,
+    isManagerKind(label),
+  );
 }
 
-/** Paint @mesh_status (+ optional @mesh_patience) on live panes. */
+function collectWorkerMiniTargets(
+  session: string,
+  workersWindow: string,
+  minisWindow: string,
+): { paneId: string; label: string }[] {
+  return [
+    ...listMeshWorkers(session, workersWindow).map((w) => ({
+      paneId: w.paneId,
+      label: `slot-${w.slot}`,
+    })),
+    ...listMeshMinis(session, minisWindow).map((m) => ({
+      paneId: m.paneId,
+      label: `mini-${m.mini}`,
+    })),
+  ];
+}
+
+/** Paint name | tasks | inbox | checkbacks | status. Inbox never stomps status. */
 export function paintMeshBorders(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
@@ -148,20 +260,13 @@ export function paintMeshBorders(
   const ux =
     loaded.profile.ux !== undefined ? resolveUxConfig(loaded.profile.ux) : null;
   const ppa = stateDir ? ppaForStateDir(stateDir) : null;
-  const activeCb = store.readCheckbacks().filter((r) => r.status === "active").length;
-  const unresolved = store.readInbox().filter((r) => !r.resolved).length;
-  const unsent = store
-    .readInbox()
-    .filter((r) => !r.resolved && !(r.sent && r.sentAt && r.deliverPane)).length;
+  const counts = paintCounts(store);
+  sessionWindows(loaded, session, baseWindow, workersWindow, minisWindow);
 
-  const paintOne = (
-    paneId: string,
-    _defaultPorts: string,
-    inheritGlobal = false,
-    label = "",
-  ) => {
+  const paintOne = (paneId: string, inheritGlobal = false, label = "", coordInbox = false) => {
     if (skipPaneIds.has(paneId)) return;
     paintOnePaneBorder(
+      loaded,
       registry,
       store,
       paneId,
@@ -169,70 +274,27 @@ export function paintMeshBorders(
       inheritGlobal,
       label,
       ppa,
-      activeCb,
+      counts,
       ux,
+      coordInbox,
     );
   };
 
-  const targets: { paneId: string; ports: string; label: string }[] = [
-    ...listMeshWorkers(session, workersWindow).map((w) => ({
-      paneId: w.paneId,
-      ports: w.ports,
-      label: `slot-${w.slot}`,
-    })),
-    ...listMeshMinis(session, minisWindow).map((m) => ({
-      paneId: m.paneId,
-      ports: m.ports,
-      label: `mini-${m.mini}`,
-    })),
-  ];
+  const targets = collectWorkerMiniTargets(session, workersWindow, minisWindow);
   if (targets.length) {
     const batch = Math.min(BORDER_PAINT_BATCH, targets.length);
     for (let i = 0; i < batch; i++) {
       const t = targets[(borderPaintOffset + i) % targets.length]!;
-      paintOne(t.paneId, t.ports, false, t.label);
+      paintOne(t.paneId, false, t.label, false);
     }
     borderPaintOffset = (borderPaintOffset + batch) % targets.length;
   }
 
-  const paintCoordInboxOrComposer = (
-    paneId: string,
-    ports: string,
-    label: string,
-    inheritGlobal: boolean,
-  ) => {
-    if (unsent > 0) {
-      const snap = capturePaneSnapshot(paneId);
-      const prov = snap ? registry.detect(snap) : null;
-      const st = prov && snap ? prov.composerState(snap) : null;
-      const gate =
-        prov && snap && st
-          ? classifyCoordDelivery(paneId, st, snap.captureTail, prov.id)
-          : null;
-      let suffix = "pending";
-      if (gate?.phase === "wait-typing") suffix = "wait typing";
-      else if (gate?.phase === "wait-busy") suffix = "wait generate";
-      else if (gate?.phase === "wait-settle" && gate.settleInSec != null) {
-        suffix = `settle ${gate.settleInSec}s`;
-      }
-      tmuxSet(paneId, "@mesh_status", `INBOX · ${unsent} · ${suffix}`);
-      return;
-    }
-    if (unresolved > 0) {
-      tmuxSet(paneId, "@mesh_status", `INBOX · ${unresolved} unresolved`);
-      return;
-    }
-    paintOne(paneId, ports, inheritGlobal, label);
-  };
-
-  const mgr = meshManagerPane(session, baseWindow);
-  if (mgr) {
-    paintCoordInboxOrComposer(mgr, "manager", "manager", false);
-  }
-
-  const sec = meshSecretaryPane(session, baseWindow);
-  if (sec) {
-    paintOne(sec, "secretary", true, "secretary");
+  for (const col of baseColumnIds(loaded.profile.layout)) {
+    const pane = coordPaneForRole(session, baseWindow, col);
+    if (!pane) continue;
+    const kinds = loaded.profile.layout?.base.kinds;
+    paintOne(pane, isSecretaryKind(col, kinds), col, isManagerKind(col, kinds));
   }
 }
 
@@ -252,20 +314,13 @@ export async function paintMeshBordersAsync(
   const ux =
     loaded.profile.ux !== undefined ? resolveUxConfig(loaded.profile.ux) : null;
   const ppa = stateDir ? ppaForStateDir(stateDir) : null;
-  const activeCb = store.readCheckbacks().filter((r) => r.status === "active").length;
-  const unresolved = store.readInbox().filter((r) => !r.resolved).length;
-  const unsent = store
-    .readInbox()
-    .filter((r) => !r.resolved && !(r.sent && r.sentAt && r.deliverPane)).length;
+  const counts = paintCounts(store);
+  sessionWindows(loaded, session, baseWindow, workersWindow, minisWindow);
 
-  const paintOne = (
-    paneId: string,
-    _defaultPorts: string,
-    inheritGlobal = false,
-    label = "",
-  ) => {
+  const paintOne = (paneId: string, inheritGlobal = false, label = "", coordInbox = false) => {
     if (skipPaneIds.has(paneId)) return;
     paintOnePaneBorder(
+      loaded,
       registry,
       store,
       paneId,
@@ -273,72 +328,28 @@ export async function paintMeshBordersAsync(
       inheritGlobal,
       label,
       ppa,
-      activeCb,
+      counts,
       ux,
+      coordInbox,
     );
   };
 
-  const targets: { paneId: string; ports: string; label: string }[] = [
-    ...listMeshWorkers(session, workersWindow).map((w) => ({
-      paneId: w.paneId,
-      ports: w.ports,
-      label: `slot-${w.slot}`,
-    })),
-    ...listMeshMinis(session, minisWindow).map((m) => ({
-      paneId: m.paneId,
-      ports: m.ports,
-      label: `mini-${m.mini}`,
-    })),
-  ];
+  const targets = collectWorkerMiniTargets(session, workersWindow, minisWindow);
   if (targets.length) {
     const batch = Math.min(BORDER_PAINT_BATCH, targets.length);
     for (let i = 0; i < batch; i++) {
       if (i > 0) await yieldEventLoop();
       const t = targets[(borderPaintOffset + i) % targets.length]!;
-      paintOne(t.paneId, t.ports, false, t.label);
+      paintOne(t.paneId, false, t.label, false);
     }
     borderPaintOffset = (borderPaintOffset + batch) % targets.length;
   }
 
-  const paintCoordInboxOrComposer = async (
-    paneId: string,
-    ports: string,
-    label: string,
-    inheritGlobal: boolean,
-  ) => {
-    if (unsent > 0) {
-      const snap = capturePaneSnapshot(paneId);
-      const prov = snap ? registry.detect(snap) : null;
-      const st = prov && snap ? prov.composerState(snap) : null;
-      const gate =
-        prov && snap && st
-          ? classifyCoordDelivery(paneId, st, snap.captureTail, prov.id)
-          : null;
-      let suffix = "pending";
-      if (gate?.phase === "wait-typing") suffix = "wait typing";
-      else if (gate?.phase === "wait-busy") suffix = "wait generate";
-      else if (gate?.phase === "wait-settle" && gate.settleInSec != null) {
-        suffix = `settle ${gate.settleInSec}s`;
-      }
-      tmuxSet(paneId, "@mesh_status", `INBOX · ${unsent} · ${suffix}`);
-      return;
-    }
-    if (unresolved > 0) {
-      tmuxSet(paneId, "@mesh_status", `INBOX · ${unresolved} unresolved`);
-      return;
-    }
-    paintOne(paneId, ports, inheritGlobal, label);
-  };
-
-  await yieldEventLoop();
-  const mgr = meshManagerPane(session, baseWindow);
-  if (mgr) {
-    await paintCoordInboxOrComposer(mgr, "manager", "manager", false);
-  }
-
-  await yieldEventLoop();
-  const sec = meshSecretaryPane(session, baseWindow);
-  if (sec) {
-    paintOne(sec, "secretary", true, "secretary");
+  for (const col of baseColumnIds(loaded.profile.layout)) {
+    await yieldEventLoop();
+    const pane = coordPaneForRole(session, baseWindow, col);
+    if (!pane) continue;
+    const kinds = loaded.profile.layout?.base.kinds;
+    paintOne(pane, isSecretaryKind(col, kinds), col, isManagerKind(col, kinds));
   }
 }

@@ -1,3 +1,4 @@
+import { isSuperviseStatusBroadcast } from "@seat-mesh/core";
 import type { PeerRow } from "./jsonl-store.js";
 
 /** Cold-start already delivered to this pane — do not re-inject duplicate pending rows. */
@@ -11,6 +12,13 @@ export function shouldSkipGlobalWorkerRoomPing(row: PeerRow): boolean {
   if (row.kind !== "room" || row.roomSlug !== "global") return false;
   if (!/^slot-[1-9]$/.test(row.targetLabel)) return false;
   return /\|\s*fyi\s+\d+\s+unseen/i.test(row.msg);
+}
+
+/** Queued rich STATUS / SUPERVISE-STATUS room pings must never land on the manager lead. */
+export function shouldSkipManagerStatusRoomPing(row: PeerRow): boolean {
+  if (row.kind !== "room") return false;
+  if (row.targetLabel !== "manager" && row.targetLabel !== "master") return false;
+  return isSuperviseStatusBroadcast(undefined, row.msg ?? "");
 }
 
 export function markPeerRowSkipped(

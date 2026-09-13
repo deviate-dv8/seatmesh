@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import ky from "ky";
 import { expiresAtUtcFromDuration, parseDurationToSeconds } from "./duration.js";
 
@@ -69,6 +70,55 @@ export async function armCheckback(input: ArmCheckbackInput): Promise<ArmCheckba
     }
     return { ok: false, reason: err.message ?? String(e) };
   }
+}
+
+/** Sync arm — CLI send paths must not exit before the timer is posted. */
+export function armCheckbackSync(input: ArmCheckbackInput): ArmCheckbackResult {
+  if (!input.ownerPane) {
+    return { ok: false, reason: "no owner pane (--here / tmux pane required)" };
+  }
+  const expiresAt = expiresAtUtcFromDuration(input.duration);
+  if (!expiresAt) {
+    return { ok: false, reason: `bad duration: ${input.duration}` };
+  }
+  let renewSec: number | null = null;
+  if (input.renew) {
+    renewSec = parseDurationToSeconds(input.renew);
+    if (renewSec == null) {
+      return { ok: false, reason: `bad renew: ${input.renew}` };
+    }
+  }
+  const payload = {
+    expect: input.expect,
+    ownerPane: input.ownerPane,
+    expiresAt,
+    kind: input.kind ?? "comms",
+    renewSec,
+    ownerMini: input.ownerMini != null && String(input.ownerMini) !== "" ? input.ownerMini : null,
+    ownerSlot: input.ownerSlot != null && String(input.ownerSlot) !== "" ? input.ownerSlot : null,
+    senderPane: input.senderPane ?? null,
+  };
+  const base = input.inboxBase.replace(/\/$/, "");
+  const r = spawnSync(
+    "curl",
+    [
+      "-sS",
+      "-m",
+      "5",
+      "-X",
+      "POST",
+      `${base}/patience`,
+      "-H",
+      "Content-Type: application/json",
+      "-d",
+      JSON.stringify(payload),
+    ],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) {
+    return { ok: false, reason: r.stderr?.trim() || r.stdout?.trim() || "curl patience failed" };
+  }
+  return { ok: true, response: r.stdout };
 }
 
 export async function inboxHealthy(inboxBase: string): Promise<boolean> {

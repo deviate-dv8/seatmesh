@@ -1,3 +1,5 @@
+import { MESH_INBOX_ROOM_TAG, MESH_INBOX_TAG } from "../messages/mesh-copy.js";
+
 /** Parse expect from room say checkback arm: `chat-room:<slug> peer update (<kind>)`. */
 export function parseRoomCommsExpect(expect: string): { slug: string; kind: string } | null {
   const m = expect.match(/^chat-room:([^\s]+) peer update \(([^)]+)\)$/);
@@ -17,8 +19,11 @@ export interface RoomCommsReplyContext {
 /** Compact seat token (harness `worker_inject_stamp` spirit: `slot-N ports P/P`). */
 export function formatCompactSeat(ctx: RoomCommsReplyContext = { role: "worker" }): string {
   const role = ctx.role || "worker";
-  if (role === "manager") return "manager";
-  if (role === "secretary") return "secretary";
+  if (role === "manager" || role === "master") return "manager";
+  if (role === "secretary" || role.startsWith("secretary-") || role.startsWith("manager-")) {
+    return role;
+  }
+  if (role !== "worker" && role !== "manager-mini") return role;
   if (role === "manager-mini" || ctx.mini) return `mini-${ctx.mini ?? "?"}`;
   const slot = ctx.slot;
   if (slot != null && String(slot).length > 0) {
@@ -44,14 +49,14 @@ export function formatMeshSteeringInject(
   body: string,
 ): string {
   const text = body.trim();
-  if (!text) return `[mesh-inbox] ${tag}`;
+  if (!text) return `${MESH_INBOX_TAG} ${tag}`;
 
   if (ctx.role === "manager" && /^TO-MASTER from /i.test(tag)) {
     const from = tag.replace(/^TO-MASTER from /i, "").trim();
-    return `[mesh-inbox] ${from}: ${text}`;
+    return `${MESH_INBOX_TAG} ${from}: ${text}`;
   }
   if (ctx.role === "manager" && /DIGEST/i.test(tag)) {
-    return `[mesh-inbox] DIGEST: ${text}`;
+    return `${MESH_INBOX_TAG} DIGEST: ${text}`;
   }
   if (/^\[agent-worker-slot-/m.test(text)) {
     return text;
@@ -59,9 +64,9 @@ export function formatMeshSteeringInject(
 
   const seat = formatCompactSeat(ctx);
   if (!text.includes("\n")) {
-    return `${seat} | [mesh-inbox] ${tag}: ${text}`;
+    return `${seat} | ${MESH_INBOX_TAG} ${tag}: ${text}`;
   }
-  return `${seat} | [mesh-inbox] ${tag}\n${text}`;
+  return `${seat} | ${MESH_INBOX_TAG} ${tag}\n${text}`;
 }
 
 /** Worker prompt lead stamp for inject prefix. */
@@ -70,15 +75,39 @@ export function formatWorkerInjectStamp(ctx: RoomCommsReplyContext): string {
   return `${seat} -`;
 }
 
-/** Room reply one-liner (receiver copies, replaces `<msg>`). */
+/** Room reply one-liner (receiver copies, replaces `<msg>`). No local runner. */
 export function formatRoomSayReplyCmd(slug: string): string {
   const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
-  return `./sm.sh room say${roomFlag} "<msg>"`;
+  return `room say${roomFlag} "<msg>"`;
 }
 
 /** Peer to-slot reply one-liner (`fromSlot` = sender to answer). */
 export function formatToSlotReplyCmd(fromSlot: string | number): string {
-  return `./sm.sh to-slot ${fromSlot} "<msg>"`;
+  return `to-slot ${fromSlot} "<msg>"`;
+}
+
+/** Coordinator peer reply one-liner (`fromRole` = sender to answer, e.g. "manager-2"). */
+export function formatPeerReplyCmd(fromRole: string): string {
+  return `peer ${fromRole} "<msg>"`;
+}
+
+/** Map room/ledger agent id to the one `./sm.sh peer` target (no second harness). */
+export function peerTargetFromAgentId(from: string): string {
+  const id = from.trim();
+  if (!id || id === "master") return "manager";
+  const worker = id.match(/^worker-(\d+)$/i);
+  if (worker) return `slot-${worker[1]}`;
+  const mini = id.match(/^mini-(\d+)$/i);
+  if (mini) return `mini-${mini[1]}`;
+  const managerMini = id.match(/^manager-mini-(\d+)$/i);
+  if (managerMini) return `mini-${managerMini[1]}`;
+  if (id.toLowerCase() === "manager-mini" || id === "mini") return "mini-?";
+  return id;
+}
+
+/** Inbound comms footer — copy this one line; do not pick room say / to-slot / tail. */
+export function formatReplyToSender(from: string): string {
+  return `Reply: ${formatPeerReplyCmd(peerTargetFromAgentId(from))}`;
 }
 
 /** Short checkback / patience nudge (not a full playbook). */
@@ -86,16 +115,24 @@ export function formatCheckNudge(ctx: RoomCommsReplyContext, expect: string, hin
   return `${formatCompactSeat(ctx)} | Check: ${expect} — ${hint}`;
 }
 
+export interface RoomCommsCheckbackOpts {
+  /** Daemon poll-later — no Reply: peer footer (keep working on hub). */
+  verifyOnly?: boolean;
+}
+
 /** Engineering reply block for room-comms checkback injects (compact). */
 export function formatRoomCommsCheckback(
   expect: string,
   ctx: RoomCommsReplyContext = { role: "worker" },
+  from?: string | null,
+  opts: RoomCommsCheckbackOpts = {},
 ): string {
-  const parsed = parseRoomCommsExpect(expect);
-  const slug = parsed?.slug ?? "global";
-  const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
-  const tailCmd = `./sm.sh room tail${roomFlag} -n 30`;
-  return formatCheckNudge(ctx, expect, `${tailCmd} | reply ${formatRoomSayReplyCmd(slug)}`);
+  const hint = opts.verifyOnly
+    ? "one verify; continue current hub (no chat reply)"
+    : from?.trim()
+      ? formatReplyToSender(from)
+      : "inbound already has Reply: peer <sender>";
+  return formatCheckNudge(ctx, expect, hint);
 }
 
 export interface RoomPeerNotifyOpts {
@@ -111,13 +148,18 @@ export function formatRoomPeerNotify(
   ctx: RoomCommsReplyContext = { role: "worker" },
   opts: RoomPeerNotifyOpts = {},
 ): string {
-  const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
   const unseen = opts.unseen ?? 0;
   const unseenPart = unseen > 0 ? ` ${unseen} unseen` : "";
-  const tail = `./sm.sh room tail${roomFlag} -n 15`;
   const seat = formatCompactSeat(ctx);
   const tag = `${slug} | ${from} | ${kind}${unseenPart}`;
-  return `${seat} | [mesh-inbox-room] ${tag}\nVerify: ${tail} (no chat reply — continue FOCUS/TASKS hub)`;
+  const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
+  // A thin ping with only a "reply to sender" hint invites a blind reply without ever
+  // reading what's actually unseen (operator-reported: recipient had no way to see the
+  // content, just a reply command). Ledger is truth, so tell them how to read it first.
+  return (
+    `${seat} | ${MESH_INBOX_ROOM_TAG} ${tag}\n` +
+    `Verify: room tail${roomFlag} -n 15\n${formatReplyToSender(from)}`
+  );
 }
 
 /** Rich PEER for manager / secretary / mini-leads / lead-workers — includes claim body snippet. */
@@ -129,14 +171,12 @@ export function formatRoomCoordNotify(
   ctx: RoomCommsReplyContext = { role: "worker" },
   opts: RoomPeerNotifyOpts = {},
 ): string {
-  const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
   const unseen = opts.unseen ?? 0;
   const unseenPart = unseen > 1 ? ` (+${unseen - 1} more unseen)` : "";
   const seat = formatCompactSeat(ctx);
   const text = body.trim();
   const snippet = text.length > 480 ? `${text.slice(0, 477)}...` : text;
-  const tail = `./sm.sh room tail${roomFlag} -n 15`;
-  return `${seat} | [mesh-inbox-room] ${slug} | ${from} | ${kind}${unseenPart}\n${snippet}\nVerify: ${tail} (no chat reply — continue FOCUS/TASKS hub)`;
+  return `${seat} | ${MESH_INBOX_ROOM_TAG} ${slug} | ${from} | ${kind}${unseenPart}\n${snippet}\n${formatReplyToSender(from)}`;
 }
 
 /** Harness-style direct room line (2-member rooms, @mentions). */
@@ -149,7 +189,7 @@ export function formatRoomDirectPm(
   _ctx: RoomCommsReplyContext = { role: "worker" },
 ): string {
   const text = body.trim();
-  return `[agent-worker-slot-${fromSlot}] room ${slug} (${fromPorts}) from ${from}: ${text} — reply ${formatRoomSayReplyCmd(slug)}`;
+  return `[agent-worker-slot-${fromSlot}] room ${slug} (${fromPorts}) from ${from}: ${text}\n${formatReplyToSender(from)}`;
 }
 
 export function parseRoomCallExpect(
@@ -170,10 +210,10 @@ export function formatRoomCallCheckback(
     return formatCheckNudge(
       ctx,
       expect,
-      `./sm.sh room accept ${callId} | ./sm.sh room decline ${callId}`,
+      `room accept ${callId} | room decline ${callId}`,
     );
   }
-  return formatCheckNudge(ctx, expect, `./sm.sh room calls (${callId})`);
+  return formatCheckNudge(ctx, expect, `room calls (${callId})`);
 }
 
 export function formatRoomCallInvite(
@@ -186,7 +226,7 @@ export function formatRoomCallInvite(
   return formatMeshSteeringInject(
     ctx,
     `CALL ${fromAgent}`,
-    `${topicLine} — ./sm.sh room accept ${callShortId} | decline ${callShortId}`,
+    `${topicLine} — room accept ${callShortId} | decline ${callShortId}`,
   );
 }
 
@@ -202,7 +242,7 @@ export function formatRoomCallResolved(
     return formatMeshSteeringInject(
       ctx,
       `ACCEPTED ${peerAgent}`,
-      `./sm.sh room tail -r ${roomSlug} -n 10`,
+      `room tail -r ${roomSlug} -n 10`,
     );
   }
   const why = reason?.trim() ? ` (${reason.trim().slice(0, 80)})` : "";
@@ -218,11 +258,11 @@ export function formatGenericCheckback(
     return formatCheckNudge(
       ctx,
       expect,
-      `./sm.sh inbox list | grep ${digestId.slice(0, 8)}`,
+      `inbox list | grep ${digestId.slice(0, 8)}`,
     );
   }
   if (/proxy ipify|OC-LIMIT|Cannot connect/i.test(expect)) {
-    return formatCheckNudge(ctx, expect, "./sm.sh proxy status");
+    return formatCheckNudge(ctx, expect, "proxy status");
   }
-  return formatCheckNudge(ctx, expect, "./sm.sh checkback list | cancel <id>");
+  return formatCheckNudge(ctx, expect, "checkback list | cancel <id>");
 }

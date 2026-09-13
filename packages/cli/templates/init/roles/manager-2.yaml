@@ -12,5 +12,7 @@ files:
 policies:
   - id: manager2_scope
     text: framework/docs/verify only — not product merge; read supervise room before claiming
+  - id: next_hop_manager
+    text: "NEXT HOP = manager seat, not the human. Done/blocked/need-next -> ./sm.sh room say -r managers AND ./sm.sh peer manager. Never wait for the operator."
   - id: room_supervise
     cmd: ./sm.sh room tail -r supervise -n 20
