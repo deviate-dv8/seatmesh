@@ -1,5 +1,6 @@
 import path from "node:path";
 import {
+  baseColumnIds,
   buildResolvedPaths,
   COLUMN_ID_RE,
   expandColumnAlias,
@@ -30,12 +31,28 @@ export function parseSeatTarget(raw: string): SeatTarget {
   throw new Error(`bad seat target: ${raw} (want <column-id>|slot-N|mini-N)`);
 }
 
+/** Coord columns must exist in profile layout — unknown ids are not resolvable paths. */
+function isKnownCoordColumn(loaded: LoadedProfile, role: string): boolean {
+  const r = role.trim().toLowerCase();
+  const aliases = new Set(expandColumnAlias(r));
+  aliases.add(r);
+  for (const id of baseColumnIds(loaded.profile.layout)) {
+    const col = id.toLowerCase();
+    if (aliases.has(col)) return true;
+    for (const a of expandColumnAlias(col)) {
+      if (aliases.has(a)) return true;
+    }
+  }
+  return false;
+}
+
 /** Resolve tasks/agent-seats/<dir> for worker, mini, manager, secretary. */
 export function seatDirFor(loaded: LoadedProfile, target: SeatTarget): string | null {
   const root = buildResolvedPaths(loaded).seatsRoot;
   const dirs = loaded.profile.seats.dirs;
 
-  if (isCoordKind(target.role)) {
+  if (isCoordKind(target.role, loaded.profile.layout?.base?.kinds)) {
+    if (!isKnownCoordColumn(loaded, target.role)) return null;
     return path.join(root, seatDirSegment(dirs, target.role));
   }
   if (target.mini) {

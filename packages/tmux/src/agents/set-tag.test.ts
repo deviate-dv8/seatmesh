@@ -6,10 +6,19 @@ import type { PaneRow } from "../lib/resolve-pane.js";
 const loaded = {
   sessionName: "mesh",
   workspace: "/tmp/ws",
+  profileDir: "/tmp/ws/.sm",
+  profilePath: "/tmp/ws/.sm/mesh.config.yaml",
   profile: {
     name: "zsign",
+    workspace: ".",
     ports: { worker: "30{n}0/30{n}1" },
-    state: { meshAgentsJson: ".sm/mesh-agents.json" },
+    seats: { root: "seats" },
+    data: { root: "runtime" },
+    state: {
+      meshAgentsJson: "mesh-agents.json",
+      agentsJson: "agents.json",
+    },
+    roles: { dir: "roles" },
   },
 } as unknown as LoadedProfile;
 

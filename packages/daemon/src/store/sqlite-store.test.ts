@@ -1,11 +1,25 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 import { JsonlStore } from "./jsonl-store.js";
 import { migrateJsonlDirToSqlite, SqliteStore } from "./sqlite-store.js";
 
-describe("SqliteStore", () => {
+const require = createRequire(import.meta.url);
+
+function sqliteNativeAvailable(): boolean {
+  try {
+    const Ctor = require("better-sqlite3") as new (filename: string) => { close(): void };
+    const db = new Ctor(":memory:");
+    db.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+describe.skipIf(!sqliteNativeAvailable())("SqliteStore", () => {
   it("roundtrips inbox and peer rows", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "sm-sqlite-"));
     const db = path.join(dir, "mesh.sqlite");

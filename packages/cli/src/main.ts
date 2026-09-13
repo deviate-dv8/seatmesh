@@ -456,6 +456,7 @@ async function main(): Promise<void> {
       printRelayoutPlan(loaded);
       return;
     }
+    requireCoordRole(loaded, "layout");
     submitPaneOp(
       loaded,
       "relayout",
@@ -601,6 +602,7 @@ async function main(): Promise<void> {
 
   if (cmd === "assign") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "assign");
     const target = sub;
     const text = tail.join(" ").trim();
     if (!target || !text) {
@@ -618,6 +620,7 @@ async function main(): Promise<void> {
 
   if (cmd === "peer") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "peer");
     let direct = false;
     const args: string[] = [];
     for (const a of [sub, ...tail].filter((x): x is string => x != null && x !== "")) {
@@ -731,6 +734,7 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "prompt") {
+      requireCoordRole(loaded, "mini prompt");
       const n = Number(tail[0]);
       const text = tail.slice(1).join(" ");
       if (!n || !text) {
@@ -756,6 +760,14 @@ async function main(): Promise<void> {
 
   if (cmd === "secretary") {
     const loaded = meshLoaded(profileArg);
+    const secretaryReadOnly =
+      !sub ||
+      sub === "status" ||
+      (sub === "watch" && (tail[0] ?? "status").toLowerCase() === "status") ||
+      (sub === "supervise" && (tail[0] ?? "status").toLowerCase() === "status");
+    if (!secretaryReadOnly) {
+      requireCoordRole(loaded, `secretary ${sub ?? ""}`.trim());
+    }
     if (sub === "start") {
       secretaryLaunch(loaded);
       return;
@@ -989,6 +1001,7 @@ async function main(): Promise<void> {
 
   if (cmd === "launch") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "launch");
     const rawArgs = [sub, ...tail].filter(
       (a): a is string => Boolean(a) && a !== "--",
     );
@@ -1018,6 +1031,7 @@ async function main(): Promise<void> {
 
   if (cmd === "prompt") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "prompt");
     let manager = false;
     const args: string[] = [];
     for (const a of [sub, ...tail].filter((x): x is string => x != null && x !== "")) {
@@ -1070,6 +1084,9 @@ async function main(): Promise<void> {
 
   if (cmd === "night") {
     const loaded = meshLoaded(profileArg);
+    if ((sub ?? "status") !== "status") {
+      requireCoordRole(loaded, "night");
+    }
     try {
       runNight(loaded, sub ?? "status");
     } catch (e) {
@@ -1095,6 +1112,7 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     try {
+      if (send) requireCoordRole(loaded, "slot-advice --send");
       runSlotAdvice(loaded, target, { send, note });
     } catch (e) {
       console.error((e as Error).message);
@@ -1105,6 +1123,7 @@ async function main(): Promise<void> {
 
   if (cmd === "continue") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "continue");
     const [target, ...noteParts] = [sub, ...tail].filter(Boolean) as string[];
     if (!target) {
       console.error("usage: continue <slot|all> [note...]   (manager-only, requires night on)");
@@ -1122,6 +1141,7 @@ async function main(): Promise<void> {
 
   if (cmd === "flush") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "flush");
     const reg = createRegistryForProfile(loaded.profile);
     const target = sub ?? "all";
     if (!sub) {
@@ -1135,6 +1155,7 @@ async function main(): Promise<void> {
 
   if (cmd === "switch" || cmd === "handoff") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, cmd);
     const reg = createRegistryForProfile(loaded.profile);
     const args = [sub, ...tail].filter(Boolean);
     if (args.length < 2) {
@@ -1195,6 +1216,7 @@ async function main(): Promise<void> {
 
   if (cmd === "set") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "set");
     const reg = createRegistryForProfile(loaded.profile);
     const target = sub;
     const typeRaw = tail[0];
@@ -1322,6 +1344,7 @@ async function main(): Promise<void> {
 
   if (cmd === "coord") {
     const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "coord");
     const reg = createRegistryForProfile(loaded.profile);
     coordCommand(loaded, reg, sub ?? "", tail);
     return;
@@ -1331,6 +1354,9 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     const reg = createRegistryForProfile(loaded.profile);
     const action = (sub ?? "status").toLowerCase();
+    if (action !== "status") {
+      requireCoordRole(loaded, `balance ${action}`);
+    }
     if (action === "on") {
       balanceLeadCommand(loaded, reg, "on", tail[0] ?? "10m");
       return;

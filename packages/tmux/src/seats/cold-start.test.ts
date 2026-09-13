@@ -149,6 +149,6 @@ describe("cold-start", () => {
     expect(fresh).toMatch(/manager-2/);
     expect(fresh.length).toBeLessThan(400);
     expect(secretaryColdStartBrief()).toMatch(/FRESH SUMMON/);
-    expect(secretaryColdStartBrief()).toMatch(/\.\/sm\.sh whoami/);
+    expect(secretaryColdStartBrief()).toMatch(/seatmesh --profile \.sm whoami/);
   });
 });

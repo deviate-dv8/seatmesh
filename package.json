@@ -1,6 +1,6 @@
 {
   "name": "seatmesh",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "private": true,
   "type": "module",
   "description": "Typed tmux agent coordination: profiles, role index, inbox daemon, connectivity recovery.",
@@ -14,6 +14,7 @@
     "build": "npm run build -w @seat-mesh/core && npm run build -w @seat-mesh/providers && npm run build -w @seat-mesh/tmux && npm run build -w @seat-mesh/connectivity && npm run build -w @seat-mesh/daemon && npm run build -w seatmesh",
     "typecheck": "npm run typecheck -ws --if-present",
     "test": "vitest run",
+    "test:ci": "vitest run --exclude '**/sqlite-store.test.ts'",
     "seatmesh": "node packages/cli/dist/main.js"
   },
   "devDependencies": {

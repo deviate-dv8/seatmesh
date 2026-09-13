@@ -12,7 +12,12 @@ function stubCtx(
       workspace,
       profileDir: workspace,
       profilePath: "",
-      profile: {} as LoadedProfile["profile"],
+      profile: {
+        seats: { root: "seats" },
+        data: { root: "runtime" },
+        state: { meshAgentsJson: "mesh-agents.json", agentsJson: "agents.json" },
+        roles: { dir: "roles" },
+      } as LoadedProfile["profile"],
       workspaceId: "test01",
       sessionName: "mesh-test01",
     } satisfies LoadedProfile,

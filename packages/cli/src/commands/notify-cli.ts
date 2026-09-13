@@ -1,11 +1,26 @@
 import { Command } from "commander";
 import type { LoadedProfile } from "@seat-mesh/core";
-import { runMeshNotify, sendYesNoToast } from "@seat-mesh/tmux";
+import { runMeshNotify, sendDesktopToastSync, sendYesNoToast } from "@seat-mesh/tmux";
 
 export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
   const notify = new Command("notify").description(
     "Desktop toast for operator (node-notifier; Yes/No via notify-act on inbox daemon)",
   );
+
+  notify
+    .command("desktop")
+    .description("Toast with explicit title and body (no tmux whoami; cross-platform via node-notifier)")
+    .argument("<title>", "toast title")
+    .argument("<body>", "toast body")
+    .action((title: string, body: string) => {
+      const loaded = getLoaded();
+      const ok = sendDesktopToastSync(loaded.workspace, title.trim(), body.trim());
+      if (!ok) {
+        console.error("FAIL: desktop notify unavailable or muted");
+        process.exit(1);
+      }
+      console.log(`ok desktop "${title.trim()}"`);
+    });
 
   notify
     .command("yesno")
