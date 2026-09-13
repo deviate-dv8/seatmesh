@@ -29,7 +29,9 @@ export interface BalanceTickResult {
 }
 
 function balanceLastPath(loaded: LoadedProfile): string {
-  const root = path.join(loaded.workspace, ".sm", "seats", "manager-2");
+  const doc = loadBalanceVendorContract(contractsDirFor(loaded));
+  const dirKey = loaded.profile.seats.dirs?.[doc.balance_lead] ?? doc.balance_lead;
+  const root = path.join(loaded.workspace, ".sm", "seats", dirKey);
   return path.join(root, "BALANCE-LAST.md");
 }
 
