@@ -136,7 +136,8 @@ export function setFocusMark(loaded: LoadedProfile, target: SeatTarget, mark: Fo
 export function appendTask(loaded: LoadedProfile, target: SeatTarget, text: string): void {
   const p = requireSeatFile(loaded, target, "TASKS.md");
   let body = fs.readFileSync(p, "utf8");
-  const line = `- [ ] ${text}`;
+  const line = `- [ ] ${text.trim()}`;
+  if (body.includes(line)) return;
 
   const openHeading = /^## Open\s*$/m;
   if (openHeading.test(body)) {

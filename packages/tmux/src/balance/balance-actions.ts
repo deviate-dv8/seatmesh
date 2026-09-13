@@ -6,6 +6,7 @@ import {
   sayInRoomSync,
   type LoadedProfile,
 } from "@seat-mesh/core";
+import { parseSeatTarget } from "../seats/seat-paths.js";
 import { runAssign } from "../seats/seat-assign.js";
 import { readSeatSnapshot } from "../seats/seat-update.js";
 import type { BalanceTickResult } from "./balance-tick.js";
@@ -63,6 +64,11 @@ export function runBalanceAutoActions(
   }
 
   if (!autoAssign || !tick.pullSuggested || tick.mainOpen <= 0) {
+    return result;
+  }
+
+  const leadSnap = readSeatSnapshot(loaded, parseSeatTarget(doc.balance_lead));
+  if (leadSnap && leadSnap.tasks.open >= 8) {
     return result;
   }
 
