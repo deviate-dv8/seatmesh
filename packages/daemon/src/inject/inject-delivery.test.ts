@@ -39,6 +39,9 @@ describe("isCursorFollowUpSteer", () => {
     expect(shouldBacklogPeerHold("held:busy", "ACK NOTED")).toBe(true);
     expect(shouldBacklogPeerHold("held:cotyped:typing", "STATUS tick")).toBe(true);
     expect(shouldBacklogPeerHold("held:busy", "PRIORITY switch now")).toBe(false);
+    expect(shouldBacklogPeerHold("held:plain_shell", "FYI: wait for agent")).toBe(true);
+    expect(shouldBacklogPeerHold("held:no_provider", "ACK: later")).toBe(true);
+    expect(shouldBacklogPeerHold("held:limit", "FYI: rate limited")).toBe(true);
     expect(isExplicitHubOverride("PRIORITY switch now")).toBe(true);
     expect(isExplicitHubOverride("ASSIGN FQ6")).toBe(false);
   });

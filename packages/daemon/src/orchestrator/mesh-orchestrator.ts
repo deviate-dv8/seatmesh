@@ -199,8 +199,8 @@ export function drainInboxOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
   };
 }
 
-/** Permanent skip only — transient holds (plain_shell during launch) must retry. */
-const PEER_SKIP_REASONS = new Set(["no_snapshot", "no_provider"]);
+/** Permanent skip only — empty seats / no_provider must backlog until a CLI loads. */
+const PEER_SKIP_REASONS = new Set(["no_snapshot"]);
 
 const PEER_KIND_PRIORITY: Record<string, number> = {
   prompt: 0,

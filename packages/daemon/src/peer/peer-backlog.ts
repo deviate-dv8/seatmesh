@@ -24,10 +24,12 @@ export function isAckClassPeer(msg: string): boolean {
   return /^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?)\b/i.test(body);
 }
 
-/** Park inbound while the pane is busy/typing. Only PRIORITY / STOP other work pastes. */
+/** Park inbound while the pane is busy/typing/empty-seat. Only PRIORITY / STOP other work pastes. */
 export function shouldBacklogPeerHold(reason: string, msg: string): boolean {
   if (/\bPRIORITY\b|\bSTOP other work\b/i.test(msg)) return false;
   if (BUSY_HOLD.test(reason)) return true;
+  // No live agent CLI yet — keep until Composer/Claude/OC loads (do not skip-drop).
+  if (/^held:(plain_shell|limit|no_provider)$/.test(reason)) return true;
   if (/^held:cotyped:/.test(reason)) return true;
   if (/^held:coord:(wait-busy|wait-typing)/.test(reason)) return true;
   if (/^held:coord:/.test(reason)) return false;
@@ -57,10 +59,14 @@ function readBacklog(store: QueueStore): PeerBacklogRow[] {
 }
 
 function writeBacklog(store: QueueStore, rows: PeerBacklogRow[]): void {
+  // Keep latest entry per id (re-parks used to append forever).
+  const byId = new Map<string, PeerBacklogRow>();
+  for (const r of rows) byId.set(r.id, r);
+  const deduped = [...byId.values()].sort((a, b) => a.backlogAt.localeCompare(b.backlogAt));
   const p = peerBacklogPath(store);
   fs.writeFileSync(
     p,
-    rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""),
+    deduped.map((r) => JSON.stringify(r)).join("\n") + (deduped.length ? "\n" : ""),
   );
 }
 
@@ -90,6 +96,8 @@ function paneIdleForPromote(paneId: string, registry: ProviderRegistry): boolean
   const prov = registry.detect(snap);
   if (!prov) return false;
   const st = prov.composerState(snap);
+  // Empty zsh / limit wall — keep backlog; never promote until a real CLI loads.
+  if (st.phase === "plain_shell" || st.phase === "limit") return false;
   if (st.phase === "empty" || st.phase === "afk") return true;
   return cursorFollowUpOpen(paneId, registry);
 }
@@ -171,7 +179,10 @@ export function promotePeerBacklog(
       msg: first.msg,
       sent: false,
     };
-    peer.push(revived);
+    // Replace parked peer row — never push a second copy of the same id.
+    const existing = peer.findIndex((r) => r.id === first.id);
+    if (existing >= 0) peer[existing] = revived;
+    else peer.push(revived);
     promoted++;
     log(`PEER backlog promote id=${first.id} -> ${first.targetLabel}${followUpOnly ? " (ack-follow-up)" : ""}`);
     kept.push(...restAck, ...restParked);
@@ -205,7 +216,8 @@ export function parkPeerToBacklog(
     backlogAt: new Date().toISOString(),
     holdReason,
   };
-  const backlog = readBacklog(store);
+  // One row per id — re-park updates holdReason instead of bloating the file.
+  const backlog = readBacklog(store).filter((r) => r.id !== row.id);
   backlog.push(entry);
   writeBacklog(store, backlog);
   log(`PEER backlog id=${row.id} -> ${row.targetLabel} reason=${holdReason}`);

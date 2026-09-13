@@ -140,9 +140,15 @@ export function deliverToPane(
   if (!snap) return { ok: false, reason: "no_snapshot" };
 
   const prov = registry.detect(snap);
-  if (!prov) return { ok: false, reason: "no_provider" };
+  if (!prov) return { ok: false, reason: "held:no_provider" };
 
   const state = prov.composerState(snap);
+  // Empty seat / rate-limit wall — never paste into zsh. Queue until a real CLI loads.
+  // Lightweight / roomPing used to skip canDeliverNow and dump [mesh-inbox] into shells.
+  if (state.phase === "plain_shell" || state.phase === "limit") {
+    return { ok: false, reason: `held:${state.phase}` };
+  }
+
   const coord = isCoordPane(paneId);
   const coTyped = coord && isHumanCoTypedPane(paneId, opts.loaded);
 
