@@ -6,16 +6,22 @@
 
 ## Current snapshot (2026-09-14)
 
-| Package | Flat `src/*.ts` (non-test) | Tests at `src/` root | Subdirs already |
-|---------|---------------------------|----------------------|-----------------|
-| `@seat-mesh/daemon` | **~29** | **~13** | none (worst) |
-| `seatmesh` (cli) | **~20** | 2 | `templates/` only |
-| `@seat-mesh/core` | **~9** | **~6** | `chatroom/`, `contracts/`, `messages/`, … |
-| `@seat-mesh/tmux` | 2 | 0 | `inject/`, `supervise/`, `comms/`, … (good pattern) |
-| `@seat-mesh/providers` | small | colocated in module dirs | ok |
-| `@seat-mesh/connectivity` | small | minimal | ok |
+| Package | Flat `src/*.ts` (non-test) | Status |
+|---------|---------------------------|--------|
+| `@seat-mesh/daemon` | root: `index` + 2 entry scripts only | **DONE** — 39 files -> 11 domain folders |
+| `seatmesh` (cli) | root: `main.ts` only | **DONE** — 21 files -> `commands/ setup/ report/ ui/` |
+| `@seat-mesh/core` | **~9** flat + folders | partial — `chatroom/`, `contracts/`, `messages/`, … (phase 3, not yet) |
+| `@seat-mesh/tmux` | 2 flat | ok — `inject/`, `supervise/`, `comms/`, `seats/` (good pattern) |
+| `@seat-mesh/providers` | small | ok — colocated tests |
+| `@seat-mesh/connectivity` | small | ok |
 
 **Good reference:** `packages/tmux/src/` — feature folders, tests beside the module (`inject/inject-draft.test.ts`).
+
+**Root-kept entry files (intentional):** files located at runtime by a hardcoded dist path must
+stay at `src/` root so their `dist/` path is unchanged: `@seat-mesh/daemon`'s
+`mesh-inbox-server.ts` + `mesh-inbox-supervisor.ts` (found by `resolveDaemonScript` in
+`@seat-mesh/core`, and the supervisor's HMR watch), and the CLI's `main.ts` (bin =
+`dist/main.js`). Everything else nests.
 
 ## Rules (new / moved code)
 
@@ -24,44 +30,42 @@
 3. **Barrels:** each folder may export via `index.ts`; package root `src/index.ts` re-exports public API only.
 4. **Names:** folder = domain (`peer/`, `store/`, `inject/`, `notify/`), not layer soup at one depth.
 
-## Target: `@seat-mesh/daemon` (phase 1)
+## `@seat-mesh/daemon` (phase 1 — DONE, commit 46f324f)
 
 ```
 packages/daemon/src/
-  index.ts
-  server/           mesh-inbox-server, mesh-inbox-supervisor
-  orchestrator/     mesh-orchestrator, orchestrator, workers
-  inject/           inject-delivery (+ test)
-  gate/             compose-gate (+ test)
-  peer/             peer-backlog, peer-pending, peer-skip, peer-target-resolve, peer-comms-checkback (+ tests)
-  store/            jsonl-store, sqlite-store, create-queue-store (+ tests)
-  notify/           notify-act, notify-act-ui (+ test)
-  inbox/            inbox-overload (+ test)
-  delivery/         delivery-hold (+ test)
-  checkback/        checkback-fire (+ test)
-  connectivity/     connectivity-recovery (+ test)
-  oc/               oc-resume, oc-resume-ack (+ test)
-  border/           border-paint
-  pane-ops/         pane-ops-drain
-  queue/            bullmq-runtime
-  state/            ppa-state
-  limit/            cc-limit-retry
+  index.ts                        barrel (public API)
+  mesh-inbox-server.ts            entry (root — resolveDaemonScript)
+  mesh-inbox-supervisor.ts        entry (root — HMR watch)
+  orchestrator/   mesh-orchestrator, orchestrator, workers
+  inject/         inject-delivery, compose-gate (+ tests)
+  peer/           peer-backlog, peer-pending, peer-skip, peer-target-resolve, peer-comms-checkback (+ tests)
+  store/          jsonl-store, sqlite-store, create-queue-store (+ tests)
+  notify/         notify-act, notify-act-ui (+ test)
+  checkback/      checkback-fire (+ test)
+  connectivity/   connectivity-recovery, oc-resume, oc-resume-ack, cc-limit-retry (+ tests)
+  inbox/          inbox-overload, delivery-hold, pane-ops-drain (+ tests)
+  border/         border-paint
+  queue/          bullmq-runtime
+  state/          ppa-state
 ```
 
-Imports: internal `../peer/peer-backlog.js`; public API unchanged via `daemon/src/index.ts` (expand exports if needed).
+Imports: internal `../peer/peer-backlog.js`; public API unchanged via `daemon/src/index.ts`.
 
-## Target: `seatmesh` CLI (phase 2)
+## `seatmesh` CLI (phase 2 — DONE, commit 46f324f)
 
 ```
 packages/cli/src/
-  index.ts / main.ts
-  commands/         checkback-cli, room-cli, notify-cli, seat-cli, …
-  init/             init.ts, agent-context-init, migrate-runtime
-  report/           status-report, discovery-report
-  assets/           banner, logo-*
+  main.ts                         entry (root — bin = dist/main.js)
+  commands/   chat-cli, checkback-cli, contract-lock-cli, coord-cli, notify-cli,
+              preview-cli, room-cli, seat-cli, sessions-cli
+  setup/      init, agent-context-init, migrate-runtime, update (+ init test)
+  report/     status-report, discovery-report
+  ui/         banner, logo-art, logo-color, version-nudge (+ test)
 ```
 
-Keep `templates/` and `profiles/` as today.
+Kept `templates/` and `profiles/` as today. Build/tooling scripts under `packages/*/scripts/`
+are full TypeScript run via node type-stripping (`node scripts/bundle-profiles.ts`), not `.mjs`.
 
 ## Target: `@seat-mesh/core` (phase 3)
 

@@ -4,6 +4,51 @@ Product-agnostic multi-agent tmux workbench. **The inbox daemon is the only writ
 to panes**; CLI commands and agents enqueue. Providers are pluggable; limit handling
 uses hooks, not hardcoded CLI branches in the orchestrator.
 
+One rule underpins everything: **producers enqueue, one daemon injects.** No command,
+worker, secretary, or recovery job pastes into a pane directly. This is what keeps a
+shared tty from being stomped by two writers at once.
+
+## Packages
+
+Five workspace packages under `packages/*` (npm workspaces, all `0.1.x` in lockstep).
+Dependency direction flows one way: `core <- {tmux, providers, connectivity} <- daemon <- cli`.
+
+| Package | Role | Depends on |
+|---------|------|------------|
+| `@seat-mesh/core` | Profile schema, path resolvers, contracts (supervise/balance), chat rooms, message copy consts. No tmux, no daemon. | — |
+| `@seat-mesh/providers` | One `AgentProvider` per CLI family (cursor-agent, claude, opencode…): detect + composer state + inject plan + limit detectors. | core |
+| `@seat-mesh/tmux` | tmux side-effects: pane snapshot/capture, inject path, seats read/write, supervise tick, comms/inbox bridge. | core, providers |
+| `@seat-mesh/connectivity` | Connectivity/limit recovery library — policies enqueue jobs, never inject. | core |
+| `@seat-mesh/daemon` | The inbox orchestrator: sole pane writer, queue drain, checkback fires, notify, border paint. | core, tmux, providers |
+| `seatmesh` (cli) | User entry: profile init/update, room/peer/checkback/seat/notify commands, reports. Spawns the daemon. | all |
+
+### Source layout (post-2026-09-14 reorg)
+
+`@seat-mesh/daemon` and `seatmesh` were flat seas of `src/*.ts`; they now nest by domain.
+Full map + rules: [PACKAGE-LAYOUT.md](PACKAGE-LAYOUT.md).
+
+```
+daemon/src/
+  index.ts  mesh-inbox-server.ts  mesh-inbox-supervisor.ts   (root: barrel + entries)
+  orchestrator/  inject/  peer/  store/  notify/  checkback/
+  connectivity/  inbox/  border/  queue/  state/
+
+cli/src/
+  main.ts                                                    (root: bin entry)
+  commands/  setup/  report/  ui/
+```
+
+**Root-kept entries are load-bearing:** `mesh-inbox-server.ts` / `mesh-inbox-supervisor.ts`
+are located at runtime by a hardcoded `packages/daemon/dist/<name>.js` path
+(`resolveDaemonScript`, `@seat-mesh/core`) and the supervisor's HMR watch; `main.ts` is the CLI
+bin (`dist/main.js`). Moving them breaks resolution — they stay at `src/` root by design.
+
+**Convention (all packages):** no new production `.ts` at `src/` root except `index.ts`
+(barrel). Tests sit next to the module (`peer/peer-skip.test.ts`). Folder = domain, not layer.
+Build/tooling scripts under `packages/*/scripts/` are full TypeScript, run via Node
+type-stripping (`node scripts/bundle-profiles.ts`) — no `.mjs`. `@seat-mesh/core` still has
+loose root modules (profile/paths) queued for the same treatment (phase 3).
+
 ## Tmux layout (default profile shape)
 
 | Index | Window | Layout | Purpose |
@@ -37,17 +82,12 @@ base column id -> manager. Override with `layout.base.kinds`.
 Workers = `layout.workers.slots`. Minis = `layout.minis.max`. Base coord count = `columns.length`
 (1..128 — "100 managers" is a config array length, not a code change).
 
-Consumer profile may still list `[manager, manager-2, secretary]` — those are **names in yaml**,
-not schema variants. See `packages/core/src/schema/seat-kind.ts`.
-
 **Adding the Nth manager needs exactly one thing: its id in `layout.base.columns`.**
 `seats.dirs`, a `roles/columns/<id>.yaml` overlay, and a `layout.base.cli.<id>` entry are all
-*optional* customization, never a requirement — `seatDirSegment()` defaults an unmapped column
-id to itself, `loadRoleIndex()` falls back to the base `manager.yaml` when no overlay file
-exists, and `cliForBaseColumn()` falls back to `defaultCliForKind()`. Don't hand-author a
-trivial `extends: manager` yaml file or an identity `dirs: {manager-4: manager-4}` entry — they
-do nothing the fallback wasn't already doing, and they're exactly the cargo-cult pattern this
-architecture exists to avoid (see 2026-09-13 Cursor postmortem). Use:
+*optional* — `seatDirSegment()` defaults an unmapped id to itself, `loadRoleIndex()` falls back
+to base `manager.yaml`, and `cliForBaseColumn()` falls back to `defaultCliForKind()`. Don't
+hand-author an identity `extends: manager` overlay or `dirs: {manager-4: manager-4}` — they do
+nothing the fallback wasn't already doing. Use:
 
 ```bash
 seatmesh --profile .sm layout column add manager-4 [--cli claude] [--after manager-3] [--co-typed]
@@ -56,26 +96,40 @@ seatmesh --profile .sm layout column remove manager-4
 ```
 
 (`packages/core/src/profile-edit.ts`) rather than hand-editing the yaml array — it validates the
-id, checks for duplicates, and preserves file comments. Seat dir + FOCUS/TASKS/REMINDER are then
-auto-created on the next `up`/`reload` by `runSeatInit`, which already iterates
-`layout.base.columns` generically.
+id, checks duplicates, preserves comments. Seat dir + FOCUS/TASKS/REMINDER are auto-created on
+the next `up`/`reload` by `runSeatInit`, which iterates `layout.base.columns` generically.
 
-### Human co-typed panes (`manager-2` inject hazard) — needs ACK + fix
+### Supervise / balance (parallel leads)
 
-**Reported (manager-2, 2026-09-13):** the `manager-2` pane is the only base column where
-**operator types in the same tty** as the daemon. Blind `send-keys` / paste inject can interleave
-with Claude Code footer redraw → corrupted / "footer bleed" messages. Other panes are
-agent-only.
+Which coordinator columns are actively driven is contract config, not code:
 
-**Required engine behavior (FQ, not docs-only):**
+- `.sm/contracts/_vendor/supervise.yaml` (locked, refreshed by `update`) + `supervise.extend.yaml`
+  (user, never overwritten). `leads:` = the panes the daemon nudges CONTINUE when idle with open
+  TASKS; `superviseLeadIds()` re-reads this **every tick** (`packages/core/src/contracts/supervise.ts`).
+  To run managers 1..N in parallel, list them all under `leads:` — a single-lead list is why
+  extra managers stall.
+- `.sm/contracts/balance.extend.yaml` (`balancees:`) spreads work across leads/slots;
+  `auto_assign` lets the balance tick assign directly.
 
-1. Mark co-typed panes in profile or pane metadata (e.g. `layout.base.humanCoTyped: [manager-2]`).
-2. Daemon inject path: **queue + composer-ready gate** (same as cursor-agent busy), never
-   paste mid-keystroke; optional steer-to-follow-up instead of raw paste.
-3. **manager** must ACK this FQ to **manager-2** in room/peer when scheduled; **manager-2**
-   owns the inject-path patch in `@seat-mesh/daemon` / `@seat-mesh/tmux`.
+The aggregate tick (`runSuperviseTick`, `packages/tmux/src/supervise/supervise-tick.ts`) writes
+`.sm/seats/secretary/SUPERVISE-LAST.md`, optionally posts a `managers` room STATUS, and nudges
+each idle lead. Per-lead `coord-nudge` and the aggregate `secretary-supervise` fire are stored
+as renewing rows in `CHECKBACK.jsonl`, so they survive a daemon restart.
 
-Spec pointer: `tasks/seat-mesh/FQ-inject-co-typed-pane.md`.
+### Human co-typed panes (implemented)
+
+Some base columns (e.g. `manager-2`) are panes where the **operator types in the same tty** as
+the daemon. Blind paste there interleaves with the CLI footer redraw and corrupts input.
+
+Handled in the inject path (`@seat-mesh/tmux`, `@seat-mesh/daemon`):
+
+1. Co-typed panes are marked in the profile (`layout.base.humanCoTyped: [manager-2]`).
+2. Inject **queues + gates on composer-ready** (same as a busy cursor-agent) and takes a
+   short keyboard-input lock (`withPaneInjectLock`) so a human keystroke can't land mid
+   clear/paste; a live human draft is preserved and restored, a stale `[mesh-inbox]` draft is
+   cleared first.
+3. No desktop toast for co-typed inject holds (removed — it was spammy). Holds are visible on
+   the pane border only.
 
 ## No direct send
 
@@ -99,7 +153,7 @@ border/status paint, and connectivity side effects that need a pane paste.
 |-------|----------|----------|
 | INBOX | workers, minis, schedule | inject manager/secretary; ack/resolve |
 | PEER | worker, mini, secretary, room fan-out | inject target pane |
-| CHECKBACK | comms, limits | timed poll inject |
+| CHECKBACK | comms, limits, supervise | timed poll inject |
 | PANE_OPS | launch, layout, relayout | serial pane operations |
 
 Goal: **best-effort empty** — fair, rate-limited, never stomp an active composer.
@@ -107,25 +161,31 @@ Goal: **best-effort empty** — fair, rate-limited, never stomp an active compos
 BullMQ is optional when Redis is up; the poll loop (`daemon.pollMs`) remains the
 reliable drain on a single host.
 
+**A queue is a queue:** a peer to a busy pane is **not** a failure. It is parked
+(`deliverPane: "backlog"` in `PEER.jsonl`, mirrored in `PEER-BACKLOG.jsonl`) and the daemon
+promotes it when the target goes idle. `isPeerDelivered()` treats `backlog`/`skipped` as **not
+delivered**; the CLI reports `QUEUED` (not `FAIL`); `reconcileBacklogOrphans` re-adds any
+backlog row lost across a restart. See `packages/daemon/src/store/jsonl-store.ts` and
+`packages/daemon/src/peer/peer-backlog.ts`.
+
 ### When agents "do not receive" inbox (diagnosis)
 
 Delivery is **not** chat — it is PEER/CHECKBACK inject when policy allows.
 
 | Symptom | Likely cause | Check |
 |---------|--------------|--------|
-| CLI `FAIL: prompt not sent … last=queued` | Target composer **busy/typing** (common on cursor-agent) | `./sm.sh peer verify <target>` |
-| CC blank composer stuck **typing** (border + held:typing) | False draft on rule-only `❯ ───` row; or need TEMP bypass | Fix in `@seat-mesh/providers`; `daemon.skipTypingGate: true` or `MESH_INBOX_SKIP_TYPING_GATE=1` then inbox restart |
-| Secretary **Bun crashed** / `illegal hardware instruction` on `opencode-cpe.sh` | Stale `mesh-agents.json` secretary=opencode while profile `layout.base.cli.secretary=claude` | Fix: coord sync uses profile CLI first; `seatmesh secretary restart`; OC relaunch only when profile says opencode |
+| CLI `QUEUED … (inbox inject when idle)` | Target composer **busy/typing** — normal; will land when idle | `seatmesh --profile .sm peer verify <target>` |
+| CC blank composer stuck **typing** | False draft on rule-only `❯ ───` row; or need TEMP bypass | Fix in `@seat-mesh/providers`; `daemon.skipTypingGate: true` or `MESH_INBOX_SKIP_TYPING_GATE=1` then inbox restart |
+| Secretary **Bun crashed** on `opencode-cpe.sh` | Stale `mesh-agents.json` secretary=opencode while profile `cli.secretary=claude` | coord sync uses profile CLI first; `seatmesh secretary restart` |
 | `peerUnsent` high in `/health` | Backlog of not-yet-delivered rows; many targets busy at once | Wait for idle + settle; reduce concurrent peer spam |
-| Room line saved, `fan-out sent=0` | Same busy gate; line still in `.sm/chat-rooms/.../ROOM.jsonl` | `./sm.sh room tail -r managers` |
-| Truly no daemon | `/health` not ok | `./sm.sh inbox restart` |
+| Room line saved, `fan-out sent=0` | Same busy gate; line still in `.sm/chat-rooms/.../ROOM.jsonl` | `seatmesh --profile .sm room tail -r managers` |
+| Truly no daemon | `/health` not ok | `seatmesh --profile .sm inbox restart` |
 
-**Work still lands on disk:** `./sm.sh assign` writes FOCUS NOW + TASK **before** peer proof;
-a failed `assign` exit code does not mean the seat has no hub — run `./sm.sh whoami` on the
-target pane.
+**Work still lands on disk:** `assign` writes FOCUS NOW + TASK **before** peer proof;
+a failed `assign` exit code does not mean the seat has no hub — run `whoami` on the target pane.
 
-**Prefix:** daemon injects must carry `[mesh-inbox]` (see `stampDaemonInject` in
-`packages/daemon/src/inject-delivery.ts`).
+**Prefix:** daemon injects carry `[mesh-inbox]` (see `stampDaemonInject` in
+`packages/daemon/src/inject/inject-delivery.ts`).
 
 ## Agent provider interface
 
@@ -141,7 +201,7 @@ interface AgentProvider {
 }
 ```
 
-The orchestrator calls `registry.getProvider(pane)` — no central if/else on CLI names.
+The orchestrator calls `registry.detect(pane)` — no central if/else on CLI names.
 
 ## Limits (hooks)
 

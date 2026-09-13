@@ -20,7 +20,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "prepublishOnly": "node scripts/bundle-profiles.mjs && npm run build"
+    "prepublishOnly": "node scripts/bundle-profiles.ts && npm run build"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.0",
