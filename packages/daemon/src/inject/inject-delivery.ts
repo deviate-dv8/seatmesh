@@ -203,9 +203,16 @@ export function deliverToPane(
 
   const steer = ackFollowUp;
 
+  // Co-typed: skip Enter only for non-inbox pastes (human may be mid-draft).
+  // Mesh-inbox / room pings MUST submit — otherwise they sit forever as a typing
+  // draft and block the pane (manager-2 stuck Verify:/peer footer).
+  const meshMail =
+    message.includes("[mesh-inbox") ||
+    message.includes("[mesh-inbox-room]") ||
+    /\b\[sent:[^\]]+\]/.test(message);
   const plan = {
     ...prov.injectPlan(snap),
-    ...(coTyped ? { skipSubmit: true } : {}),
+    ...(coTyped && !meshMail ? { skipSubmit: true } : {}),
   };
   injectToPane(paneId, message, plan, prov.id, snap.captureTail, snap.captureTailAnsi);
   const mode = steer ? "steer" : "idle";
