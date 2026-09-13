@@ -21,45 +21,45 @@ import {
   resolveLiveTmuxSession,
   saveMeshSession,
 } from "@seat-mesh/tmux";
-import { configureInboxTypingGate } from "./compose-gate.js";
-import { createQueueStore } from "./create-queue-store.js";
-import { countPeerPendingGlobal } from "./peer-pending.js";
-import { findDupInbox, findDupPeer, type CheckbackRow } from "./jsonl-store.js";
+import { configureInboxTypingGate } from "./inject/compose-gate.js";
+import { createQueueStore } from "./store/create-queue-store.js";
+import { countPeerPendingGlobal } from "./peer/peer-pending.js";
+import { findDupInbox, findDupPeer, type CheckbackRow } from "./store/jsonl-store.js";
 import {
   orchestratorDrainTickAsync,
   type MeshOrchestratorCtx,
-} from "./mesh-orchestrator.js";
-import { repaintMeshPaneBorder } from "./border-paint.js";
+} from "./orchestrator/mesh-orchestrator.js";
+import { repaintMeshPaneBorder } from "./border/border-paint.js";
 import {
   clearOcLimitBannerForPane,
   maybeEndRateLimitEpisode,
   newConnectivityRecoveryState,
   pollConnectivityRecovery,
-} from "./connectivity-recovery.js";
+} from "./connectivity/connectivity-recovery.js";
 import {
   notifyResumeWave,
   resumeAllOpenCodePanes,
   type ResumeWaveMeta,
-} from "./oc-resume.js";
-import { armResumeAckWave, pollResumeAcks } from "./oc-resume-ack.js";
+} from "./connectivity/oc-resume.js";
+import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
 import {
   armCcLimitRetryCheckback,
   paneSessionFingerprint,
   parseCcLimitRetryAtMs,
-} from "./cc-limit-retry.js";
+} from "./connectivity/cc-limit-retry.js";
 import {
   drainPaneOpsOnce,
   enqueuePaneOp,
   queueAheadCount,
   type PaneOpsDrainCtx,
-} from "./pane-ops-drain.js";
+} from "./inbox/pane-ops-drain.js";
 import type { NotifyActRegisterAction, PaneOpKind } from "@seat-mesh/core";
 import {
   createNotifyActRegistry,
   executeNotifyAct,
   htmlActPage,
-} from "./notify-act.js";
-import { htmlDemoYesNoPage, htmlUiHome } from "./notify-act-ui.js";
+} from "./notify/notify-act.js";
+import { htmlDemoYesNoPage, htmlUiHome } from "./notify/notify-act-ui.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -460,11 +460,11 @@ async function main(): Promise<void> {
 
       if (req.method === "POST" && url.pathname === "/to-peer") {
         const raw = await readBody(req);
-        const body = JSON.parse(raw || "{}") as Partial<import("./jsonl-store.js").PeerRow>;
+        const body = JSON.parse(raw || "{}") as Partial<import("./store/jsonl-store.js").PeerRow>;
         const msg = String(body.msg ?? "").trim();
         const targetPane = String(body.targetPane ?? "").trim();
         const kindRaw = String(body.kind ?? "to-slot");
-        const kind: import("./jsonl-store.js").PeerKind =
+        const kind: import("./store/jsonl-store.js").PeerKind =
           kindRaw === "to-mini" ||
           kindRaw === "prompt" ||
           kindRaw === "remind" ||
@@ -480,7 +480,7 @@ async function main(): Promise<void> {
           log(`TO-PEER dedupe ${kind} -> ${dup.targetLabel} id=${dup.id.slice(0, 8)}`);
           return json(res, 200, { ok: true, entry: dup, deduped: true });
         }
-        const row: import("./jsonl-store.js").PeerRow = {
+        const row: import("./store/jsonl-store.js").PeerRow = {
           id: crypto.randomUUID(),
           at: now,
           kind,
@@ -513,7 +513,7 @@ async function main(): Promise<void> {
         const defaultMsg = String(body.msg ?? "").trim();
         const exclude = String(body.excludePane ?? "").trim();
         const now = new Date().toISOString();
-        const rows: import("./jsonl-store.js").PeerRow[] = [];
+        const rows: import("./store/jsonl-store.js").PeerRow[] = [];
         for (const t of body.targets ?? []) {
           const targetPane = String(t.targetPane ?? "").trim();
           const rowMsg = String(t.msg ?? defaultMsg).trim();

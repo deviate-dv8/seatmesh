@@ -115,16 +115,16 @@ import {
   balanceLeadCommand,
 } from "@seat-mesh/tmux";
 import { parseAgentApplyArgs } from "@seat-mesh/core";
-import { buildChatCommands } from "./chat-cli.js";
-import { buildCheckbackCommands } from "./checkback-cli.js";
-import { buildNotifyCommand } from "./notify-cli.js";
-import { buildPreviewCommand } from "./preview-cli.js";
-import { buildContractLockCommands } from "./contract-lock-cli.js";
-import { buildRoomCommands } from "./room-cli.js";
-import { runInit } from "./init.js";
-import { runAgentContextInit } from "./agent-context-init.js";
-import { runSeatCommand } from "./seat-cli.js";
-import { coordCommand } from "./coord-cli.js";
+import { buildChatCommands } from "./commands/chat-cli.js";
+import { buildCheckbackCommands } from "./commands/checkback-cli.js";
+import { buildNotifyCommand } from "./commands/notify-cli.js";
+import { buildPreviewCommand } from "./commands/preview-cli.js";
+import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
+import { buildRoomCommands } from "./commands/room-cli.js";
+import { runInit } from "./setup/init.js";
+import { runAgentContextInit } from "./setup/agent-context-init.js";
+import { runSeatCommand } from "./commands/seat-cli.js";
+import { coordCommand } from "./commands/coord-cli.js";
 
 function parseArgs(argv: string[]) {
   const profileFlag: string[] = [];
@@ -207,7 +207,7 @@ Coordination / comms (pane to pane)
 }
 
 async function main(): Promise<void> {
-  const { maybePrintVersionNudge } = await import("./version-nudge.js");
+  const { maybePrintVersionNudge } = await import("./ui/version-nudge.js");
   maybePrintVersionNudge();
 
   const { profile: profileArg, rest } = parseArgs(process.argv.slice(2));
@@ -216,12 +216,12 @@ async function main(): Promise<void> {
   if (!cmd || (cmd.startsWith("-") && cmd !== "-h" && cmd !== "--help")) {
     const json = rest.includes("--json");
     if (!profileArg && !findDotSmConfig()) {
-      const { printDiscoveryReport } = await import("./discovery-report.js");
+      const { printDiscoveryReport } = await import("./report/discovery-report.js");
       const report = await printDiscoveryReport({ json });
       process.exit(report.ok ? 0 : 1);
     }
     const loaded = meshLoaded(profileArg);
-    const { printStatusReport } = await import("./status-report.js");
+    const { printStatusReport } = await import("./report/status-report.js");
     const verbose = rest.includes("--verbose") || rest.includes("-v");
     const report = await printStatusReport(loaded, { json, verbose });
     process.exit(report.ok ? 0 : 1);
@@ -237,7 +237,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "update") {
-    const { runUpdate } = await import("./update.js");
+    const { runUpdate } = await import("./setup/update.js");
     const dryRun = rest.includes("--dry-run");
     const migrate = rest.includes("--migrate");
     const r = runUpdate({ profileArg, dryRun, migrate });
@@ -253,7 +253,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "migrate-runtime") {
-    const { runMigrateRuntime } = await import("./migrate-runtime.js");
+    const { runMigrateRuntime } = await import("./setup/migrate-runtime.js");
     const dryRun = rest.includes("--dry-run");
     const noSeats = rest.includes("--no-seats");
     const r = runMigrateRuntime({ profileArg, dryRun, seats: !noSeats });
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "sessions") {
-    const { runSessionsCommand } = await import("./sessions-cli.js");
+    const { runSessionsCommand } = await import("./commands/sessions-cli.js");
     process.exit(await runSessionsCommand(sub, tail, profileArg));
   }
 
@@ -662,9 +662,11 @@ async function main(): Promise<void> {
           manager: true,
           armCheckback: !coord,
         });
-        console.log(
-          `SENT: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`,
-        );
+        const line =
+          via === "queued"
+            ? `QUEUED: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"} (inbox inject when idle)`
+            : `SENT: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`;
+        console.log(line);
       }
     } catch (e) {
       console.error((e as Error).message);
@@ -1183,7 +1185,7 @@ async function main(): Promise<void> {
 
   if (cmd === "report") {
     const loaded = meshLoaded(profileArg);
-    const { printStatusReport } = await import("./status-report.js");
+    const { printStatusReport } = await import("./report/status-report.js");
     const report = await printStatusReport(loaded, {
       json: rest.includes("--json"),
       verbose: rest.includes("--verbose") || rest.includes("-v"),

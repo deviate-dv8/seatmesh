@@ -9,7 +9,7 @@ export interface PromptSentProof {
   ok: boolean;
   token: string;
   paneId: string;
-  via?: "pane-row" | "scrollback";
+  via?: "pane-row" | "scrollback" | "queued";
   last?: string;
 }
 
@@ -110,12 +110,21 @@ export function waitPromptSent(
     }
     const row = findPeerRow(loaded, opts);
     if (row) {
-      if (row.deliverPane === "backlog" || row.deliverPane === "skipped") {
+      if (row.deliverPane === "backlog") {
+        return {
+          ok: true,
+          token: opts.token,
+          paneId: opts.paneId,
+          via: "queued",
+          last: row.holdReason ?? "held until pane idle",
+        };
+      }
+      if (row.deliverPane === "skipped") {
         return {
           ok: false,
           token: opts.token,
           paneId: opts.paneId,
-          last: `${row.deliverPane}${row.holdReason ? ` ${row.holdReason}` : ""}`,
+          last: "skipped",
         };
       }
       if (peerRowSentProof(row, opts.paneId)) {
@@ -129,6 +138,9 @@ export function waitPromptSent(
 }
 
 export function formatPromptSent(label: string, proof: PromptSentProof): string {
+  if (proof.ok && proof.via === "queued") {
+    return `QUEUED: ${label} pane=${proof.paneId} token=${proof.token} — inbox will inject when idle (${proof.last ?? "backlog"})`;
+  }
   if (proof.ok) {
     return `SENT: ${label} pane=${proof.paneId} token=${proof.token} via=${proof.via}`;
   }

@@ -161,7 +161,7 @@ export function enqueuePrompt(
     );
   }
 
-  if (opts.armCheckback !== false) {
+  if (opts.armCheckback !== false && proof.via !== "queued") {
     armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
   }
 
