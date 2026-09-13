@@ -29,3 +29,4 @@ export * from "./contracts/index.js";
 export * from "./global-registry.js";
 export * from "./messages/mesh-copy.js";
 export * from "./messages/mesh-inbox-intent.js";
+export * from "./messages/cli-hints.js";

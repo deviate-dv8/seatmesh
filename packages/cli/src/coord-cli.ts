@@ -1,9 +1,5 @@
-import type { LoadedProfile } from "@seat-mesh/core";
-import {
-  armCoordExpectAfterAssign,
-  formatCoordExpect,
-  type ProviderRegistry,
-} from "@seat-mesh/tmux";
+import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { armCoordExpectAfterAssign, formatCoordExpect } from "@seat-mesh/tmux";
 
 export function coordCommand(
   loaded: LoadedProfile,

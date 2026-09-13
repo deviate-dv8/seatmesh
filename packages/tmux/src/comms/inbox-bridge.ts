@@ -5,6 +5,8 @@ import {
   meshRuntimePaths,
   resolveDaemonPort,
   resolveDaemonScript,
+  seatmeshInboxDown,
+  seatmeshInboxRestart,
   type LoadedProfile,
 } from "@seat-mesh/core";
 import { armAfterPeer } from "./chat-checkback.js";
@@ -81,6 +83,26 @@ export function inboxHealth(port: number): Record<string, unknown> | null {
   } catch {
     return { raw: r.stdout.trim() };
   }
+}
+
+export type InboxProbe = "healthy" | "down" | "wedged";
+
+function tcpPortListening(port: number): boolean {
+  const r = spawnSync("ss", ["-ltn", `sport = :${port}`], { encoding: "utf8" });
+  return r.status === 0 && r.stdout.includes(`:${port}`);
+}
+
+/** healthy = daemon JSON; wedged = port open but /health hung (must fuser-kill). */
+export function probeInbox(port: number): InboxProbe {
+  const h = inboxHealth(port);
+  if (h?.engine === "@seat-mesh/daemon") return "healthy";
+  if (tcpPortListening(port)) return "wedged";
+  return "down";
+}
+
+export function killWedgedInboxListener(port: number): void {
+  spawnSync("fuser", ["-k", `${port}/tcp`], { stdio: "ignore" });
+  spawnSync("sleep", ["0.4"]);
 }
 
 export interface InboxStartOptions {
@@ -192,9 +214,14 @@ function inboxHttpPost(port: number, path: string, body: Record<string, unknown>
 }
 
 function requireInboxUp(loaded: LoadedProfile): number | null {
-  if (ensureMeshInbox(loaded, { quiet: true })) return meshInboxPort(loaded);
   const port = meshInboxPort(loaded);
-  console.error(`inbox down on :${port} — run: ./sm.sh inbox restart`);
+  const probe = probeInbox(port);
+  if (probe === "wedged") {
+    killWedgedInboxListener(port);
+    startMeshInbox(loaded, { quiet: true });
+  }
+  if (ensureMeshInbox(loaded, { quiet: true })) return port;
+  console.error(seatmeshInboxDown(port));
   return null;
 }
 
@@ -328,6 +355,9 @@ export function ensureMeshInbox(
 ): boolean {
   if (!autoStartEnabled(loaded)) return false;
   const port = meshInboxPort(loaded);
+  if (probeInbox(port) === "wedged") {
+    killWedgedInboxListener(port);
+  }
   const existing = inboxHealth(port);
   if (existing?.engine === "@seat-mesh/daemon") return true;
 
@@ -457,8 +487,9 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
   }
 
   for (let i = 0; i < 24; i++) {
-    if (!inboxHealth(port)) break;
-    if (i === 6 || i === 14) {
+    const probe = probeInbox(port);
+    if (probe === "down") break;
+    if (probe === "wedged" || i === 6 || i === 14) {
       if (pidAlive(meta?.supervisorPid)) {
         spawnSync("kill", ["-KILL", String(meta!.supervisorPid!)], { stdio: "ignore" });
       }
@@ -469,8 +500,8 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
     }
     spawnSync("sleep", ["0.25"]);
   }
-  if (inboxHealth(port)) {
-    console.log(`WARN: mesh-inbox still answering /health — killing listener on :${port}`);
+  if (probeInbox(port) !== "down") {
+    console.log(`WARN: inbox wedged on :${port} — killing listener (${seatmeshInboxRestart()})`);
     killPortListener(port);
     spawnSync("sleep", ["0.5"]);
   }
@@ -484,9 +515,14 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
 }
 
 export function restartMeshInbox(loaded: LoadedProfile): void {
+  const port = meshInboxPort(loaded);
+  if (probeInbox(port) === "wedged") {
+    killWedgedInboxListener(port);
+  }
   stopMeshInbox(loaded);
   for (let i = 0; i < 16; i++) {
-    if (!inboxHealth(meshInboxPort(loaded))) break;
+    if (probeInbox(port) === "down") break;
+    killWedgedInboxListener(port);
     spawnSync("sleep", ["0.2"]);
   }
   startMeshInbox(loaded);

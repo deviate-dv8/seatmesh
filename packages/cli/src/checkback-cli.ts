@@ -23,7 +23,7 @@ function requireMeshInbox(loaded: LoadedProfile): void {
   if (ensureMeshInbox(loaded, { quiet: true })) return;
   const port = meshInboxPort(loaded);
   console.error(
-    `FAIL: mesh inbox down on :${port} (auto-start failed) — run: ./sm.sh inbox restart`,
+    `FAIL: mesh inbox down on :${port} (auto-start failed) — run: seatmesh inbox restart`,
   );
   process.exit(1);
 }

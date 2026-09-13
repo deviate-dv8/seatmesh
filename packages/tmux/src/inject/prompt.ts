@@ -5,6 +5,7 @@ import {
   peerTargetForComms,
   portsForSlot,
   resolveAgentId,
+  seatmeshInboxRestart,
 } from "@seat-mesh/core";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
@@ -146,7 +147,7 @@ export function enqueuePrompt(
     fromSlot: "manager",
   });
   if (!resp?.ok) {
-    throw new Error("FAIL: prompt enqueue (inbox down?) — run: ./sm.sh inbox restart");
+    throw new Error(`FAIL: prompt enqueue (inbox down?) — run: ${seatmeshInboxRestart()}`);
   }
   const entry = resp.entry as { id?: string } | undefined;
   const proof = waitPromptSent(loaded, {
