@@ -6,7 +6,7 @@ vi.mock("./whoami.js", () => ({
 }));
 
 import { runWhoami } from "./whoami.js";
-import { requireCoordRole, requireRole } from "./authz-guard.js";
+import { requireCoordRole, requireInboxLifecycleRole, requireRole } from "./authz-guard.js";
 
 const loaded = {} as LoadedProfile;
 
@@ -64,5 +64,30 @@ describe("requireRole / requireCoordRole", () => {
     expect(errors[0]).toContain("manager");
     expect(errors[0]).toContain("secretary");
     expect(errors[0]).toContain("you_are=worker");
+  });
+
+  it("requireInboxLifecycleRole allows manager+secretary, denies manager-2", () => {
+    const prev = process.env.TMUX_PANE;
+    process.env.TMUX_PANE = "%1";
+    try {
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "manager" });
+      expect(() => requireInboxLifecycleRole(loaded, "inbox restart")).not.toThrow();
+
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "secretary" });
+      expect(() => requireInboxLifecycleRole(loaded, "inbox restart")).not.toThrow();
+
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "manager-2" });
+      const { errors } = stubExit();
+      expect(() => requireInboxLifecycleRole(loaded, "inbox restart")).toThrow("__exit__");
+      expect(errors[0]).toContain("UNAUTHORIZED: inbox restart");
+      expect(errors[0]).toContain("you_are=manager-2");
+      expect(errors[1]).toContain("ask manager or secretary");
+    } finally {
+      if (prev === undefined) delete process.env.TMUX_PANE;
+      else process.env.TMUX_PANE = prev;
+    }
   });
 });

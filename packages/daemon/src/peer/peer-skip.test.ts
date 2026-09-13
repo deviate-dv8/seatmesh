@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { PeerRow } from "../store/jsonl-store.js";
-import { shouldSkipGlobalWorkerRoomPing, shouldSkipManagerStatusRoomPing } from "./peer-skip.js";
+import {
+  isThinRoomUnseenPing,
+  shouldSkipGlobalWorkerRoomPing,
+  shouldSkipManagerStatusRoomPing,
+} from "./peer-skip.js";
 
 const base: PeerRow = {
   id: "x",
@@ -15,6 +19,22 @@ const base: PeerRow = {
   msg: "slot-1 3010/3011 | [mesh-inbox-room] global | worker-6 | fyi 18 unseen\nVerify: ./sm.sh room tail -n 15",
   sent: false,
 };
+
+describe("isThinRoomUnseenPing", () => {
+  it("true for mesh-inbox-room N unseen", () => {
+    expect(isThinRoomUnseenPing(base)).toBe(true);
+  });
+
+  it("false for non-room or no unseen", () => {
+    expect(isThinRoomUnseenPing({ ...base, kind: "prompt" })).toBe(false);
+    expect(
+      isThinRoomUnseenPing({
+        ...base,
+        msg: "[mesh-inbox-room] managers | manager-2 | done\nDONE: 5.6",
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("shouldSkipGlobalWorkerRoomPing", () => {
   it("skips global thin fyi to worker slot", () => {

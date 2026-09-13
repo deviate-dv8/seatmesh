@@ -111,9 +111,9 @@ function commsOneLiner(role: string, mini: string | null, workerCount: number): 
     return "comms: room broadcast|say | to-master digest | secretary collect --nudge";
   }
   if (role === "manager-mini" || mini) {
-    return `comms: room say [--room supervise] | mini done ${mini ?? "N"} | mini peer (dev harness)`;
+    return `comms: room say [--room supervise] | mini done ${mini ?? "N"} | peer <slot-N|mini-N|manager>`;
   }
-  return `comms: room call|say|accept (checkback default) | to-slot 1-${workerCount} | room read marks seen | to-master PROVED|DONE only`;
+  return `comms: room call|say|accept (checkback default) | peer slot-N|mini-N | to-slot 1-${workerCount} | room read marks seen | to-master PROVED|DONE only`;
 }
 
 /** Extra whoami lines: agent id, rooms, checkbacks, mini task, inbox, comms. */

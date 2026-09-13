@@ -54,6 +54,9 @@ export interface PeerRow {
   sentAt?: string;
   deliverPane?: string;
   deliverMode?: "idle" | "steer";
+  /** Set on first successful pane paste — survives backlog park; never re-inject. */
+  injectedPane?: string;
+  injectedAt?: string;
 }
 
 /** Delivered = inject succeeded AND proof fields stamped (not hand-set sent:true). */
@@ -62,10 +65,20 @@ export function isInboxDelivered(row: ToMasterRow): boolean {
 }
 
 export function isPeerDelivered(row: PeerRow): boolean {
+  // Already pasted once — terminal even if later parked in backlog.
+  if (row.injectedPane || row.injectedAt) return true;
   const dp = row.deliverPane;
-  // Parked in backlog/skipped — not injected yet (daemon will promote when idle).
-  if (dp === "backlog" || dp === "skipped") return false;
+  // Terminal — do not re-drain (was causing PROVED/ACK inject loops).
+  if (dp === "skipped") return true;
+  // Parked in backlog — promotePeerBacklog may re-queue when idle.
+  if (dp === "backlog") return false;
   return row.sent === true && Boolean(row.sentAt) && Boolean(row.deliverPane);
+}
+
+/** Mesh peer footer token — used to drop duplicate re-injects of the same outbound. */
+export function peerSentToken(msg: string): string | null {
+  const m = msg.match(/\[sent:([a-z0-9]+)\]/i);
+  return m?.[1] ?? null;
 }
 
 export type QueueStore = JsonlStore;

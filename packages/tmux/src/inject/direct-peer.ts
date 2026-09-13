@@ -1,5 +1,5 @@
 import type { ComposerState, ProviderRegistry } from "@seat-mesh/core";
-import { formatToSlotReplyCmd } from "@seat-mesh/core";
+import { formatPeerReplyCmd } from "@seat-mesh/core";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { injectToPane } from "./inject.js";
 import { resolvePaneTarget, type ResolvePaneContext } from "../lib/resolve-pane.js";
@@ -76,7 +76,7 @@ export function harnessToSlotMessage(
   report: string,
 ): string {
   const text = report.trim();
-  return `[agent-worker-slot-${fromSlot}] TO-SLOT-${destSlot} (${fromPorts}): ${text} — reply ${formatToSlotReplyCmd(fromSlot)}`;
+  return `[agent-worker-slot-${fromSlot}] TO-SLOT-${destSlot} (${fromPorts}): ${text} — reply ${formatPeerReplyCmd(`slot-${fromSlot}`)}`;
 }
 
 export function harnessRoomMentionMessage(

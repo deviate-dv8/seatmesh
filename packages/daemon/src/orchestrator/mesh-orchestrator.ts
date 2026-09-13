@@ -71,6 +71,7 @@ import {
   shouldSkipDuplicateColdStartResummon,
   shouldSkipGlobalWorkerRoomPing,
   shouldSkipManagerStatusRoomPing,
+  isThinRoomUnseenPing,
 } from "../peer/peer-skip.js";
 import { deliveryHoldForPane } from "../inbox/delivery-hold.js";
 import { refreshPeerTargetPane } from "../peer/peer-target-resolve.js";
@@ -294,6 +295,13 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
     const isColdStart = row.fromSlot === "mesh-cold-start";
     const gate = gateDelivery(ctx, row.targetPane, { isColdStart });
     if (gate.blocked) {
+      if (isThinRoomUnseenPing(row)) {
+        markPeerRowSkipped(ctx.store, row);
+        ctx.log(
+          `PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=thin-room-busy:${gate.reason}`,
+        );
+        continue;
+      }
       ctx.log(`PEER held id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=${gate.reason}`);
       held++;
       continue;
@@ -335,6 +343,13 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
         continue;
       }
       if (shouldBacklogPeerHold(result.reason, row.msg)) {
+        if (isThinRoomUnseenPing(row)) {
+          markPeerRowSkipped(ctx.store, row);
+          ctx.log(
+            `PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=thin-room-no-backlog:${result.reason}`,
+          );
+          continue;
+        }
         parkPeerToBacklog(ctx.store, row, result.reason, ctx.log);
         continue;
       }
@@ -345,10 +360,13 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
     const rows = ctx.store.readPeer();
     const i = rows.findIndex((r) => r.id === row.id);
     if (i >= 0) {
+      const at = new Date().toISOString();
       rows[i]!.sent = true;
-      rows[i]!.sentAt = new Date().toISOString();
+      rows[i]!.sentAt = at;
       rows[i]!.deliverPane = row.targetPane;
       rows[i]!.deliverMode = result.mode;
+      rows[i]!.injectedPane = row.targetPane;
+      rows[i]!.injectedAt = at;
       ctx.store.writePeer(rows);
     }
     const from =

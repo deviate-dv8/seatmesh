@@ -1,5 +1,5 @@
 import type { LoadedProfile } from "@seat-mesh/core";
-import { formatToSlotReplyCmd, portsForSlot } from "@seat-mesh/core";
+import { formatPeerReplyCmd, isCoordKind, portsForSlot } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import { enqueuePeer } from "./inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
@@ -8,6 +8,7 @@ import {
   harnessToSlotMessage,
   tryDirectPeerInject,
 } from "../inject/direct-peer.js";
+import { enqueuePrompt } from "../inject/prompt.js";
 import { armAfterToSlot, armRecipientRoomPing, armRecipientToSlot } from "./chat-checkback.js";
 
 function requireWorkerSender(loaded: LoadedProfile): {
@@ -19,7 +20,7 @@ function requireWorkerSender(loaded: LoadedProfile): {
   }
   const who = runWhoami(loaded, "here");
   if (who.role === "manager" || who.role === "secretary" || who.role === "manager-mini") {
-    throw new Error(`refused: ${who.role} cannot use peer send (use prompt / mini peer)`);
+    throw new Error(`refused: ${who.role} cannot use to-slot/to-mini (use: peer <target>)`);
   }
   if (who.role !== "worker" || who.slot == null) {
     throw new Error(`refused: @mesh_role is '${who.role}' (want worker)`);
@@ -34,7 +35,8 @@ function requireWorkerSender(loaded: LoadedProfile): {
 
 function formatToMiniMsg(fromSlot: string, fromPorts: string, miniId: string, report: string): string {
   const text = report.trim();
-  return `[agent-worker-slot-${fromSlot}] TO-MINI-${miniId} (${fromPorts}): ${text} — reply ${formatToSlotReplyCmd(fromSlot)}`;
+  // Seamless mesh: one reply cmd for every role (minis cannot run to-slot).
+  return `[agent-worker-slot-${fromSlot}] TO-MINI-${miniId} (${fromPorts}): ${text} — reply ${formatPeerReplyCmd(`slot-${fromSlot}`)}`;
 }
 
 function deliverPeer(
@@ -65,9 +67,99 @@ function deliverPeer(
     msg,
   });
   if (!resp?.ok) {
-    throw new Error("FAIL: peer enqueue (inbox down?) — run: ./sm.sh inbox restart");
+    throw new Error(
+      "FAIL: peer enqueue (inbox down?) — ask manager or secretary: seatmesh inbox restart",
+    );
   }
   console.log(`queued -> ${targetLabel} from slot-${enqueue.fromSlot} (${direct.reason})`);
+}
+
+/**
+ * Universal peer — workers, minis, and coords all use `peer <target>`.
+ * Workers still may call to-slot / to-mini; those stay as thin aliases.
+ * Coord `--direct` stays in the CLI (injectPromptDirect).
+ */
+export function runPeer(
+  loaded: LoadedProfile,
+  targetRaw: string,
+  report: string,
+): { via: string; paneId?: string; targetLabel: string; token?: string } {
+  const text = report.trim();
+  if (!targetRaw?.trim() || !text) {
+    throw new Error(
+      'usage: peer <manager|secretary|slot-N|mini-N|pane> <msg...>',
+    );
+  }
+  if (!process.env.TMUX_PANE) {
+    throw new Error("refused: run peer from a live mesh pane");
+  }
+
+  const who = runWhoami(loaded, "here");
+  const target = targetRaw.trim();
+  const kinds = loaded.profile.layout?.base.kinds;
+
+  if (who.role === "worker" && who.slot != null) {
+    const slotDest = target.match(/^slot-([1-9])$/i)?.[1];
+    if (slotDest) {
+      runToSlot(loaded, slotDest, text);
+      return { via: "to-slot", targetLabel: `slot-${slotDest}` };
+    }
+    const miniDest = target.match(/^(?:mini|manager-mini)-([1-9]\d*)$/i)?.[1];
+    if (miniDest) {
+      runToMini(loaded, miniDest, text);
+      return { via: "to-mini", targetLabel: `mini-${miniDest}` };
+    }
+    // worker -> manager/secretary/coord
+    const sent = enqueuePrompt(loaded, target, text, {
+      manager: false,
+      prefix: "",
+      armCheckback: true,
+    });
+    console.log(
+      `QUEUED: peer -> ${sent.targetLabel} pane=${sent.paneId} token=${sent.token ?? "-"} (inbox inject when idle)`,
+    );
+    return {
+      via: sent.via ?? "queued",
+      paneId: sent.paneId,
+      targetLabel: sent.targetLabel,
+      token: sent.token,
+    };
+  }
+
+  if (who.role === "manager-mini") {
+    const selfMini =
+      who.slotLabel?.replace(/^(?:mini|manager-mini)-/i, "") ||
+      (who.ports?.match(/mini-(\d+)/i)?.[1] ?? "");
+    const destMini = target.match(/^(?:mini|manager-mini)-([1-9]\d*)$/i)?.[1];
+    if (destMini && selfMini && destMini === selfMini) {
+      throw new Error(`refused: cannot peer yourself (mini-${selfMini})`);
+    }
+    const sent = enqueuePrompt(loaded, target, text, {
+      manager: false,
+      prefix: "",
+      armCheckback: true,
+    });
+    const line =
+      sent.via === "queued"
+        ? `QUEUED: peer -> ${sent.targetLabel} pane=${sent.paneId} token=${sent.token ?? "-"} (inbox inject when idle)`
+        : `SENT: peer -> ${sent.targetLabel} pane=${sent.paneId} token=${sent.token ?? "-"} via=${sent.via ?? "pane-row"}`;
+    console.log(line);
+    return {
+      via: sent.via ?? "queued",
+      paneId: sent.paneId,
+      targetLabel: sent.targetLabel,
+      token: sent.token,
+    };
+  }
+
+  if (!isCoordKind(who.role, kinds)) {
+    throw new Error(
+      `refused: peer requires worker|manager-mini|manager|secretary (you_are=${who.role})`,
+    );
+  }
+
+  // Coord path stays in CLI (manager prefix / --direct).
+  throw new Error("__peer_coord__");
 }
 
 /** Direct PM when idle (harness to-slot); queue when busy. */

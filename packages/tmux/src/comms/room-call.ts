@@ -78,7 +78,7 @@ function enqueueThinPeer(
     msg: opts.msg,
   });
   if (!resp?.ok) {
-    throw new Error("FAIL: peer enqueue (inbox down?) — run: ./sm.sh inbox restart");
+    throw new Error("FAIL: peer enqueue (inbox down?) — ask manager|secretary: seatmesh inbox restart");
   }
 }
 

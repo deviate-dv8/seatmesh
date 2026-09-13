@@ -130,20 +130,33 @@ export function waitPromptSent(
       if (peerRowSentProof(row, opts.paneId)) {
         return { ok: true, token: opts.token, paneId: opts.paneId, via: "pane-row" };
       }
-      // Row exists, not skipped, not yet injected (settle/busy hold) — that IS the queue.
-      // Do not wait out the full timeout then FAIL; inbox purpose is durable wait.
-      if (Date.now() - start >= 1500) {
-        return {
-          ok: true,
-          token: opts.token,
-          paneId: opts.paneId,
-          via: "queued",
-          last: `pending deliverPane=${row.deliverPane ?? "-"}`,
-        };
-      }
-      last = `queued deliverPane=${row.deliverPane ?? "-"}`;
+      // Still attempting inject (settle / follow-up steer). Keep waiting for
+      // scrollback or pane-row proof — do not declare QUEUED at 1.5s or lead
+      // peers always print QUEUED-only while daemon injects a few seconds later.
+      last = `pending deliverPane=${row.deliverPane ?? "-"}`;
     }
     sleepMs(250);
+  }
+  // Timeout: durable queue is success (not FAIL). Prefer QUEUED only when we
+  // never saw inject proof — caller prints QUEUED vs SENT from via.
+  const row = findPeerRow(loaded, opts);
+  if (row?.deliverPane === "backlog") {
+    return {
+      ok: true,
+      token: opts.token,
+      paneId: opts.paneId,
+      via: "queued",
+      last: row.holdReason ?? "held until pane idle",
+    };
+  }
+  if (row && !peerRowSentProof(row, opts.paneId)) {
+    return {
+      ok: true,
+      token: opts.token,
+      paneId: opts.paneId,
+      via: "queued",
+      last: last || `pending deliverPane=${row.deliverPane ?? "-"}`,
+    };
   }
   return { ok: false, token: opts.token, paneId: opts.paneId, last };
 }

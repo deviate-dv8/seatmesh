@@ -33,6 +33,17 @@ export function shouldSkipManagerStatusRoomPing(row: PeerRow): boolean {
   return isSuperviseStatusBroadcast(undefined, row.msg ?? "");
 }
 
+/**
+ * Thin "[mesh-inbox-room] … N unseen" ledger pings — never backlog/hold while busy.
+ * Ledger is source of truth; stuck UNSENT promote loops flood panes and PEER-BACKLOG.
+ */
+export function isThinRoomUnseenPing(row: PeerRow): boolean {
+  if (row.kind !== "room") return false;
+  const msg = row.msg ?? "";
+  if (!/\[mesh-inbox-room\]/.test(msg)) return false;
+  return /\b\d+\s+unseen\b/i.test(msg);
+}
+
 export function markPeerRowSkipped(
   store: { readPeer: () => PeerRow[]; writePeer: (rows: PeerRow[]) => void },
   row: PeerRow,

@@ -30,6 +30,7 @@ import {
   runWhoami,
   roleKindFromWhoami,
   requireCoordRole,
+  requireInboxLifecycleRole,
   capturePaneSnapshot,
   listSessionPanes,
   sessionAttach,
@@ -97,6 +98,7 @@ import {
   runPpa,
   runToSlot,
   runToMini,
+  runPeer,
   applyMeshState,
   saveMeshSession,
   saveMeshSessionDetailed,
@@ -507,14 +509,17 @@ async function main(): Promise<void> {
     const json = flags.json || rest.includes("--json");
 
     if (sub === "stop") {
+      requireInboxLifecycleRole(loaded, "inbox stop");
       stopMeshInbox(loaded);
       return;
     }
     if (sub === "restart") {
+      requireInboxLifecycleRole(loaded, "inbox restart");
       restartMeshInbox(loaded);
       return;
     }
     if (sub === "start") {
+      requireInboxLifecycleRole(loaded, "inbox start");
       startMeshInbox(loaded);
       return;
     }
@@ -620,7 +625,6 @@ async function main(): Promise<void> {
 
   if (cmd === "peer") {
     const loaded = meshLoaded(profileArg);
-    requireCoordRole(loaded, "peer");
     let direct = false;
     const args: string[] = [];
     for (const a of [sub, ...tail].filter((x): x is string => x != null && x !== "")) {
@@ -628,6 +632,7 @@ async function main(): Promise<void> {
       else args.push(a);
     }
     if (args[0] === "verify") {
+      requireCoordRole(loaded, "peer verify");
       const mgrs = managerColumnIds(loaded.profile.layout);
       const target = args[1] ?? mgrs[1] ?? mgrs[0] ?? "manager";
       const reg = createRegistryForProfile(loaded.profile);
@@ -644,6 +649,14 @@ async function main(): Promise<void> {
       process.exit(2);
     }
     try {
+      // Workers + minis: universal peer (to-slot/to-mini/enqueue). Coords keep manager stamp.
+      try {
+        runPeer(loaded, target, rawMsg);
+        return;
+      } catch (e) {
+        if ((e as Error).message !== "__peer_coord__") throw e;
+      }
+      requireCoordRole(loaded, "peer");
       if (direct) {
         const reg = createRegistryForProfile(loaded.profile);
         const { paneId, providerId, token, via } = injectPromptDirect(

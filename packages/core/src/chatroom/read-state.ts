@@ -8,6 +8,9 @@ import { RoomMessageSchema } from "./types.js";
 export interface AgentReadCursor {
   lastReadId?: string;
   lastReadTs?: string;
+  /** Last thin room-ping unseen count (dedupe flood when unread pile does not grow). */
+  lastThinNotifyUnseen?: number;
+  lastThinNotifyAt?: string;
 }
 
 export type RoomReadState = Record<string, AgentReadCursor>;
@@ -115,4 +118,48 @@ export function unseenSummaryForAgent(
   const messages = listRoomMessages(workspace, cfg, slug);
   const state = loadRoomReadState(dir);
   return countUnseenMessages(messages, agentId, state[agentId]);
+}
+
+const THIN_NOTIFY_MIN_MS = 5 * 60 * 1000;
+
+/**
+ * Skip thin room pings on a per-agent cooldown.
+ * Do NOT key off unseen growth — busy rooms grow unseen on every FYI and that
+ * made the old "skip when unseen not grown" check never fire (UNSENT flood).
+ */
+export function shouldSkipThinRoomNotify(
+  workspace: string,
+  cfg: ChatRoomConfig,
+  slug: string,
+  agentId: string,
+  unseen: number,
+  nowMs: number = Date.now(),
+): boolean {
+  if (unseen <= 0) return true;
+  const dir = roomDir(workspace, cfg, slug);
+  const state = loadRoomReadState(dir);
+  const cur = state[agentId];
+  if (!cur?.lastThinNotifyAt) return false;
+  const age = nowMs - Date.parse(cur.lastThinNotifyAt);
+  if (!Number.isFinite(age) || age < 0) return false;
+  return age < THIN_NOTIFY_MIN_MS;
+}
+
+export function recordThinRoomNotify(
+  workspace: string,
+  cfg: ChatRoomConfig,
+  slug: string,
+  agentId: string,
+  unseen: number,
+  nowMs: number = Date.now(),
+): void {
+  const dir = roomDir(workspace, cfg, slug);
+  const state = loadRoomReadState(dir);
+  const prev = state[agentId] ?? {};
+  state[agentId] = {
+    ...prev,
+    lastThinNotifyUnseen: unseen,
+    lastThinNotifyAt: new Date(nowMs).toISOString(),
+  };
+  saveRoomReadState(dir, state);
 }

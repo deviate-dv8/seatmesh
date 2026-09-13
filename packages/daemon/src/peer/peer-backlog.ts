@@ -2,7 +2,8 @@ import fs from "node:fs";
 import type { ProviderRegistry } from "@seat-mesh/core";
 import { capturePaneSnapshot, tmux } from "@seat-mesh/tmux";
 import type { QueueStore, PeerRow } from "../store/create-queue-store.js";
-import { isPeerDelivered } from "../store/create-queue-store.js";
+import { isPeerDelivered, peerSentToken } from "../store/create-queue-store.js";
+import { isThinRoomUnseenPing } from "./peer-skip.js";
 
 export interface PeerBacklogRow extends PeerRow {
   status: "backlog";
@@ -21,7 +22,10 @@ export function isAckClassPeer(msg: string): boolean {
     if (next === body) break;
     body = next;
   }
-  return /^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?)\b/i.test(body);
+  // Lead/supervise nudges + ACK-class: safe to follow-up-steer mid-turn.
+  return /^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?|OPEN\b|INBOX\b|VERIFY\b|CONTINUE\b|REPORT\b|MINI-?(DONE|TASK)\b)/i.test(
+    body,
+  );
 }
 
 /** Park inbound while the pane is busy/typing/empty-seat. Only PRIORITY / STOP other work pastes. */
@@ -125,6 +129,29 @@ function reconcileBacklogOrphans(store: QueueStore, log: (line: string) => void)
   return fixed;
 }
 
+/** Drop already-pasted backlog rows (do not revive with sent:false — that re-injects). */
+function finalizeAlreadyInjected(
+  peer: PeerRow[],
+  row: PeerBacklogRow,
+  log: (line: string) => void,
+): void {
+  const pane = row.injectedPane || row.targetPane;
+  const at = row.injectedAt || row.sentAt || new Date().toISOString();
+  const done: PeerRow = {
+    ...row,
+    sent: true,
+    sentAt: at,
+    deliverPane: pane,
+    deliverMode: row.deliverMode ?? "steer",
+    injectedPane: row.injectedPane || pane,
+    injectedAt: row.injectedAt || at,
+  };
+  const existing = peer.findIndex((r) => r.id === row.id);
+  if (existing >= 0) peer[existing] = done;
+  else peer.push(done);
+  log(`PEER backlog drop-already-injected id=${row.id} -> ${row.targetLabel} pane=${pane}`);
+}
+
 /** Re-queue oldest backlog row per idle pane (one promote per pane per tick). */
 export function promotePeerBacklog(
   store: QueueStore,
@@ -136,6 +163,13 @@ export function promotePeerBacklog(
   if (!backlog.length) return 0;
 
   const peer = store.readPeer();
+  const deliveredTokens = new Set(
+    peer
+      .filter((r) => isPeerDelivered(r))
+      .map((r) => peerSentToken(r.msg))
+      .filter((t): t is string => Boolean(t)),
+  );
+
   const byPane = new Map<string, PeerBacklogRow[]>();
   for (const row of backlog) {
     const list = byPane.get(row.targetPane) ?? [];
@@ -144,26 +178,58 @@ export function promotePeerBacklog(
   }
 
   let promoted = 0;
+  let dropped = 0;
   const kept: PeerBacklogRow[] = [];
+  let peerDirty = false;
 
   for (const [, rows] of byPane) {
     rows.sort((a, b) => a.backlogAt.localeCompare(b.backlogAt));
     const paneId = rows[0]!.targetPane;
+
+    // Always strip already-injected / dup-token / thin-room-unseen rows even while pane busy.
+    const still: PeerBacklogRow[] = [];
+    for (const row of rows) {
+      const tok = peerSentToken(row.msg);
+      if (row.injectedPane || row.injectedAt || (tok && deliveredTokens.has(tok))) {
+        finalizeAlreadyInjected(peer, row, log);
+        dropped++;
+        peerDirty = true;
+        if (tok) deliveredTokens.add(tok);
+        continue;
+      }
+      if (isThinRoomUnseenPing(row)) {
+        // Ledger SoT — drop stuck thin "N unseen" backlog (no promote/repark loop).
+        const i = peer.findIndex((r) => r.id === row.id);
+        if (i >= 0) {
+          peer[i]!.sent = true;
+          peer[i]!.sentAt = peer[i]!.sentAt ?? new Date().toISOString();
+          peer[i]!.deliverPane = "skipped";
+          peer[i]!.deliverMode = "idle";
+          peerDirty = true;
+        }
+        log(`PEER backlog drop id=${row.id} -> ${row.targetLabel} reason=thin-room-unseen`);
+        dropped++;
+        continue;
+      }
+      still.push(row);
+    }
+    if (!still.length) continue;
+
     const followUpOnly = cursorFollowUpOpen(paneId, registry);
     if (!paneIdleForPromote(paneId, registry)) {
-      kept.push(...rows);
+      kept.push(...still);
       continue;
     }
     // Follow-up steer: only ACK/FYI — never paste substance mid-turn.
     const eligible = followUpOnly
-      ? rows.filter((r) => isAckClassPeer(r.msg))
-      : rows;
+      ? still.filter((r) => isAckClassPeer(r.msg))
+      : still;
     if (!eligible.length) {
-      kept.push(...rows);
+      kept.push(...still);
       continue;
     }
     const restParked = followUpOnly
-      ? rows.filter((r) => !isAckClassPeer(r.msg))
+      ? still.filter((r) => !isAckClassPeer(r.msg))
       : [];
     const [first, ...restAck] = eligible;
     const revived: PeerRow = {
@@ -178,19 +244,23 @@ export function promotePeerBacklog(
       targetLabel: first.targetLabel,
       msg: first.msg,
       sent: false,
+      // Preserve inject proof if present (should have been dropped above).
+      injectedPane: first.injectedPane,
+      injectedAt: first.injectedAt,
     };
     // Replace parked peer row — never push a second copy of the same id.
     const existing = peer.findIndex((r) => r.id === first.id);
     if (existing >= 0) peer[existing] = revived;
     else peer.push(revived);
     promoted++;
+    peerDirty = true;
     log(`PEER backlog promote id=${first.id} -> ${first.targetLabel}${followUpOnly ? " (ack-follow-up)" : ""}`);
     kept.push(...restAck, ...restParked);
   }
 
-  if (promoted) store.writePeer(peer);
+  if (peerDirty) store.writePeer(peer);
   writeBacklog(store, kept);
-  return promoted;
+  return promoted + dropped;
 }
 
 export function parkPeerToBacklog(
@@ -202,6 +272,19 @@ export function parkPeerToBacklog(
   const peer = store.readPeer();
   const i = peer.findIndex((r) => r.id === row.id);
   if (i < 0) return;
+
+  // If already pasted once, do not re-park — that feeds promote→re-inject storms.
+  if (row.injectedPane || row.injectedAt) {
+    row.sent = true;
+    row.sentAt = row.sentAt ?? row.injectedAt ?? new Date().toISOString();
+    row.deliverPane = row.injectedPane || row.targetPane;
+    peer[i] = row;
+    store.writePeer(peer);
+    const backlog = readBacklog(store).filter((r) => r.id !== row.id);
+    writeBacklog(store, backlog);
+    log(`PEER backlog skip-repark id=${row.id} -> ${row.targetLabel} (already injected)`);
+    return;
+  }
 
   row.sent = true;
   row.sentAt = new Date().toISOString();

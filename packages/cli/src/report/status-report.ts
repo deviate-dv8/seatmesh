@@ -115,7 +115,7 @@ function printInbox(loaded: LoadedProfile): { ok: boolean; health: Record<string
   let ok = Boolean(h && h.engine === "@seat-mesh/daemon");
   if (!ok && probe === "wedged") {
     console.log(`inbox: wedged :${port} (port open, /health hung) session=${loaded.sessionName}`);
-    console.log(`  fix: seatmesh inbox restart --profile ${loaded.profileDir}`);
+    console.log(`  fix: ask manager|secretary: seatmesh inbox restart --profile ${loaded.profileDir}`);
   } else {
     console.log(meshInboxStatusLine(loaded, h));
   }
@@ -137,7 +137,7 @@ function printInbox(loaded: LoadedProfile): { ok: boolean; health: Record<string
       console.log(`  oc_limit_active=${String(h.ocLimitActive)}`);
     }
     if (!ok) {
-      console.log(`  fix: npx seatmesh inbox restart   (or session up / reload)`);
+      console.log(`  fix: ask manager|secretary: npx seatmesh inbox restart   (or session up / reload)`);
     }
   } else {
     const rt = meshRuntimePaths(loaded);

@@ -225,8 +225,9 @@ export function deliverToPane(
     prov.id === "claude" ||
     mode === "steer" ||
     verifyInjectVisible(paneId, message);
+  // Paste already ran — claiming failure re-drains and duplicates in the pane.
   if (!verified) {
-    return { ok: false, reason: "inject_unverified" };
+    return { ok: true, providerId: prov.id, mode, verified: false };
   }
   return { ok: true, providerId: prov.id, mode, verified };
 }

@@ -16,6 +16,8 @@ import {
   resolveFanoutDelivery,
   roomDir,
   unseenSummaryForAgent,
+  shouldSkipThinRoomNotify,
+  recordThinRoomNotify,
 } from "@seat-mesh/core";
 import {
   listMeshMonitorPanes,
@@ -309,6 +311,12 @@ export function fanOutRoomMessage(
     }
 
     const unseen = unseenSummaryForAgent(loaded.workspace, cfg, input.slug, agentId);
+    const thin = !directPm && delivery === "thin";
+    if (thin && shouldSkipThinRoomNotify(loaded.workspace, cfg, input.slug, agentId, unseen)) {
+      skipped++;
+      continue;
+    }
+
     const msg = directPm
       ? formatRoomDirectPm(input.slug, input.from, fromSlot, fromPorts, input.body, ctx)
       : delivery === "rich"
@@ -333,6 +341,9 @@ export function fanOutRoomMessage(
     if (result === "sent") sent++;
     else if (result === "queued") enqueued++;
     else failed++;
+    if (thin && (result === "sent" || result === "queued")) {
+      recordThinRoomNotify(loaded.workspace, cfg, input.slug, agentId, unseen);
+    }
   }
 
   return { sent, enqueued, skipped, failed };

@@ -7,6 +7,7 @@ export type { CheckbackRow, PeerRow, ToMasterRow, PeerKind } from "./jsonl-store
 export {
   isInboxDelivered,
   isPeerDelivered,
+  peerSentToken,
   dedupeJsonlRowsById,
   findDupPeer,
   findDupInbox,

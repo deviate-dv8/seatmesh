@@ -15,6 +15,24 @@ function mockStore(peer: PeerRow[]): QueueStore {
 }
 
 describe("peer-pending", () => {
+  it("isPeerDelivered is true for skipped (terminal — no re-drain)", () => {
+    const row: PeerRow = {
+      id: "s",
+      at: "",
+      kind: "prompt",
+      fromSlot: "x",
+      fromPorts: "-",
+      targetPane: "%1",
+      targetLabel: "manager",
+      msg: "PROVED: ok",
+      sent: true,
+      sentAt: "2026-01-01T00:00:00.000Z",
+      deliverPane: "skipped",
+    };
+    expect(isPeerDelivered(row)).toBe(true);
+    expect(isPeerPendingDelivery(row)).toBe(false);
+  });
+
   it("isPeerDelivered is false for backlog (still queued for inject)", () => {
     const row: PeerRow = {
       id: "1",
