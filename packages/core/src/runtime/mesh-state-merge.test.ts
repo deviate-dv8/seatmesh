@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeMeshAgentsIntoProfile } from "./mesh-state-merge.js";
-import type { MeshProfile } from "./schema/profile.js";
+import type { MeshProfile } from "../schema/profile.js";
 
 const baseProfile = {
   name: "test",

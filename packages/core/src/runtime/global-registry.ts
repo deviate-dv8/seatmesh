@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import lockfile from "proper-lockfile";
-import type { LoadedProfile } from "./profile.js";
-import { profilePaths } from "./profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
+import { profilePaths } from "../profile/profile.js";
 import { SM_DIR } from "./dotdir.js";
 
 export const GLOBAL_REGISTRY_VERSION = 1;

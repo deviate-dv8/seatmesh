@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import YAML from "yaml";
 import type { LoadedProfile } from "./profile.js";
-import { COLUMN_ID_RE } from "./schema/seat-kind.js";
+import { COLUMN_ID_RE } from "../schema/seat-kind.js";
 
 /**
  * Programmatic edits to `mesh.config.yaml`'s `layout.base.columns` (+ the optional

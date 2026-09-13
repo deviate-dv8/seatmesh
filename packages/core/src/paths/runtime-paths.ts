@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { MeshProfile } from "./schema/profile.js";
+import type { MeshProfile } from "../schema/profile.js";
 import { resolveFromWorkspace } from "./paths.js";
 import { buildResolvedPaths, resolveHarnessPath } from "./paths-manifest.js";
-import type { LoadedProfile } from "./profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
 import type { StorageBackend } from "./paths-manifest.js";
 
 /** Outside common dev 3000-3099 (product FE/BE slots, legacy harness). */

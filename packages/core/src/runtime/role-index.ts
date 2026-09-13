@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
-import { seatKindFromId } from "./schema/seat-kind.js";
+import { seatKindFromId } from "../schema/seat-kind.js";
 
 export interface RoleIndexEntry {
   path: string;

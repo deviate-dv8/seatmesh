@@ -8,8 +8,8 @@ import {
   resolveHarnessPath,
   writePathsManifest,
 } from "./paths-manifest.js";
-import type { LoadedProfile } from "./profile.js";
-import type { MeshProfile } from "./schema/profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
+import type { MeshProfile } from "../schema/profile.js";
 
 function stubLoaded(profileDir: string, workspace: string): LoadedProfile {
   const profile = {

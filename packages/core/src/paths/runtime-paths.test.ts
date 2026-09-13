@@ -6,8 +6,8 @@ import {
   resolveSessionName,
   workspaceScopeId,
 } from "./runtime-paths.js";
-import type { LoadedProfile } from "./profile.js";
-import type { MeshProfile } from "./schema/profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
+import type { MeshProfile } from "../schema/profile.js";
 
 function stubProfile(overrides: Partial<MeshProfile> = {}): MeshProfile {
   return {

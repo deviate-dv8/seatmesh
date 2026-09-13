@@ -1,27 +1,27 @@
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
-import { seatMeshPackageRoot } from "./engine-paths.js";
-import { findDotSmConfig } from "./dotdir.js";
-import { MeshProfileSchema, type MeshProfile } from "./schema/profile.js";
-import { resolveWorkspace, resolveFromProfile } from "./paths.js";
+import { seatMeshPackageRoot } from "../paths/engine-paths.js";
+import { findDotSmConfig } from "../runtime/dotdir.js";
+import { MeshProfileSchema, type MeshProfile } from "../schema/profile.js";
+import { resolveWorkspace, resolveFromProfile } from "../paths/paths.js";
 import {
   buildResolvedPaths,
   writePathsManifest,
   assertHarnessUnderDotdir,
-} from "./paths-manifest.js";
+} from "../paths/paths-manifest.js";
 import {
   meshRuntimePaths,
   resolveDaemonPort,
   resolveSessionName,
   workspaceScopeId,
   type MeshRuntimePaths,
-} from "./runtime-paths.js";
+} from "../paths/runtime-paths.js";
 import {
   primaryManagerColumn,
   primarySecretaryColumn,
   seatDirSegment,
-} from "./schema/seat-kind.js";
+} from "../schema/seat-kind.js";
 
 export interface LoadedProfile {
   profile: MeshProfile;
@@ -42,9 +42,9 @@ export {
   workspaceScopeId,
   resolveConnectivityHooks,
   runtimePathHint,
-} from "./runtime-paths.js";
+} from "../paths/runtime-paths.js";
 
-export { seatMeshPackageRoot, resolveDaemonScript } from "./engine-paths.js";
+export { seatMeshPackageRoot, resolveDaemonScript } from "../paths/engine-paths.js";
 
 /** Default profile: workspace `.sm/` when present, else bundled minimal. No flags required. */
 export function defaultProfilePath(): string {

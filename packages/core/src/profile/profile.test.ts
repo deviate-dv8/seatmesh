@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { defaultProfilePath, loadProfile, portsForSlot } from "./index.js";
+import { defaultProfilePath, loadProfile, portsForSlot } from "../index.js";
 
 describe("loadProfile", () => {
   it("loads default profile without --profile", () => {
@@ -18,7 +18,7 @@ describe("loadProfile", () => {
   it("loads bundled minimal profile", () => {
     const minimalDir = path.resolve(
       import.meta.dirname,
-      "../../../profiles/minimal",
+      "../../../../profiles/minimal",
     );
     const loaded = loadProfile(minimalDir);
     expect(loaded.profile.name).toBe("minimal");

@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { MeshProfile } from "../schema/profile.js";
-import { resolveFromWorkspace } from "../paths.js";
-import { resolveHarnessPath } from "../paths-manifest.js";
-import type { LoadedProfile } from "../profile.js";
+import { resolveFromWorkspace } from "../paths/paths.js";
+import { resolveHarnessPath } from "../paths/paths-manifest.js";
+import type { LoadedProfile } from "../profile/profile.js";
 import { appendJsonlLine, readJsonlAll, readJsonlTail } from "../jsonl/store.js";
 import {
   RoomMessageSchema,

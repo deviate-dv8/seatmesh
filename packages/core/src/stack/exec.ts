@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile } from "../profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
 import { stackConfig } from "./config.js";
 
 export function resolveStackScript(loaded: LoadedProfile): string {

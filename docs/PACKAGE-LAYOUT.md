@@ -10,7 +10,7 @@
 |---------|---------------------------|--------|
 | `@seat-mesh/daemon` | root: `index` + 2 entry scripts only | **DONE** — 39 files -> 11 domain folders |
 | `seatmesh` (cli) | root: `main.ts` only | **DONE** — 21 files -> `commands/ setup/ report/ ui/` |
-| `@seat-mesh/core` | **~9** flat + folders | partial — `chatroom/`, `contracts/`, `messages/`, … (phase 3, not yet) |
+| `@seat-mesh/core` | root: `index.ts` only | **DONE** — loose modules -> `profile/` `paths/` `runtime/` |
 | `@seat-mesh/tmux` | 2 flat | ok — `inject/`, `supervise/`, `comms/`, `seats/` (good pattern) |
 | `@seat-mesh/providers` | small | ok — colocated tests |
 | `@seat-mesh/connectivity` | small | ok |
@@ -67,13 +67,20 @@ packages/cli/src/
 Kept `templates/` and `profiles/` as today. Build/tooling scripts under `packages/*/scripts/`
 are full TypeScript run via node type-stripping (`node scripts/bundle-profiles.ts`), not `.mjs`.
 
-## Target: `@seat-mesh/core` (phase 3)
+## `@seat-mesh/core` (phase 3 — DONE)
 
-Move loose root modules into existing or new folders:
+```
+packages/core/src/
+  index.ts                        barrel only at root
+  profile/    profile, profile-edit (+ tests)
+  paths/      paths, paths-manifest, runtime-paths, engine-paths (+ tests)
+  runtime/    dotdir, global-registry, role-index, mesh-state-merge (+ tests)
+  chatroom/ contracts/ messages/ layout/ schema/ …   (already nested)
+```
 
-- `profile.ts`, `profile-edit.ts` → `profile/`
-- `paths.ts`, `paths-manifest.ts`, `runtime-paths.ts`, `engine-paths.ts` → `paths/`
-- `dotdir.ts`, `global-registry.ts`, `role-index.ts`, `mesh-state-merge.ts` → keep or `runtime/`
+`engine-paths.ts` lives under `paths/`; `seatMeshPackageRoot()` walks `../../../..` to the
+seat-mesh repo root (one extra `..` vs the old root-src location). Public API unchanged via
+`@seat-mesh/core` barrel.
 
 ## Migration process
 

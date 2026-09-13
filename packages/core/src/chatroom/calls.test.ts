@@ -7,7 +7,7 @@ import {
   resolveSessionName,
   workspaceScopeId,
   type LoadedProfile,
-} from "../profile.js";
+} from "../profile/profile.js";
 import {
   callsPath,
   createPendingCall,

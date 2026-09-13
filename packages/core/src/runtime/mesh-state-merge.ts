@@ -1,5 +1,5 @@
-import type { MeshProfile } from "./schema/profile.js";
-import type { MeshAgents, SavedMinisLayout } from "./schema/agents.js";
+import type { MeshProfile } from "../schema/profile.js";
+import type { MeshAgents, SavedMinisLayout } from "../schema/agents.js";
 
 /** Effective minis layout: saved mesh-agents.json wins over profile yaml defaults. */
 export function effectiveMinisLayout(

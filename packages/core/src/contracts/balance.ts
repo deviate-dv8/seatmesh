@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
-import type { LoadedProfile } from "../profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
 import {
   contractLockPath,
   contractsDirFor,

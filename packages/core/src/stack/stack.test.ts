@@ -2,12 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadProfile } from "../profile.js";
+import { loadProfile } from "../profile/profile.js";
 import {
   resolveSessionName,
   workspaceScopeId,
   type LoadedProfile,
-} from "../profile.js";
+} from "../profile/profile.js";
 import { stackConfig } from "./config.js";
 import { resolveStackScript } from "./exec.js";
 

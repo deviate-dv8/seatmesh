@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { LoadedProfile } from "../profile.js";
-import { meshRuntimePaths } from "../runtime-paths.js";
+import type { LoadedProfile } from "../profile/profile.js";
+import { meshRuntimePaths } from "../paths/runtime-paths.js";
 
 export type RoomCallStatus = "pending" | "accepted" | "declined" | "cancelled";
 

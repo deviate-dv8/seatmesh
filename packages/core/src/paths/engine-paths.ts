@@ -10,7 +10,8 @@ function hasMinimalProfile(root: string): boolean {
 
 /** Repo root (dev) or published seatmesh / @seat-mesh/core package root. */
 export function seatMeshPackageRoot(): string {
-  const mono = path.resolve(import.meta.dirname, "../../..");
+  // paths/engine-paths.ts -> packages/core/src/paths -> seat-mesh root is ../../../../
+  const mono = path.resolve(import.meta.dirname, "../../../..");
   if (hasMinimalProfile(mono)) return mono;
 
   for (const pkg of ["seatmesh", "@seat-mesh/cli"]) {

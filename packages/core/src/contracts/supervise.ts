@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { z } from "zod";
-import type { LoadedProfile } from "../profile.js";
-import { buildResolvedPaths } from "../paths-manifest.js";
+import type { LoadedProfile } from "../profile/profile.js";
+import { buildResolvedPaths } from "../paths/paths-manifest.js";
 import { managerColumnIds } from "../schema/seat-kind.js";
 
 export const SuperviseContractSchema = z.object({

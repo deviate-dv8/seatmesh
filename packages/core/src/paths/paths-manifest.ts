@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { LoadedProfile } from "./profile.js";
+import type { LoadedProfile } from "../profile/profile.js";
 
 export const PATHS_MANIFEST = "paths.json";
 
