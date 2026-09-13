@@ -70,7 +70,11 @@ roles:
 
 daemon:
   port: 31670
-  portScope: profile
+  # workspace: unique port per project (base + hash(workspace) % range) so two
+  # seatmesh-managed projects never collide on one machine. Set to "profile"
+  # only if you deliberately want every project on this profile pinned to the
+  # same fixed port.
+  portScope: workspace
   portBase: 31670
   portRange: 90
   autoStart: true

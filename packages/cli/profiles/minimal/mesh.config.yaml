@@ -15,7 +15,7 @@ state:
 
 daemon:
   port: 31671
-  portScope: profile
+  portScope: workspace
   managerPromptPrefix: "[agent-manager]"
 
 ports:

@@ -1,6 +1,6 @@
 {
   "name": "seatmesh",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "node": ">=22"
   },
@@ -24,11 +24,11 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.0",
-    "@seat-mesh/connectivity": "1.0.0",
-    "@seat-mesh/core": "1.0.0",
-    "@seat-mesh/daemon": "1.0.0",
-    "@seat-mesh/providers": "1.0.0",
-    "@seat-mesh/tmux": "1.0.0",
+    "@seat-mesh/connectivity": "1.0.1",
+    "@seat-mesh/core": "1.0.1",
+    "@seat-mesh/daemon": "1.0.1",
+    "@seat-mesh/providers": "1.0.1",
+    "@seat-mesh/tmux": "1.0.1",
     "boxen": "^8.0.1",
     "cfonts": "^3.3.1",
     "commander": "^15.0.0"
