@@ -151,21 +151,18 @@ export function sessionAttach(loaded: LoadedProfile): void {
   if (!tmuxHasSession(session)) {
     sessionUp(loaded);
   } else {
-    // Fast path: stamp env + save hooks, kick sync to background, attach NOW.
-    // Previously ensureMeshInbox + coord-sync blocked for seconds–tens of seconds
-    // before tmux attach (npx attach felt broken / “5 years”).
-    ensureMeshSessionEnv(session, {
-      workspaceId: loaded.workspaceId,
-      sessionName: loaded.sessionName,
-      workspace: loaded.workspace,
-      profilePath: loaded.profilePath,
-    });
-    installSessionSaveHooks(session, loaded);
+    // Ultra-lazy (tmux-zsign style): do NOT touch inbox/coord/env before attach.
+    // bin/seatmesh bash short-circuit is even faster; this is the Node fallback.
     if (process.env.SEATMESH_ATTACH_SYNC === "1") {
       sessionSync(loaded);
     } else {
       spawnDetachedSessionSync(loaded);
     }
+  }
+
+  if (process.env.SEATMESH_ATTACH_DRY === "1") {
+    console.log(`OK: attach dry-run session=${session} (would tmux attach now)`);
+    return;
   }
 
   if (process.env.TMUX) {
