@@ -1,4 +1,5 @@
 import {
+  claudeIdleEmptyComposer,
   stripMeshOwnedLines,
   type Detection,
   type PaneSnapshot,
@@ -215,6 +216,8 @@ export function agentInputDraft(captureTail: string, captureTailAnsi?: string): 
 /** Claude Code UI hint that reuses the "❯" marker but is never a human draft. */
 const CLAUDE_NON_DRAFT_HINT_RE = /^Press up to edit queued messages$/i;
 
+export { claudeIdleEmptyComposer } from "@seat-mesh/core";
+
 /**
  * Claude's composer draft — collects wrapped continuation lines, not just the
  * first visual line (a footer-bleed root cause: a multi-line human draft under
@@ -334,6 +337,10 @@ export function composerFromCapture(
     if (CC_LIMIT_RE.test(tail)) {
       return { phase: "limit", limitKind: "cc-limit" };
     }
+    // Empty ❯ composer — idle even when scrollback mentions "thinking" (busy-generic wedge).
+    if (claudeIdleEmptyComposer(tail)) {
+      return { phase: "empty" };
+    }
     // Claude does not use CPE :18887 — ignore stale OC connect text in scrollback.
   }
 
@@ -363,9 +370,17 @@ export function composerFromCapture(
     }
   }
 
-  if (/Working|Running|Thinking/.test(tail)) {
+  if (providerId !== "claude" && /Working|Running|Thinking/.test(tail)) {
     const m = tail.match(/(Working|Running|Thinking[^\n]*)/);
     return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
+  }
+  if (providerId === "claude") {
+    const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-4);
+    const active = bottomLines.some((l) => /^(Working|Running|Thinking)\b/.test(l.trim()));
+    if (active) {
+      const m = bottomLines.join("\n").match(/(Working|Running|Thinking[^\n]*)/);
+      return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
+    }
   }
 
   if (/AFK|Stuck|draft/.test(tail)) {

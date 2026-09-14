@@ -1,3 +1,4 @@
+import { claudeIdleEmptyComposer } from "../composer/claude-idle.js";
 import { stripMeshOwnedLines } from "../messages/mesh-copy.js";
 import type { ComposerState, PaneSnapshot } from "../providers/types.js";
 import {
@@ -82,6 +83,18 @@ function opencodeComposerOverride(
   return { phase: "empty" };
 }
 
+/** Claude empty ❯ composer — deliverable even when scrollback mentions "thinking". */
+function claudeComposerOverride(
+  tail: string,
+  providerId: string,
+): ComposerState | null {
+  if (providerId !== "claude") return null;
+  if (claudeIdleEmptyComposer(tail)) {
+    return { phase: "empty" };
+  }
+  return null;
+}
+
 /** Cursor idle post-turn chrome (follow-up box + composer footer) is deliverable — not active generate. */
 function cursorAgentIdleOverride(
   tail: string,
@@ -158,6 +171,11 @@ export function evaluateUxRules(
   const ocOverride = opencodeComposerOverride(tail, providerId);
   if (ocOverride) {
     return { ruleId: "oc-composer-idle", state: ocOverride, border: "idle" };
+  }
+
+  const ccOverride = claudeComposerOverride(tail, providerId);
+  if (ccOverride) {
+    return { ruleId: "cc-composer-idle", state: ccOverride, border: "idle" };
   }
 
   const cursorIdle = cursorAgentIdleOverride(tail, providerId);

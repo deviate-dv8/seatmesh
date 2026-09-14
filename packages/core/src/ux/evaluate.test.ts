@@ -64,6 +64,20 @@ describe("evaluateUxRules", () => {
     expect(hit?.state.phase).toBe("plain_shell");
   });
 
+  it("claude empty composer is idle even when scrollback mentions thinking", () => {
+    const tail =
+      "* Pouncing… (15s · still thinking)\n" +
+      "  tmux detected · scroll with PgUp/PgDn\n" +
+      "────────────────────────────────────\n" +
+      "❯ \n" +
+      "────────────────────────────────────\n" +
+      "  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt\n";
+    const hit = evaluateUxRules(snap(tail, "claude"), "claude", config);
+    expect(hit?.ruleId).toBe("cc-composer-idle");
+    expect(hit?.state.phase).toBe("empty");
+    expect(hit?.border).toBe("idle");
+  });
+
   it("composer idle wins over stale limit text", () => {
     const tail = [
       "old rate limit line",

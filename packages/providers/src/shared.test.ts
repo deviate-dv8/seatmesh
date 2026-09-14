@@ -86,6 +86,18 @@ describe("composerFromCapture (border/typing status)", () => {
     expect(composerFromCapture(pane, "claude")).toEqual({ phase: "empty" });
     expect(claudeInputDraft(tail)).toBe("");
   });
+
+  it("empty CC composer stays empty when scrollback mentions thinking (not BUSY)", () => {
+    const tail =
+      "* Pouncing… (15s · still thinking)\n" +
+      "  tmux detected · scroll with PgUp/PgDn\n" +
+      "────────────────────────────────────\n" +
+      "❯ \n" +
+      "────────────────────────────────────\n" +
+      "  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt\n";
+    const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
+    expect(composerFromCapture(pane, "claude")).toEqual({ phase: "empty" });
+  });
 });
 
 describe("agentInputDraft (cursor ghost-text / placeholders)", () => {

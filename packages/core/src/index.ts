@@ -31,3 +31,4 @@ export * from "./runtime/global-registry.js";
 export * from "./messages/mesh-copy.js";
 export * from "./messages/mesh-inbox-intent.js";
 export * from "./messages/cli-hints.js";
+export * from "./composer/claude-idle.js";
