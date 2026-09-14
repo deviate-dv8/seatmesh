@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatMeshInboxStamp,
   hubLockActive,
+  intentKeepsShellFooter,
   parseMeshInboxIntent,
   stripReplyPeerFooter,
 } from "./mesh-inbox-intent.js";
@@ -23,7 +24,6 @@ describe("mesh-inbox-intent", () => {
   });
 
   it("keeps checkback-verify kill shell (Ignored-chat failure mode)", () => {
-    const { intentKeepsShellFooter } = require("./mesh-inbox-intent.js") as typeof import("./mesh-inbox-intent.js");
     expect(intentKeepsShellFooter("checkback-verify")).toBe(true);
     expect(intentKeepsShellFooter("continue")).toBe(false);
   });
