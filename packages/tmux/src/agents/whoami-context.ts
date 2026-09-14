@@ -2,15 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   chatRoomConfigForLoaded,
+  formatAckCloseShell,
+  formatAckOpenLine,
   listRooms,
   loadRoomProfile,
   meshRuntimePaths,
+  openAcksForSeat,
   resolveAgentId,
   roomDir,
   runtimePathHint,
   unseenSummaryForAgent,
   isManagerKind,
   seatmeshCmd,
+  type AckRow,
   type LoadedProfile,
 } from "@seat-mesh/core";
 
@@ -116,7 +120,27 @@ function commsOneLiner(role: string, mini: string | null, workerCount: number): 
   return `comms: room call|say|accept (checkback default) | peer slot-N|mini-N | to-slot 1-${workerCount} | room read marks seen | to-master PROVED|DONE only`;
 }
 
-/** Extra whoami lines: agent id, rooms, checkbacks, mini task, inbox, comms. */
+function parseAckRow(row: unknown): AckRow | null {
+  const r = row as Partial<AckRow>;
+  if (!r || typeof r.id !== "string" || typeof r.seat !== "string") return null;
+  if (typeof r.ask !== "string") return null;
+  return {
+    id: r.id,
+    at: String(r.at ?? ""),
+    seat: r.seat,
+    paneId: String(r.paneId ?? ""),
+    source: (r.source as AckRow["source"]) || "operator",
+    from: r.from,
+    ask: r.ask,
+    ackedAt: r.ackedAt,
+    ackBy: r.ackBy,
+    ackNote: r.ackNote,
+    reminders: Number(r.reminders ?? 0),
+    remindedAt: r.remindedAt,
+  };
+}
+
+/** Extra whoami lines: agent id, rooms, checkbacks, open ACKs, mini task, inbox, comms. */
 export function buildWhoamiContextLines(
   loaded: LoadedProfile,
   w: WhoamiResult,
@@ -205,6 +229,24 @@ export function buildWhoamiContextLines(
       }
       if (cbs.length > 5) lines.push(`checkback_more=${cbs.length - 5}`);
       lines.push(`checkback_cmds=${m("checkback list")} | ${m("checkback cancel <id>")}`);
+    }
+  }
+
+  // Open ACKs for this seat — same surface as whoami every turn (chat does not clear).
+  {
+    const allAcks = readJsonl<AckRow>(rt.ackJsonl, parseAckRow);
+    const open = openAcksForSeat(allAcks, agentId);
+    lines.push("--- open ACKs (this seat) ---");
+    lines.push(`ack_open=${open.length}`);
+    if (!open.length) {
+      lines.push("ack=none open");
+    } else {
+      for (const row of open.slice(0, 5)) {
+        lines.push(`ack=${formatAckOpenLine(row)}`);
+      }
+      if (open.length > 5) lines.push(`ack_more=${open.length - 5}`);
+      lines.push(`ack_cmds=${m("ack")} | ${formatAckCloseShell(open[0]!)}`);
+      lines.push("ack_hint=chat reply does NOT clear — run ack_cmds / peer … --ended <id>");
     }
   }
 

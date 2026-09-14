@@ -18,8 +18,8 @@ export function formatAckClearCmd(id: string): string {
 }
 
 /**
- * One shell line that both replies and closes the ACK (stops the n+3 loop:
- * peer → ack → maybe cb cancel).
+ * One shell line that both replies and closes the ACK (stops the waste loop:
+ * peer → separate ack → maybe cb cancel across turns).
  */
 export function formatPeerEndedCmd(to: string, id: string): string {
   const target = peerTargetFromAgentId(to);
@@ -67,7 +67,7 @@ export function formatAckReminder(seat: string, rows: AckRow[]): string {
   return (
     `${head}\n${body}${tail}\n` +
     `SHELL (required — chat reply does NOT clear): ${formatAckCloseShell(first)}\n` +
-    `FYI: follow-ups / more inbox while busy are queued — they inject when idle.`
+    `FYI: open ACKs also list in whoami context; follow-ups while busy are queued.`
   );
 }
 

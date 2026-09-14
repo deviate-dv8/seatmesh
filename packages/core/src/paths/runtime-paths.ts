@@ -54,6 +54,7 @@ export interface MeshRuntimePaths {
   inboxJsonl: string;
   peerJsonl: string;
   checkbackJsonl: string;
+  ackJsonl: string;
   targetJsonl: string;
   paneOpsJsonl: string;
   callsJsonl: string;
@@ -80,6 +81,7 @@ export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
     inboxJsonl: path.join(daemonDir, "INBOX.jsonl"),
     peerJsonl: path.join(daemonDir, "PEER.jsonl"),
     checkbackJsonl: path.join(daemonDir, "CHECKBACK.jsonl"),
+    ackJsonl: path.join(daemonDir, "ACK.jsonl"),
     targetJsonl: path.join(daemonDir, "TARGET.jsonl"),
     paneOpsJsonl: path.join(daemonDir, "PANE_OPS.jsonl"),
     callsJsonl: path.join(daemonDir, "CALLS.jsonl"),

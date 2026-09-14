@@ -154,7 +154,8 @@ export async function listCheckbacks(
 
 export interface CancelCheckbackResult {
   ok: boolean;
-  cancelled: string;
+  cancelled: string | null;
+  error?: string;
 }
 
 export async function cancelCheckback(
@@ -162,9 +163,27 @@ export async function cancelCheckback(
   id: string,
 ): Promise<CancelCheckbackResult> {
   const encoded = encodeURIComponent(id);
-  return inboxClient(inboxBase)
-    .post(`patience/${encoded}/cancel`)
-    .json<CancelCheckbackResult>();
+  try {
+    return await inboxClient(inboxBase)
+      .post(`patience/${encoded}/cancel`)
+      .json<CancelCheckbackResult>();
+  } catch (e) {
+    const err = e as { response?: Response; message?: string };
+    if (err.response) {
+      try {
+        const body = (await err.response.json()) as CancelCheckbackResult;
+        if (body && typeof body.ok === "boolean") return body;
+      } catch {
+        /* fall through */
+      }
+      return {
+        ok: false,
+        cancelled: null,
+        error: `inbox POST ${err.response.status}`,
+      };
+    }
+    return { ok: false, cancelled: null, error: err.message ?? String(e) };
+  }
 }
 
 export interface CancelAllCheckbacksResult {

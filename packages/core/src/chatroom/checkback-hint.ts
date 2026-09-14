@@ -112,14 +112,24 @@ export function formatReplyToSender(from: string): string {
   return `SHELL (required — chat-only "received" does NOT file): ${shell}`;
 }
 
-function shortCheckbackId(id: string): string {
-  return id.replace(/^cb-/, "").slice(0, 10);
+/**
+ * Prefix that matches store cancel (`id.startsWith(needle)`).
+ * Keep the `cb-` prefix — stripping it made inject cancel lines miss the row
+ * and agents burned turns on fake-success loops.
+ */
+export function shortCheckbackId(id: string): string {
+  const t = id.trim();
+  if (!t) return t;
+  // Prefer a stable head including `cb-` (e.g. cb-peer-1234…).
+  if (t.length <= 14) return t;
+  return t.slice(0, 14);
 }
 
 /**
  * Always on every Check: inject. Agents otherwise reply in chat, ignore the
  * renew, and get infinite re-fires — cancel is the only stop.
  * Also: more peer/inbox while busy is queued, not lost (do not panic-reply).
+ * After CHECKBACK_MAX_FIRES the daemon auto-stops renew; cancel only if still active.
  */
 export function formatCheckbackCancelHint(id?: string | null): string {
   const cancel = id?.trim()
@@ -127,7 +137,7 @@ export function formatCheckbackCancelHint(id?: string | null): string {
     : `${seatmeshCmd("cb list")} → ${seatmeshCmd("cb cancel <id>")}`;
   return (
     `SHELL (required to STOP renew — chat reply does NOT cancel): ${cancel}\n` +
-    `FYI: follow-ups / more inbox while busy are queued — they inject when idle; do not infinite-reply this Check.`
+    `FYI: follow-ups while busy are queued; renew auto-stops after a few Checks — do not loop cancel.`
   );
 }
 

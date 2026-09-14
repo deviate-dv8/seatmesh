@@ -60,6 +60,7 @@ import { isInboxDelivered, isPeerDelivered } from "../store/create-queue-store.j
 import { drainPaneOpsOnce, type PaneOpsDrainCtx } from "../inbox/pane-ops-drain.js";
 import {
   deferCheckbackAfterFailedFire,
+  shouldRenewCheckback,
   sortDueCheckbackIndices,
 } from "../checkback/checkback-fire.js";
 import { pendingPeerRows, promotePeerBacklog } from "../peer/peer-backlog.js";
@@ -625,6 +626,8 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");
         continue;
       }
+      // One verify nudge — do not renew forever (was: cancel-loop fuel).
+      row.renewSec = 0;
       ctx.log(`room-comms checkback pane=${pane} expect=${row.expect}`);
     } else {
       const meta = pane ? paneMetaForPane(pane) : null;
@@ -651,10 +654,21 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       ctx.log(`checkback pane=${pane} expect=${expect.slice(0, 80)}`);
     }
 
-    if (row.renewSec && row.renewSec > 0) {
-      row.expiresAt = new Date(now + row.renewSec * 1000).toISOString();
+    if (row.status !== "active") continue;
+
+    if (shouldRenewCheckback(
+      { ...row, fireCount: (row.fireCount ?? 0) + 1 },
+      now,
+    )) {
+      row.fireCount = (row.fireCount ?? 0) + 1;
+      row.expiresAt = new Date(now + (row.renewSec as number) * 1000).toISOString();
       row.updatedAt = new Date().toISOString();
     } else {
+      if (row.renewSec && row.renewSec > 0) {
+        ctx.log(
+          `checkback auto-stop id=${row.id} kind=${row.kind ?? "?"} fires=${(row.fireCount ?? 0) + 1}`,
+        );
+      }
       row.status = "cancelled";
       row.updatedAt = new Date().toISOString();
     }

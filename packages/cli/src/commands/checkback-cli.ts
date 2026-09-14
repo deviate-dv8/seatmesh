@@ -176,6 +176,11 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
       requireMeshInbox(loaded);
       const cfg = chatRoomConfigForLoaded(loaded);
       const res = await cancelCheckback(cfg.inboxBase, id);
+      if (!res.ok) {
+        console.error(`fail: ${res.error ?? "cancel missed — check cb list"}`);
+        process.exitCode = 1;
+        return;
+      }
       console.log(`ok cancelled=${res.cancelled}`);
     });
 

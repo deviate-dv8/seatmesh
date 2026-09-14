@@ -162,7 +162,7 @@ describe("formatRoomCommsCheckback", () => {
       null,
       { verifyOnly: true, id: "cb-peer-1234567890-abcdef" },
     );
-    expect(msg).toContain("cb cancel peer-12345");
+    expect(msg).toContain("cb cancel cb-peer-12345");
     expect(msg).toContain("chat reply does NOT cancel");
   });
 });
@@ -226,7 +226,7 @@ describe("formatGenericCheckback", () => {
       { id: "cb-digest-aa" },
     );
     expect(msg).toContain("inbox list | grep 400ac9c9");
-    expect(msg).toContain("cb cancel digest-aa");
+    expect(msg).toContain("cb cancel cb-digest-aa");
     expect(msg).toContain("queued");
   });
 });

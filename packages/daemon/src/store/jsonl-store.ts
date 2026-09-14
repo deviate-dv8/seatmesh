@@ -24,6 +24,8 @@ export interface CheckbackRow {
   expiresAt?: string;
   senderLabel?: string;
   recipientLabel?: string;
+  /** Successful fires so far — ordinary CBs stop renewing after CHECKBACK_MAX_FIRES. */
+  fireCount?: number;
   /** When set, cc-limit-retry fires only if pane session still matches. */
   sessionFingerprint?: string;
   createdAt: string;
@@ -174,10 +176,19 @@ export class JsonlStore {
   }
 
   cancelCheckback(id: string): boolean {
+    const needle = id.trim();
+    if (!needle) return false;
+    const bare = needle.replace(/^cb-/i, "");
     const rows = this.readCheckbacks();
     let hit = false;
     for (const r of rows) {
-      if (r.id === id || r.id.startsWith(id)) {
+      if (r.status !== "active") continue;
+      const idBare = r.id.replace(/^cb-/i, "");
+      if (
+        r.id === needle ||
+        r.id.startsWith(needle) ||
+        (bare.length >= 6 && (idBare.startsWith(bare) || r.id.includes(bare)))
+      ) {
         r.status = "cancelled";
         r.updatedAt = new Date().toISOString();
         hit = true;

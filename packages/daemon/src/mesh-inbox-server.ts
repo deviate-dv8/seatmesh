@@ -651,7 +651,11 @@ async function main(): Promise<void> {
           const n = store.cancelAllCheckbacks();
           return json(res, 200, { ok: true, cancelled: n });
         }
-        store.cancelCheckback(id);
+        const hit = store.cancelCheckback(id);
+        if (!hit) {
+          return json(res, 404, { ok: false, cancelled: null, error: `no active checkback matching ${id}` });
+        }
+        log(`checkback cancel id=${id}`);
         return json(res, 200, { ok: true, cancelled: id });
       }
 

@@ -1,12 +1,47 @@
 import { describe, expect, it } from "vitest";
 import type { CheckbackRow } from "../store/jsonl-store.js";
-import { checkbackFirePriority, sortDueCheckbackIndices } from "./checkback-fire.js";
+import {
+  CHECKBACK_MAX_FIRES,
+  checkbackFirePriority,
+  shouldRenewCheckback,
+  sortDueCheckbackIndices,
+} from "./checkback-fire.js";
 
 describe("checkbackFirePriority", () => {
   it("supervise beats comms", () => {
     expect(checkbackFirePriority("secretary-supervise")).toBeLessThan(
       checkbackFirePriority("room-comms"),
     );
+  });
+});
+
+describe("shouldRenewCheckback", () => {
+  const base = (over: Partial<CheckbackRow> = {}): CheckbackRow => ({
+    id: "cb-peer-1",
+    kind: "comms",
+    status: "active",
+    renewSec: 180,
+    createdAt: "2026-09-14T10:00:00.000Z",
+    updatedAt: "2026-09-14T10:00:00.000Z",
+    ...over,
+  });
+
+  it("caps ordinary CBs after CHECKBACK_MAX_FIRES", () => {
+    const now = Date.parse("2026-09-14T10:05:00.000Z");
+    expect(shouldRenewCheckback(base({ fireCount: CHECKBACK_MAX_FIRES - 1 }), now)).toBe(true);
+    expect(shouldRenewCheckback(base({ fireCount: CHECKBACK_MAX_FIRES }), now)).toBe(false);
+  });
+
+  it("keeps supervise / mesh-watch renewing", () => {
+    const now = Date.parse("2026-09-14T12:00:00.000Z");
+    expect(
+      shouldRenewCheckback(base({ kind: "secretary-supervise", fireCount: 99 }), now),
+    ).toBe(true);
+    expect(shouldRenewCheckback(base({ kind: "mesh-watch", fireCount: 99 }), now)).toBe(true);
+  });
+
+  it("one-shot when renewSec unset", () => {
+    expect(shouldRenewCheckback(base({ renewSec: 0 }), Date.now())).toBe(false);
   });
 });
 

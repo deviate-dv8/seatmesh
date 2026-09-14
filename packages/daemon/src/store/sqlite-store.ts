@@ -409,12 +409,26 @@ export class SqliteStore {
   }
 
   cancelCheckback(id: string): boolean {
-    const r = this.db
+    const needle = id.trim();
+    if (!needle) return false;
+    const bare = needle.replace(/^cb-/i, "");
+    const now = new Date().toISOString();
+    let changes = 0;
+    const r1 = this.db
       .prepare(
         "UPDATE checkback SET status = 'cancelled', updated_at = ? WHERE status = 'active' AND (id = ? OR id LIKE ?)",
       )
-      .run(new Date().toISOString(), id, `${id}%`);
-    return sqlChanges(r) > 0;
+      .run(now, needle, `${needle}%`);
+    changes += sqlChanges(r1);
+    if (!changes && bare.length >= 6) {
+      const r2 = this.db
+        .prepare(
+          "UPDATE checkback SET status = 'cancelled', updated_at = ? WHERE status = 'active' AND (id LIKE ? OR id LIKE ?)",
+        )
+        .run(now, `cb-${bare}%`, `%${bare}%`);
+      changes += sqlChanges(r2);
+    }
+    return changes > 0;
   }
 
   cancelAllCheckbacks(): number {
