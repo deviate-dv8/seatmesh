@@ -1,6 +1,6 @@
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { publishMdviewPublic, readMarkdownFile } from "@seat-mesh/core";
 import type { LoadedProfile } from "@seat-mesh/core";
 import { runMeshNotify } from "./notify-operator.js";
 
@@ -28,47 +28,22 @@ export interface PreviewMdviewResult {
   exitCode: number;
 }
 
-function resolveMarkdownFile(workspace: string, file: string): string {
-  const abs = path.isAbsolute(file) ? file : path.resolve(workspace, file);
-  return abs;
-}
-
-export function publishOneMdview(
+export async function publishOneMdview(
   workspace: string,
   file: string,
   days: number,
-): PreviewMdviewFileResult {
-  const abs = resolveMarkdownFile(workspace, file);
-  if (!fs.existsSync(abs)) {
-    return { file, ok: false, error: "file not found" };
+): Promise<PreviewMdviewFileResult> {
+  try {
+    const content = readMarkdownFile(workspace, file);
+    const title = path.basename(file, path.extname(file));
+    const published = await publishMdviewPublic({ title, content, expiresInDays: days });
+    if (!published.ok) {
+      return { file, ok: false, error: published.error };
+    }
+    return { file, ok: true, url: published.viewerUrl };
+  } catch (e) {
+    return { file, ok: false, error: (e as Error).message };
   }
-  if (!fs.statSync(abs).isFile()) {
-    return { file, ok: false, error: "not a file" };
-  }
-
-  const script = path.join(workspace, "scripts/publish-mdview.sh");
-  if (!fs.existsSync(script)) {
-    return { file, ok: false, error: "scripts/publish-mdview.sh missing in workspace" };
-  }
-
-  const title = path.basename(abs, path.extname(abs));
-  const r = spawnSync("bash", [script, abs, title, String(days)], {
-    encoding: "utf8",
-    cwd: workspace,
-    timeout: 120_000,
-  });
-
-  const url = (r.stdout ?? "").trim().split("\n").find((line) => line.startsWith("http")) ?? "";
-  if (r.status !== 0 || !url) {
-    const detail = (r.stderr ?? "").trim() || (r.stdout ?? "").trim();
-    return {
-      file,
-      ok: false,
-      error: detail ? detail.split("\n")[0] : "mdview publish failed",
-    };
-  }
-
-  return { file, ok: true, url };
 }
 
 export async function runMeshPreview(
@@ -93,7 +68,7 @@ export async function runMeshPreview(
   }
 
   for (const file of input.files) {
-    const row = publishOneMdview(loaded.workspace, file, days);
+    const row = await publishOneMdview(loaded.workspace, file, days);
     results.push(row);
 
     if (row.ok && row.url && input.notify) {

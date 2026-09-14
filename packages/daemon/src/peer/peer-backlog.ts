@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import type { ProviderRegistry } from "@seat-mesh/core";
+import { PEER_BULK_MAX } from "@seat-mesh/core";
 import { capturePaneSnapshot, tmux } from "@seat-mesh/tmux";
 import type { QueueStore, PeerRow } from "../store/create-queue-store.js";
 import { isPeerDelivered, peerSentToken } from "../store/create-queue-store.js";
 import { isThinRoomUnseenPing } from "./peer-skip.js";
+import { paneInDeliveryHold } from "../inject/pane-hold.js";
+import { inboxSkipTypingGate } from "../inject/compose-gate.js";
 
 export interface PeerBacklogRow extends PeerRow {
   status: "backlog";
@@ -33,7 +36,9 @@ export function shouldBacklogPeerHold(reason: string, msg: string): boolean {
   if (/\bPRIORITY\b|\bSTOP other work\b/i.test(msg)) return false;
   if (BUSY_HOLD.test(reason)) return true;
   // No live agent CLI yet — keep until Composer/Claude/OC loads (do not skip-drop).
-  if (/^held:(plain_shell|limit|no_provider)$/.test(reason)) return true;
+  if (/^held:(plain_shell|plain_pane|limit|no_provider|target-unresolved)$/.test(reason)) {
+    return true;
+  }
   if (/^held:cotyped:/.test(reason)) return true;
   if (/^held:coord:(wait-busy|wait-typing)/.test(reason)) return true;
   if (/^held:coord:/.test(reason)) return false;
@@ -93,15 +98,23 @@ function cursorFollowUpOpen(paneId: string, registry: ProviderRegistry): boolean
 }
 
 function paneIdleForPromote(paneId: string, registry: ProviderRegistry): boolean {
-  const mark = paneStatusMark(paneId);
-  if (/\bBUSY\b/i.test(mark) && !cursorFollowUpOpen(paneId, registry)) return false;
   const snap = capturePaneSnapshot(paneId);
   if (!snap) return false;
   const prov = registry.detect(snap);
   if (!prov) return false;
   const st = prov.composerState(snap);
-  // Empty zsh / limit wall — keep backlog; never promote until a real CLI loads.
+  // Empty zsh / rate wall — keep backlog; never promote until a real CLI loads.
   if (st.phase === "plain_shell" || st.phase === "limit") return false;
+  // Prove / operator bypass — promote so drain can DIGEST-paste under skipTypingGate.
+  if (inboxSkipTypingGate()) return true;
+
+  // Recent hold (typing/busy) — do not promote until the backoff expires.
+  if (paneInDeliveryHold(paneId)) return false;
+  const mark = paneStatusMark(paneId);
+  // Banner already knows typing/busy — do not capture-pane (lags the live composer).
+  if (/\btyping\b/i.test(mark)) return false;
+  if (/\bBUSY\b/i.test(mark) && !cursorFollowUpOpen(paneId, registry)) return false;
+  if (st.phase === "typing" || st.phase === "busy") return false;
   if (st.phase === "empty" || st.phase === "afk") return true;
   return cursorFollowUpOpen(paneId, registry);
 }
@@ -152,7 +165,7 @@ function finalizeAlreadyInjected(
   log(`PEER backlog drop-already-injected id=${row.id} -> ${row.targetLabel} pane=${pane}`);
 }
 
-/** Re-queue oldest backlog row per idle pane (one promote per pane per tick). */
+/** Re-queue up to PEER_BULK_MAX backlog rows per idle pane per tick (DIGEST batch). */
 export function promotePeerBacklog(
   store: QueueStore,
   registry: ProviderRegistry,
@@ -231,31 +244,35 @@ export function promotePeerBacklog(
     const restParked = followUpOnly
       ? still.filter((r) => !isAckClassPeer(r.msg))
       : [];
-    const [first, ...restAck] = eligible;
-    const revived: PeerRow = {
-      id: first.id,
-      at: first.at,
-      kind: first.kind,
-      fromSlot: first.fromSlot,
-      fromPorts: first.fromPorts,
-      roomSlug: first.roomSlug,
-      fromAgent: first.fromAgent,
-      targetPane: first.targetPane,
-      targetLabel: first.targetLabel,
-      msg: first.msg,
-      sent: false,
-      // Preserve inject proof if present (should have been dropped above).
-      injectedPane: first.injectedPane,
-      injectedAt: first.injectedAt,
-    };
-    // Replace parked peer row — never push a second copy of the same id.
-    const existing = peer.findIndex((r) => r.id === first.id);
-    if (existing >= 0) peer[existing] = revived;
-    else peer.push(revived);
-    promoted++;
-    peerDirty = true;
-    log(`PEER backlog promote id=${first.id} -> ${first.targetLabel}${followUpOnly ? " (ack-follow-up)" : ""}`);
-    kept.push(...restAck, ...restParked);
+    // Promote up to DIGEST batch size so drain can one-paste ≤PEER_BULK_MAX.
+    const take = eligible.slice(0, PEER_BULK_MAX);
+    const restEligible = eligible.slice(PEER_BULK_MAX);
+    for (const row of take) {
+      const revived: PeerRow = {
+        id: row.id,
+        at: row.at,
+        kind: row.kind,
+        fromSlot: row.fromSlot,
+        fromPorts: row.fromPorts,
+        roomSlug: row.roomSlug,
+        fromAgent: row.fromAgent,
+        targetPane: row.targetPane,
+        targetLabel: row.targetLabel,
+        msg: row.msg,
+        sent: false,
+        injectedPane: row.injectedPane,
+        injectedAt: row.injectedAt,
+      };
+      const existing = peer.findIndex((r) => r.id === row.id);
+      if (existing >= 0) peer[existing] = revived;
+      else peer.push(revived);
+      promoted++;
+      peerDirty = true;
+      log(
+        `PEER backlog promote id=${row.id} -> ${row.targetLabel}${followUpOnly ? " (ack-follow-up)" : ""}`,
+      );
+    }
+    kept.push(...restEligible, ...restParked);
   }
 
   if (peerDirty) store.writePeer(peer);
@@ -311,5 +328,6 @@ export function countPeerBacklog(store: QueueStore): number {
 }
 
 export function pendingPeerRows(store: QueueStore): PeerRow[] {
-  return store.readPeer().filter((r) => !isPeerDelivered(r));
+  // Backlog rows wait for promotePeerBacklog — do not re-drain every tick (capture spam / typing lag).
+  return store.readPeer().filter((r) => !isPeerDelivered(r) && r.deliverPane !== "backlog");
 }

@@ -1,9 +1,12 @@
 import { spawnSync } from "node:child_process";
 import {
   loadProfile,
+  peerTargetForComms,
+  resolveAgentId,
   resolveDaemonPort,
   type LoadedProfile,
 } from "@seat-mesh/core";
+import { paneMetaForPane } from "../lib/pane-meta.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { runWhoami } from "../agents/whoami.js";
 
@@ -48,6 +51,49 @@ function curlPost(port: number, path: string, body: unknown): Record<string, unk
   }
 }
 
+function localAgentId(who: {
+  role: string;
+  slot: number | null;
+  mini?: string | null;
+}): string {
+  return resolveAgentId({
+    role: who.role || "plain",
+    slot: who.slot,
+    mini: who.mini ?? null,
+  });
+}
+
+/** Machine id for PEER row — profile:agent (no role+slotLabel duplication). */
+export function buildRemoteFromAgent(
+  profileName: string,
+  who: { role: string; slot: number | null; slotLabel?: string | null; mini?: string | null },
+): string {
+  return `${profileName}:${localAgentId(who)}`;
+}
+
+/** Same [from:x to:y] convention as local peer/prompt inject. */
+export function buildRemoteFromToHeader(
+  fromProfile: string,
+  who: { role: string; slot: number | null; mini?: string | null },
+  toAlias: string,
+  toTarget: string,
+): string {
+  return `[from:${fromProfile}:${localAgentId(who)} to:${toAlias}:${toTarget}] `;
+}
+
+function peerTargetFromRow(row: {
+  role: string;
+  slot: string;
+  mini: string;
+}): string {
+  const slotNum = row.slot ? Number.parseInt(row.slot, 10) : null;
+  return peerTargetForComms({
+    role: row.role,
+    slot: Number.isFinite(slotNum) ? slotNum : null,
+    mini: row.mini || null,
+  });
+}
+
 /** Enqueue peer on another mesh session's inbox (same host, portScope:workspace). */
 export function runRemotePeer(
   local: LoadedProfile,
@@ -69,7 +115,22 @@ export function runRemotePeer(
   }
   const port = resolveDaemonPort(remote.profile, remote.workspace);
   const who = runWhoami(local, "here");
-  const fromAgent = `${local.workspaceId}:${who.role}${who.slot != null ? `-slot-${who.slot}` : who.slotLabel ? `-${who.slotLabel}` : ""}`;
+  const meta = who.paneId ? paneMetaForPane(who.paneId) : null;
+  const whoCtx = {
+    role: who.role,
+    slot: who.slot,
+    mini: meta?.mini ?? null,
+  };
+  const fromAgent = buildRemoteFromAgent(local.profile.name, {
+    ...whoCtx,
+    slotLabel: who.slotLabel,
+  });
+  const stamp = buildRemoteFromToHeader(
+    local.profile.name,
+    whoCtx,
+    alias,
+    peerTargetFromRow(resolved.row),
+  );
   const body = {
     kind: "prompt",
     targetPane: resolved.paneId,
@@ -77,7 +138,7 @@ export function runRemotePeer(
     fromSlot: fromAgent,
     fromPorts: null,
     fromAgent,
-    msg: `[remote ${fromAgent}] ${msg.trim()}`,
+    msg: `${stamp}${msg.trim()}`,
   };
   const resp = curlPost(port, "/to-peer", body);
   if (!resp?.ok) {

@@ -9,7 +9,7 @@ import { tmux } from "../lib/tmux-run.js";
 
 /**
  * Resolve mini-N pane by @mesh_mini label (survives 4x2 lead swaps).
- * Falls back to pane_index N-1 when label missing.
+ * No pane_index fallback — unlabeled grid cells stay plain for manual use.
  */
 export function resolveMiniPaneId(
   session: string,
@@ -22,7 +22,7 @@ export function resolveMiniPaneId(
     "-t",
     target,
     "-F",
-    "#{@mesh_mini}\t#{pane_index}\t#{pane_id}",
+    "#{@mesh_mini}\t#{pane_id}",
   ]).out;
   if (!out) return null;
   const rows = out
@@ -30,20 +30,13 @@ export function resolveMiniPaneId(
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [mini, idx, paneId] = line.split("\t");
-      return {
-        mini: mini ?? "",
-        idx: Number.parseInt(idx ?? "0", 10),
-        paneId: paneId ?? "",
-      };
+      const [mini, paneId] = line.split("\t");
+      return { mini: mini ?? "", paneId: paneId ?? "" };
     })
     .filter((r) => r.paneId.startsWith("%"));
 
   const labeled = rows.find((r) => r.mini === String(n));
-  if (labeled) return labeled.paneId;
-
-  const byIndex = rows.find((r) => r.idx === n - 1);
-  return byIndex?.paneId ?? null;
+  return labeled?.paneId ?? null;
 }
 
 /** Pane ids in a single window, sorted by pane_index (stable slot order). */

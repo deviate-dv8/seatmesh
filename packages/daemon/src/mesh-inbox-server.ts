@@ -24,6 +24,7 @@ import {
 } from "@seat-mesh/tmux";
 import { configureInboxTypingGate } from "./inject/compose-gate.js";
 import { createQueueStore } from "./store/create-queue-store.js";
+import { openAckForPeerRow } from "./ack/ack-open.js";
 import { countPeerPendingGlobal } from "./peer/peer-pending.js";
 import { findDupInbox, findDupPeer, type CheckbackRow } from "./store/jsonl-store.js";
 import {
@@ -42,6 +43,7 @@ import {
   resumeAllOpenCodePanes,
   type ResumeWaveMeta,
 } from "./connectivity/oc-resume.js";
+import { broadcastOcResumeToRemotes } from "./connectivity/oc-resume-broadcast.js";
 import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
 import {
   armCcLimitRetryCheckback,
@@ -58,9 +60,12 @@ import type { NotifyActRegisterAction, PaneOpKind } from "@seat-mesh/core";
 import {
   createNotifyActRegistry,
   executeNotifyAct,
-  htmlActPage,
 } from "./notify/notify-act.js";
-import { htmlDemoYesNoPage, htmlUiHome } from "./notify/notify-act-ui.js";
+import {
+  htmlActPage,
+  htmlDecideCardPage,
+  htmlDemoYesNoPage,
+} from "./notify/notify-act-ui.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -145,6 +150,7 @@ async function main(): Promise<void> {
     inboxUnresolved: 0,
     peerUnsent: 0,
     paneOpsPending: 0,
+    ackOpen: 0,
     updatedAt: 0,
   };
 
@@ -163,6 +169,7 @@ async function main(): Promise<void> {
       inboxUnresolved: store.readInbox().filter((r) => !r.resolved).length,
       peerUnsent: countPeerPendingGlobal(store),
       paneOpsPending: store.countPaneOpsPending(),
+      ackOpen: store.countOpenAcks(),
       updatedAt: Date.now(),
     };
   }
@@ -232,12 +239,26 @@ async function main(): Promise<void> {
     minisWindow,
     log,
     ocLimitedPaneIds: ocLimited,
+    connectPaneIds: connectivity.connectPanes,
     proxyDownActive: connectivity.proxyDownActive,
     paneOps: paneOpsCtx,
   };
 
+  function borderConnectivitySnapshot(): {
+    proxyDownActive: boolean;
+    ocLimitedPaneIds: Set<string>;
+    connectPaneIds: Set<string>;
+  } {
+    return {
+      proxyDownActive: connectivity.proxyDownActive,
+      ocLimitedPaneIds: connectivity.ocLimited,
+      connectPaneIds: connectivity.connectPanes,
+    };
+  }
+
   function refreshOrchConnectivity(): void {
     orchCtx.proxyDownActive = connectivity.proxyDownActive;
+    orchCtx.connectPaneIds = connectivity.connectPanes;
   }
 
   function drainPaneOpsChain(): void {
@@ -275,7 +296,11 @@ async function main(): Promise<void> {
     scheduleDrain();
   }
 
-  function resumeOpenCodePanes(reason = "recovery", meta?: ResumeWaveMeta): void {
+  function resumeOpenCodePanes(
+    reason = "recovery",
+    meta?: ResumeWaveMeta,
+    opts?: { skipBroadcast?: boolean },
+  ): void {
     const panes = listMeshMonitorPanes(
       session,
       baseWindow,
@@ -287,6 +312,9 @@ async function main(): Promise<void> {
     notifyResumeWave(workspace, reason, sent, total, meta);
     if (sent > 0) {
       armResumeAckWave(sentPaneIds, reason);
+    }
+    if (!opts?.skipBroadcast) {
+      broadcastOcResumeToRemotes(loaded, reason, meta, log);
     }
   }
 
@@ -321,6 +349,61 @@ async function main(): Promise<void> {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://127.0.0.1:${port}`);
     try {
+      // Plain Targets UI (static). Decide cards live at /act/card/:id (dynamic).
+      if (req.method === "GET" && (url.pathname === "/ui" || url.pathname === "/ui/" || url.pathname.startsWith("/ui/"))) {
+        // Live demo under static path — register fresh Yes/No then render blueish page.
+        if (url.pathname === "/ui/demo-yesno" || url.pathname === "/ui/demo-yesno/") {
+          const baseUrl = `http://127.0.0.1:${port}`;
+          const links = actRegistry.register(
+            [
+              {
+                label: "Yes",
+                type: "peer",
+                params: {
+                  target: "secretary",
+                  msg: "Dan notify reply: YES",
+                  kind: "prompt",
+                },
+              },
+              {
+                label: "No",
+                type: "peer",
+                params: {
+                  target: "secretary",
+                  msg: "Dan notify reply: NO",
+                  kind: "prompt",
+                },
+              },
+            ],
+            3600,
+            baseUrl,
+          );
+          log(`NOTIFY-ACT ui demo-yesno n=${links.length}`);
+          return html(res, 200, htmlDemoYesNoPage(links, port));
+        }
+        const uiRoot = path.join(__dirname, "..", "static", "ui");
+        let rel = url.pathname === "/ui" || url.pathname === "/ui/" ? "index.html" : url.pathname.slice("/ui/".length);
+        rel = path.normalize(rel).replace(/^(\.\.(\/|\\|$))+/, "");
+        const file = path.join(uiRoot, rel || "index.html");
+        if (!file.startsWith(uiRoot) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+          res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+          res.end("ui not found");
+          return;
+        }
+        const ext = path.extname(file);
+        const type =
+          ext === ".html"
+            ? "text/html; charset=utf-8"
+            : ext === ".css"
+              ? "text/css; charset=utf-8"
+              : ext === ".js"
+                ? "text/javascript; charset=utf-8"
+                : "application/octet-stream";
+        res.writeHead(200, { "content-type": type, "cache-control": "no-store" });
+        fs.createReadStream(file).pipe(res);
+        return;
+      }
+
       if (req.method === "GET" && url.pathname === "/health") {
         return json(res, 200, {
           ok: true,
@@ -339,6 +422,7 @@ async function main(): Promise<void> {
           inboxUnresolved: queueSnap.inboxUnresolved,
           peerUnsent: queueSnap.peerUnsent,
           paneOpsPending: queueSnap.paneOpsPending,
+          ackOpen: queueSnap.ackOpen,
           queueSnapAgeMs: Date.now() - queueSnap.updatedAt,
           healthSnapAgeMs: Date.now() - healthSnap.updatedAt,
           ready: healthSnap.updatedAt > 0 && queueSnap.updatedAt > 0,
@@ -388,6 +472,131 @@ async function main(): Promise<void> {
         let rows = store.readCheckbacks();
         if (!all) rows = rows.filter((r) => r.status === "active");
         return json(res, 200, { entries: rows });
+      }
+
+      if (req.method === "GET" && url.pathname === "/targets") {
+        const all = url.searchParams.get("all") === "1";
+        let rows = store.readTargets();
+        if (!all) rows = rows.filter((r) => r.status === "active");
+        rows = [...rows].sort((a, b) => a.deadlineAt.localeCompare(b.deadlineAt));
+        return json(res, 200, { targets: rows });
+      }
+
+      if (req.method === "POST" && url.pathname === "/targets") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          goal?: string;
+          deadlineAt?: string;
+          triageTo?: string[];
+          kind?: string;
+          parentId?: string;
+        };
+        const goal = String(body.goal ?? "").trim();
+        const deadlineAt = String(body.deadlineAt ?? "").trim();
+        if (!goal) return json(res, 400, { ok: false, error: "goal required" });
+        if (!deadlineAt || Number.isNaN(Date.parse(deadlineAt))) {
+          return json(res, 400, { ok: false, error: "deadlineAt ISO required" });
+        }
+        const parentId = String(body.parentId ?? "").trim() || undefined;
+        let kind: "scope" | "slice" | undefined =
+          body.kind === "scope" || body.kind === "slice" ? body.kind : undefined;
+        if (parentId) kind = "slice";
+        if (!kind && !parentId) kind = "scope"; // default: whole-goal for leads to break down
+        if (parentId) {
+          const parent = store.findTarget(parentId);
+          if (!parent) return json(res, 400, { ok: false, error: "parent scope not found" });
+        }
+        if (!parentId) store.cancelActiveTargetsWithGoal(goal);
+        const now = new Date().toISOString();
+        const row = {
+          id: `tgt-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+          status: "active" as const,
+          goal,
+          deadlineAt,
+          createdAt: now,
+          updatedAt: now,
+          kind,
+          parentId,
+          triageTo: Array.isArray(body.triageTo)
+            ? body.triageTo.map((s) => String(s).trim()).filter(Boolean)
+            : ["manager", "secretary"],
+          source: "operator" as const,
+        };
+        store.upsertTarget(row);
+        log(
+          `target add id=${row.id} kind=${kind ?? "-"} parent=${parentId?.slice(0, 8) ?? "-"} deadline=${deadlineAt} goal=${goal.slice(0, 60)}`,
+        );
+        return json(res, 200, { ok: true, id: row.id, target: row });
+      }
+
+      const targetAction = /^\/targets\/([^/]+)\/(done|cancel|triage|remind)$/.exec(url.pathname);
+      if (req.method === "POST" && targetAction) {
+        const id = decodeURIComponent(targetAction[1]!);
+        const action = targetAction[2]!;
+        const row = store.findTarget(id);
+        if (!row) return json(res, 404, { ok: false, error: "not found" });
+        if (action === "done") {
+          const updated = store.markTargetDone(id);
+          log(`target done id=${updated?.id}`);
+          return json(res, 200, { ok: true, target: updated });
+        }
+        if (action === "cancel") {
+          const updated = store.cancelTarget(id);
+          log(`target cancel id=${updated?.id}`);
+          return json(res, 200, { ok: true, target: updated });
+        }
+        const { fireOneTarget } = await import("./target/target-fire.js");
+        if (action === "remind") {
+          fireOneTarget(
+            { store, loaded, log },
+            row,
+            { forceToast: true, forceTriage: false },
+          );
+          return json(res, 200, { ok: true, target: store.findTarget(id) });
+        }
+        // triage
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { triageTo?: string[] };
+        if (Array.isArray(body.triageTo) && body.triageTo.length) {
+          row.triageTo = body.triageTo.map((s) => String(s).trim()).filter(Boolean);
+        }
+        fireOneTarget(
+          { store, loaded, log },
+          row,
+          { forceToast: false, forceTriage: true },
+        );
+        return json(res, 200, { ok: true, target: store.findTarget(id) });
+      }
+
+      if (req.method === "GET" && url.pathname === "/ack") {
+        const all = url.searchParams.get("all") === "1";
+        const seat = url.searchParams.get("seat")?.trim().toLowerCase();
+        let rows = store.readAcks();
+        if (!all) rows = rows.filter((r) => !r.ackedAt);
+        if (seat) rows = rows.filter((r) => r.seat.trim().toLowerCase() === seat);
+        rows.sort((a, b) => a.at.localeCompare(b.at));
+        return json(res, 200, { entries: rows, open: store.countOpenAcks() });
+      }
+
+      if (req.method === "POST" && url.pathname === "/ack/clear") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { seat?: string };
+        const n = store.ackAllAcks(body.seat);
+        log(`ack clear-all n=${n} seat=${body.seat ?? "*"}`);
+        return json(res, 200, { ok: true, cleared: n });
+      }
+
+      if (req.method === "POST" && url.pathname === "/ack") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { id?: string; note?: string };
+        const id = String(body.id ?? "").trim();
+        if (!id) return json(res, 400, { ok: false, error: "id required" });
+        const note = String(body.note ?? "").trim();
+        if (!note) return json(res, 400, { ok: false, error: "note required" });
+        const result = store.ackAck(id, "explicit", note);
+        if (!result.ok) return json(res, 404, result);
+        log(`ack clear id=${result.row?.id} seat=${result.row?.seat}`);
+        return json(res, 200, { ok: true, entry: result.row });
       }
 
       if (req.method === "POST" && url.pathname === "/patience/cancel-all") {
@@ -503,6 +712,7 @@ async function main(): Promise<void> {
         };
         store.appendPeer(row);
         log(`TO-PEER ${kind} from=slot-${row.fromSlot} -> ${row.targetLabel}`);
+        openAckForPeerRow(store, row, log);
         await enqueueAfterAppend("peer", row.id);
         return json(res, 200, { ok: true, entry: row });
       }
@@ -552,10 +762,6 @@ async function main(): Promise<void> {
         return json(res, 200, { ok: true, enqueued: rows.length });
       }
 
-      if (req.method === "GET" && url.pathname === "/ui") {
-        return html(res, 200, htmlUiHome(port));
-      }
-
       if (req.method === "GET" && url.pathname === "/ui/demo-yesno") {
         const baseUrl = `http://127.0.0.1:${port}`;
         const links = actRegistry.register(
@@ -591,16 +797,45 @@ async function main(): Promise<void> {
         const body = JSON.parse(raw || "{}") as {
           actions?: NotifyActRegisterAction[];
           ttlSec?: number;
+          card?: { title?: string; body?: string };
         };
         const actions = Array.isArray(body.actions) ? body.actions : [];
-        if (!actions.length) {
-          return json(res, 400, { ok: false, error: "actions required" });
+        const hasCard = Boolean(body.card && (body.card.title || body.card.body));
+        if (!actions.length && !hasCard) {
+          return json(res, 400, { ok: false, error: "actions or card required" });
         }
         const ttlSec = Number(body.ttlSec ?? 3600);
         const baseUrl = `http://127.0.0.1:${port}`;
-        const links = actRegistry.register(actions, ttlSec, baseUrl);
-        log(`NOTIFY-ACT register n=${links.length}`);
-        return json(res, 200, { ok: true, links });
+        const links = actions.length ? actRegistry.register(actions, ttlSec, baseUrl) : [];
+        let card = undefined as ReturnType<typeof actRegistry.registerCard> | undefined;
+        let infoUrl: string | undefined;
+        if (hasCard) {
+          card = actRegistry.registerCard(
+            {
+              title: String(body.card!.title ?? "Info"),
+              body: String(body.card!.body ?? ""),
+              links,
+            },
+            ttlSec,
+            baseUrl,
+          );
+          infoUrl = card.infoUrl.trim();
+        }
+        log(`NOTIFY-ACT register n=${links.length}${card ? ` card=${card.id}` : ""}`);
+        return json(res, 200, { ok: true, links, card, infoUrl });
+      }
+
+      const cardMatch = /^\/act\/card\/([^/]+)$/.exec(url.pathname);
+      if (req.method === "GET" && cardMatch) {
+        const card = actRegistry.getCard(cardMatch[1]!);
+        if (!card) {
+          return html(
+            res,
+            404,
+            htmlActPage("Card expired", "This decision card expired or was never registered.", false),
+          );
+        }
+        return html(res, 200, htmlDecideCardPage(card, port));
       }
 
       const actMatch = /^\/act\/v1\/([^/]+)$/.exec(url.pathname);
@@ -619,6 +854,7 @@ async function main(): Promise<void> {
           store,
           log,
           onPeerEnqueued: async (peerRow) => {
+            openAckForPeerRow(store, peerRow, log);
             await enqueueAfterAppend("peer", peerRow.id);
           },
         });
@@ -642,6 +878,24 @@ async function main(): Promise<void> {
         });
         log(`INBOX resolve count=${result.resolved} ids=${result.ids.map((i) => i.slice(0, 8)).join(",")}`);
         return json(res, 200, { ok: true, ...result });
+      }
+
+      if (req.method === "POST" && url.pathname === "/connectivity/oc-resume") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          reason?: string;
+          fromIp?: string | null;
+          toIp?: string | null;
+          source?: string;
+        };
+        const reason = String(body.reason ?? "remote").trim() || "remote";
+        const meta: ResumeWaveMeta = { fromIp: body.fromIp ?? null, toIp: body.toIp ?? null };
+        const src = body.source?.trim();
+        if (src && src === (loaded.profile.name ?? "")) {
+          return json(res, 200, { ok: true, skipped: "same-source" });
+        }
+        resumeOpenCodePanes(reason, meta, { skipBroadcast: true });
+        return json(res, 200, { ok: true, reason, meta });
       }
 
       if (req.method === "POST" && url.pathname === "/to-master") {
@@ -728,10 +982,7 @@ async function main(): Promise<void> {
         registry,
         store,
         paneId,
-        {
-          proxyDownActive: connectivity.proxyDownActive,
-          ocLimitedPaneIds: connectivity.ocLimited,
-        },
+        borderConnectivitySnapshot(),
         false,
         "",
         stateDir,
@@ -746,10 +997,7 @@ async function main(): Promise<void> {
             registry,
             store,
             sec,
-            {
-              proxyDownActive: connectivity.proxyDownActive,
-              ocLimitedPaneIds: connectivity.ocLimited,
-            },
+            borderConnectivitySnapshot(),
             true,
             "secretary",
             stateDir,

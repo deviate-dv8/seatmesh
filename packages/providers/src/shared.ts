@@ -1,11 +1,14 @@
 import {
   claudeIdleEmptyComposer,
+  isClaudeLiveComposerRow,
   stripMeshOwnedLines,
   type Detection,
   type PaneSnapshot,
   type ComposerState,
   type PromptCapture,
 } from "@seat-mesh/core";
+
+export { claudeIdleEmptyComposer, isClaudeLiveComposerRow };
 
 /** Process cmdlines attached to snapshot (from pane tree walk). */
 export function cmdlines(pane: PaneSnapshot): string[] {
@@ -216,8 +219,6 @@ export function agentInputDraft(captureTail: string, captureTailAnsi?: string): 
 /** Claude Code UI hint that reuses the "❯" marker but is never a human draft. */
 const CLAUDE_NON_DRAFT_HINT_RE = /^Press up to edit queued messages$/i;
 
-export { claudeIdleEmptyComposer } from "@seat-mesh/core";
-
 /**
  * Claude's composer draft — collects wrapped continuation lines, not just the
  * first visual line (a footer-bleed root cause: a multi-line human draft under
@@ -229,16 +230,19 @@ export function claudeInputDraft(captureTail: string): string {
   for (let i = lines.length - 1; i >= 0; i--) {
     const m = /^\s*❯\s+(.*)$/.exec(lines[i] ?? "");
     if (!m) continue;
-    if (isDecorativeChromeNeighbor(lines[i - 1] ?? "", lines[i + 1] ?? "")) continue;
+    if (!isClaudeLiveComposerRow(lines, i)) continue;
     const first = (m[1] ?? "").trim();
     if (isPlaceholderPromptContent(first)) return "";
     if (CLAUDE_NON_DRAFT_HINT_RE.test(first)) return "";
     const parts = [first];
     for (let j = i + 1; j < lines.length; j++) {
       const cont = lines[j] ?? "";
-      if (!cont.trim()) break;
+      const trimmed = cont.trim();
+      if (!trimmed) break;
       if (/^\s*❯\s/.test(cont)) break;
-      parts.push(cont.trim());
+      if (RULE_LINE_RE.test(trimmed)) break;
+      if (/auto mode on|shift\+tab to cycle/i.test(cont)) break;
+      parts.push(trimmed);
     }
     return parts.join(" ").trim();
   }
@@ -312,14 +316,21 @@ export function composerFromCapture(
     const bottom = bottomLines.join("\n");
     const atComposer =
       /ctrl\+p commands/i.test(bottom) || OC_COMPOSER_RE.test(bottom);
-    // Live composer wins over stale limit/Thinking lines left in scrollback after resume.
+    // Live composer wins over stale limit/connect lines left in scrollback after resume.
+    // Must return here on busy too — otherwise bottom8 still matches "Cannot connect" while
+    // tokens stream and sticky PROXY-DOWN never clears.
     if (atComposer) {
       const recentBusy =
         /⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|esc interrupt/i.test(bottom) ||
         bottomLines.slice(-3).some((l) => /^(Working|Running|Thinking)\b/.test(l.trim()));
-      if (!recentBusy) {
-        return { phase: "empty" };
+      if (recentBusy) {
+        return { phase: "busy", busyLabel: "busy" };
       }
+      const ocDraft = opencodeInputDraft(tail);
+      if (ocDraft) {
+        return { phase: "typing", draftFingerprint: ocDraft.slice(0, 80) };
+      }
+      return { phase: "empty" };
     }
     // Prefer the live bottom band (same window as empty/busy) — bottom28 keeps stale connect errors forever.
     const bottom8 = bottom;
@@ -337,7 +348,16 @@ export function composerFromCapture(
     if (CC_LIMIT_RE.test(tail)) {
       return { phase: "limit", limitKind: "cc-limit" };
     }
-    // Empty ❯ composer — idle even when scrollback mentions "thinking" (busy-generic wedge).
+    const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-4);
+    const active = bottomLines.some((l) => /^(Working|Running|Thinking)\b/.test(l.trim()));
+    if (active) {
+      const m = bottomLines.join("\n").match(/(Working|Running|Thinking[^\n]*)/);
+      return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
+    }
+    const clDraft = claudeInputDraft(tail);
+    if (clDraft) {
+      return { phase: "typing", draftFingerprint: clDraft.slice(0, 80) };
+    }
     if (claudeIdleEmptyComposer(tail)) {
       return { phase: "empty" };
     }
@@ -377,15 +397,6 @@ export function composerFromCapture(
     const m = tail.match(/(Working|Running|Thinking[^\n]*)/);
     return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
   }
-  if (providerId === "claude") {
-    const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-4);
-    const active = bottomLines.some((l) => /^(Working|Running|Thinking)\b/.test(l.trim()));
-    if (active) {
-      const m = bottomLines.join("\n").match(/(Working|Running|Thinking[^\n]*)/);
-      return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
-    }
-  }
-
   if (/AFK|Stuck|draft/.test(tail)) {
     return { phase: "afk" };
   }

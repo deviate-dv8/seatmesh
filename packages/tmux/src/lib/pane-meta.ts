@@ -66,6 +66,10 @@ export function listMeshMinis(session: string, minisWindow: string): MeshPaneMet
   return listWindowMeta(session, minisWindow).filter((m) => /^[1-9]$/.test(m.mini));
 }
 
+export function isLabeledMeshPane(meta: MeshPaneMeta | null | undefined): boolean {
+  return Boolean(meta?.role?.trim());
+}
+
 export function meshManagerPane(session: string, baseWindow: string): string | null {
   const rows = listWindowMeta(session, baseWindow);
   for (const m of rows) {
@@ -74,7 +78,7 @@ export function meshManagerPane(session: string, baseWindow: string): string | n
   for (const m of rows) {
     if (isManagerKind(m.role)) return m.paneId;
   }
-  return rows[0]?.paneId ?? null;
+  return null;
 }
 
 /** Resolve a base-window coord pane by @mesh_role (profile layout driven). */

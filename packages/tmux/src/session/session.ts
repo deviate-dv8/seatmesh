@@ -47,7 +47,7 @@ export function sessionUp(loaded: LoadedProfile): void {
   if (!layout) throw new Error("profile missing layout");
 
   if (tmuxHasSession(session)) {
-    throw new Error(`session '${session}' already exists — ./sm.sh session attach`);
+    throw new Error(`session '${session}' already exists — seatmesh --profile .sm session attach`);
   }
 
   const flags = layoutWindowFlags(loaded);
@@ -159,7 +159,7 @@ export function relayoutMeshSession(
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
-    throw new Error(`session '${session}' does not exist — ./sm.sh session up`);
+    throw new Error(`session '${session}' does not exist — seatmesh --profile .sm session up`);
   }
 
   assertRelayoutSafe(loaded, opts.force ?? false);
@@ -190,7 +190,7 @@ export function realignAllLayouts(loaded: LoadedProfile): {
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
-    throw new Error(`session '${session}' does not exist — ./sm.sh session up`);
+    throw new Error(`session '${session}' does not exist — seatmesh --profile .sm session up`);
   }
 
   const base = realignBaseLayout(loaded, session);
@@ -228,7 +228,7 @@ export function sessionStatus(loaded: LoadedProfile): void {
       const role = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_role}"]).out;
       const slot = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_slot}"]).out;
       const ports = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_ports}"]).out;
-      console.log(`${win}\t${paneId}\t${role}\t${slot}\t${ports}`);
+      console.log(`${win}\t${paneId}\t${role || "plain"}\t${slot || "-"}\t${ports || "-"}`);
     }
   }
 }

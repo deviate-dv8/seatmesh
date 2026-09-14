@@ -1,6 +1,18 @@
 import fs from "node:fs";
 import path from "node:path";
-import { formatMeshSteeringInject, type PaneOpRow } from "@seat-mesh/core";
+import { randomUUID } from "node:crypto";
+import {
+  type AckOpenInput,
+  type AckRow,
+  closeAckRow,
+  formatMeshSteeringInject,
+  openAcks,
+  openAcksForSeat,
+  type PaneOpRow,
+  trimAsk,
+} from "@seat-mesh/core";
+import * as targetJsonl from "./target-jsonl.js";
+export type { TargetRow } from "./target-jsonl.js";
 
 export interface CheckbackRow {
   id: string;
@@ -94,6 +106,9 @@ export class JsonlStore {
   get checkbackPath(): string {
     return path.join(this.stateDir, "CHECKBACK.jsonl");
   }
+  get targetPath(): string {
+    return path.join(this.stateDir, "TARGET.jsonl");
+  }
   get inboxPath(): string {
     return path.join(this.stateDir, "INBOX.jsonl");
   }
@@ -102,6 +117,10 @@ export class JsonlStore {
   }
   get paneOpsPath(): string {
     return path.join(this.stateDir, "PANE_OPS.jsonl");
+  }
+  /** Single ledger of unanswered asks — the one file the operator reads. */
+  get ackPath(): string {
+    return path.join(this.stateDir, "ACK.jsonl");
   }
 
   readCheckbacks(): CheckbackRow[] {
@@ -207,6 +226,30 @@ export class JsonlStore {
     return open.length;
   }
 
+  readTargets(): import("./target-jsonl.js").TargetRow[] {
+    return targetJsonl.readTargets(this.targetPath);
+  }
+
+  upsertTarget(row: import("./target-jsonl.js").TargetRow): import("./target-jsonl.js").TargetRow {
+    return targetJsonl.upsertTarget(this.targetPath, row);
+  }
+
+  findTarget(id: string): import("./target-jsonl.js").TargetRow | null {
+    return targetJsonl.findTarget(this.targetPath, id);
+  }
+
+  markTargetDone(id: string): import("./target-jsonl.js").TargetRow | null {
+    return targetJsonl.markTargetStatus(this.targetPath, id, "done");
+  }
+
+  cancelTarget(id: string): import("./target-jsonl.js").TargetRow | null {
+    return targetJsonl.markTargetStatus(this.targetPath, id, "cancelled");
+  }
+
+  cancelActiveTargetsWithGoal(goal: string): number {
+    return targetJsonl.cancelActiveTargetsWithGoal(this.targetPath, goal);
+  }
+
   readInbox(): ToMasterRow[] {
     return this.readJsonl<ToMasterRow>(this.inboxPath);
   }
@@ -255,6 +298,94 @@ export class JsonlStore {
     if (!rows.length) return;
     const chunk = rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
     fs.appendFileSync(this.peerPath, chunk, { encoding: "utf8", flag: "a" });
+  }
+
+  readAcks(): AckRow[] {
+    return this.readJsonl<AckRow>(this.ackPath);
+  }
+
+  writeAcks(rows: AckRow[]): void {
+    this.writeJsonl(this.ackPath, rows);
+  }
+
+  upsertAck(row: AckRow): AckRow {
+    const rows = this.readAcks().filter((r) => r.id !== row.id);
+    rows.push(row);
+    this.writeAcks(rows);
+    return row;
+  }
+
+  /**
+   * Open a row for an unanswered ask.
+   *
+   * Re-asking the same thing while it is still open is the operator repeating
+   * themselves, not a second obligation — so an identical open ask is returned
+   * as-is rather than stacking a duplicate the agent would have to clear twice.
+   */
+  openAck(input: AckOpenInput): AckRow {
+    const ask = trimAsk(input.ask);
+    const dup = openAcksForSeat(this.readAcks(), input.seat).find((r) => r.ask === ask);
+    if (dup) return dup;
+
+    const row: AckRow = {
+      id: input.id ?? `ack-${randomUUID().replace(/-/g, "").slice(0, 10)}`,
+      at: input.at ?? new Date().toISOString(),
+      seat: input.seat,
+      paneId: input.paneId,
+      source: input.source,
+      ask,
+      reminders: 0,
+      ...(input.from ? { from: input.from } : {}),
+    };
+    return this.upsertAck(row);
+  }
+
+  findAck(id: string): AckRow | null {
+    const needle = String(id || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^ack-/, "");
+    if (!needle) return null;
+    const rows = this.readAcks();
+    return (
+      rows.find((r) => r.id.toLowerCase() === needle) ??
+      rows.find((r) => r.id.toLowerCase().replace(/^ack-/, "").startsWith(needle)) ??
+      null
+    );
+  }
+
+  /** Clear one row. Only a set `ackedAt` ends an obligation. */
+  ackAck(
+    id: string,
+    by: AckRow["ackBy"] = "explicit",
+    note?: string,
+  ): { ok: boolean; row?: AckRow; error?: string } {
+    const row = this.findAck(id);
+    if (!row) return { ok: false, error: "not found" };
+    if (row.ackedAt) return { ok: false, error: `already acked at ${row.ackedAt}` };
+    closeAckRow(row, by, note);
+    this.upsertAck(row);
+    return { ok: true, row };
+  }
+
+  /** Clear every open row (optionally one seat) — operator escape hatch. */
+  ackAllAcks(seat?: string, by: AckRow["ackBy"] = "operator"): number {
+    const rows = this.readAcks();
+    const want = seat?.trim().toLowerCase();
+    const now = new Date().toISOString();
+    let n = 0;
+    for (const r of rows) {
+      if (r.ackedAt) continue;
+      if (want && r.seat.trim().toLowerCase() !== want) continue;
+      closeAckRow(r, by, "cleared by operator", now);
+      n++;
+    }
+    if (n) this.writeAcks(rows);
+    return n;
+  }
+
+  countOpenAcks(): number {
+    return openAcks(this.readAcks()).length;
   }
 
   readPaneOps(): PaneOpRow[] {

@@ -3,6 +3,9 @@ import {
   BANNER_SINGLE_MIN_WIDTH,
   bannerNameFromMeta,
   bannerShouldUseTwoRow,
+  compactBannerInbox,
+  compactBannerTasks,
+  fitBannerLine,
   formatBannerCheckbacks,
   formatBannerInbox,
   formatBannerTasks,
@@ -18,8 +21,29 @@ describe("mesh banner format", () => {
     expect(meshBorderFormat(true)).toBe(MESH_PANE_BORDER_FORMAT_ONE);
     expect(meshBorderFormat(false)).toBe(MESH_PANE_BORDER_FORMAT_ONE);
     expect(MESH_PANE_BORDER_FORMAT_ONE).not.toContain("\n");
-    expect(MESH_PANE_BORDER_FORMAT_ONE).toContain("#{@mesh_inbox}  |  #{@mesh_status}");
+    expect(MESH_PANE_BORDER_FORMAT_ONE).toContain("#{@mesh_banner}");
     expect(MESH_PANE_BORDER_FORMAT_TWO).toBe(MESH_PANE_BORDER_FORMAT_ONE);
+  });
+
+  it("fits banner to pane width (compact then drop segments)", () => {
+    const wide = {
+      name: "manager",
+      tasks: "tasks 3",
+      inbox: "inbox 2 cb 1 wait",
+      status: "BUSY",
+    };
+    expect(fitBannerLine(120, wide)).toBe(
+      "manager  |  tasks 3  |  inbox 2 cb 1 wait  |  BUSY",
+    );
+    const mid = fitBannerLine(48, wide);
+    expect(mid).toContain("t3");
+    expect(mid).toContain("i2·1w");
+    expect(mid.length).toBeLessThanOrEqual(48);
+    const narrow = fitBannerLine(28, wide);
+    expect(narrow.length).toBeLessThanOrEqual(28);
+    expect(narrow).toContain("BUSY");
+    expect(compactBannerTasks("tasks 3")).toBe("t3");
+    expect(compactBannerInbox("inbox 2 cb 1 wait")).toBe("i2·1w");
   });
 
   it("formats field labels", () => {

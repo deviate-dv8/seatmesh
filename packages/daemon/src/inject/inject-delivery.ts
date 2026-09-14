@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import type { ComposerState, LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import {
   formatMeshInboxStamp,
+  intentKeepsShellFooter,
   isCoordKind,
   isHumanCoTypedColumn,
   MESH_INBOX_ROOM_TAG,
@@ -15,6 +16,7 @@ import {
 import {
   capturePaneSnapshot,
   injectToPane,
+  isLabeledMeshPane,
   paneMetaForPane,
 } from "@seat-mesh/tmux";
 import { classifyCoordDelivery, inboxSkipTypingGate } from "./compose-gate.js";
@@ -119,7 +121,7 @@ export interface DeliverOptions {
 /** operator standing: every daemon paste is tagged so coord panes can filter (draft-preserve, STATUS). */
 export function stampDaemonInject(message: string, intent?: MeshInboxIntent): string {
   let body = message;
-  if (intent && intent !== "assign") {
+  if (intent && !intentKeepsShellFooter(intent)) {
     body = stripReplyPeerFooter(body);
   }
   const t = body.trimStart();
@@ -136,6 +138,10 @@ export function deliverToPane(
   opts: DeliverOptions = {},
 ): DeliverResult {
   message = stampDaemonInject(message, opts.intent);
+  const meta = paneMetaForPane(paneId);
+  if (!isLabeledMeshPane(meta)) {
+    return { ok: false, reason: "held:plain_pane" };
+  }
   const snap = capturePaneSnapshot(paneId);
   if (!snap) return { ok: false, reason: "no_snapshot" };
 

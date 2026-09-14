@@ -16,8 +16,8 @@ describe("isSmInjectText", () => {
     expect(isSmInjectText("manager-2 | [mesh-inbox-room] managers | manager | msg 1 unseen")).toBe(
       true,
     );
-    expect(isSmInjectText("secretary | [mesh-inbox] SUPERVISE: ./sm.sh contexts")).toBe(true);
-    expect(isSmInjectText("manager-2 | Check: peer:manager reply — ./sm.sh checkback list")).toBe(
+    expect(isSmInjectText("secretary | [mesh-inbox] SUPERVISE: seatmesh agent contexts")).toBe(true);
+    expect(isSmInjectText("manager-2 | Check: peer:manager reply — seatmesh agent checkback list")).toBe(
       true,
     );
   });
@@ -53,5 +53,19 @@ describe("humanDraftToPreserve", () => {
   it("claude: does not preserve a seat-prefixed room ping as a human draft", () => {
     const tail = "\u276f manager-2 | [mesh-inbox-room] managers | manager | msg 1 unseen\n";
     expect(humanDraftToPreserve(tail, "claude", "INJECT")).toBe("");
+  });
+
+  it("preserves human draft when inject body is mesh-inbox (not skipped for sm mail)", () => {
+    const tail = "  \u2192 fix the login flow\n  Add a follow-up";
+    expect(
+      humanDraftToPreserve(tail, "cursor-agent", "[mesh-inbox] CONTINUE: read FOCUS.md"),
+    ).toBe("fix the login flow");
+  });
+
+  it("preserves short human draft even when DIGEST body happens to include it", () => {
+    const tail = "\u276f ok\n";
+    const digest =
+      "[mesh-inbox] DIGEST (2)\n---\n1. [from:x] please say ok when done\n---\n2. other";
+    expect(humanDraftToPreserve(tail, "claude", digest)).toBe("ok");
   });
 });

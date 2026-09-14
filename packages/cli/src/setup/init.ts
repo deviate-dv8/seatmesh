@@ -8,10 +8,15 @@ export interface InitOptions {
   workspace?: string;
   /** Profile name slug (default: basename of workspace). */
   name?: string;
-  /** seats.root in yaml — default `.sm/seats` for greenfield. */
+  /** seats.root in yaml — default `<dotdir>/seats` for greenfield. */
   seatsRoot?: string;
-  /** Overwrite existing .sm (default refuse). */
+  /** Overwrite existing dotdir (default refuse). */
   force?: boolean;
+  /**
+   * Dotdir under workspace: `.sm` (default) or `.sm-<id>` for multi-config.
+   * Prefer {@link normalizeSmProfileDir} for named configs.
+   */
+  smDirName?: string;
 }
 
 export interface InitResult {
@@ -49,10 +54,14 @@ function copyTree(srcDir: string, destDir: string, created: string[], skipped: s
   }
 }
 
-/** Create `.sm/` dotdir in a project (npx seatmesh init). Never touches existing seat FOCUS/TASKS. */
+/** Create `.sm/` (or `.sm-<id>/`) dotdir in a project. Never touches existing seat FOCUS/TASKS. */
 export function runInit(opts: InitOptions = {}): InitResult {
   const workspace = path.resolve(opts.workspace ?? process.cwd());
-  const smDir = path.join(workspace, SM_DIR);
+  const smDirName = opts.smDirName?.trim() || SM_DIR;
+  if (!smDirName.startsWith(".sm")) {
+    throw new Error(`smDirName must be .sm or .sm-<id> (got ${smDirName})`);
+  }
+  const smDir = path.join(workspace, smDirName);
   const configPath = path.join(smDir, SM_CONFIG);
   const created: string[] = [];
   const skipped: string[] = [];
@@ -64,7 +73,8 @@ export function runInit(opts: InitOptions = {}): InitResult {
   }
 
   const name = opts.name ?? path.basename(workspace);
-  const seatsRoot = opts.seatsRoot ?? ".sm/seats";
+  // paths.scope=profile → seats root is relative to .sm/, not workspace
+  const seatsRoot = opts.seatsRoot ?? "seats";
 
   fs.mkdirSync(smDir, { recursive: true });
   fs.mkdirSync(path.join(smDir, "runtime", "daemon"), { recursive: true });
@@ -85,11 +95,20 @@ export function runInit(opts: InitOptions = {}): InitResult {
   writeTpl("mesh.config.yaml");
   writeTpl("mesh-agents.json");
   writeTpl("README.md");
+  writeTpl("AGENTS.md");
 
   const rolesSrc = path.join(TEMPLATE_ROOT, "roles");
   const rolesDest = path.join(smDir, "roles");
   fs.mkdirSync(rolesDest, { recursive: true });
   copyTree(rolesSrc, rolesDest, created, skipped, Boolean(opts.force));
+
+  const agents = ensureAgentsCliDoc(smDir, {
+    workspace,
+    forceRefresh: Boolean(opts.force),
+    smDirName,
+  });
+  created.push(...agents.created);
+  skipped.push(...agents.skipped);
 
   return { smDir, configPath, created, skipped };
 }
@@ -103,4 +122,65 @@ export function ensureMissingRoleTemplates(smDir: string): { created: string[] }
   fs.mkdirSync(rolesDest, { recursive: true });
   copyTree(rolesSrc, rolesDest, created, [], false);
   return { created };
+}
+
+const AGENTS_MD = "AGENTS.md";
+
+/** Engine-owned seatmesh CLI brief — every agent read_first / Cursor AGENTS.md. */
+export function agentsMdTemplatePath(): string {
+  return path.join(TEMPLATE_ROOT, AGENTS_MD);
+}
+
+/**
+ * Ensure `.sm/AGENTS.md` exists (and refresh when template differs).
+ * Optionally seed workspace-root `AGENTS.md` only when missing (never clobber).
+ */
+export function ensureAgentsCliDoc(
+  smDir: string,
+  opts: { workspace?: string; forceRefresh?: boolean; smDirName?: string } = {},
+): { created: string[]; refreshed: string[]; skipped: string[] } {
+  const created: string[] = [];
+  const refreshed: string[] = [];
+  const skipped: string[] = [];
+  const src = agentsMdTemplatePath();
+  if (!fs.existsSync(src)) return { created, refreshed, skipped };
+
+  const dest = path.join(smDir, AGENTS_MD);
+  const body = fs.readFileSync(src);
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, body);
+    created.push(dest);
+  } else if (opts.forceRefresh !== false) {
+    const same = fs.readFileSync(dest).equals(body);
+    if (same) skipped.push(dest);
+    else {
+      fs.writeFileSync(dest, body);
+      refreshed.push(dest);
+    }
+  } else {
+    skipped.push(dest);
+  }
+
+  const workspace = opts.workspace ?? path.dirname(smDir);
+  const rootAgents = path.join(workspace, AGENTS_MD);
+  const smLabel = opts.smDirName ?? path.basename(smDir);
+  if (!fs.existsSync(rootAgents)) {
+    const multi =
+      smLabel !== ".sm"
+        ? `Multi-config: \`seatmesh --profile ${smLabel} agent\` · \`seatmesh --profile ${smLabel} agent whoami\`.\n`
+        : `Every pane: \`seatmesh agent\` · \`seatmesh agent whoami\` (default walk-up \`.sm/\`).\n`;
+    const pointer =
+      `# Agent brief\n\n` +
+      `Mesh CLI defaults live in \`${smLabel}/AGENTS.md\` (engine-owned).\n` +
+      multi +
+      `\n` +
+      fs.readFileSync(src, "utf8");
+    fs.writeFileSync(rootAgents, pointer);
+    created.push(rootAgents);
+  } else {
+    skipped.push(rootAgents);
+  }
+
+  return { created, refreshed, skipped };
 }

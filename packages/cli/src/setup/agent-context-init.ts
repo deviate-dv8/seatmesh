@@ -1,4 +1,10 @@
-import { dotSmDirFromConfig, findDotSmConfig, type LoadedProfile } from "@seat-mesh/core";
+import path from "node:path";
+import {
+  SM_DIR,
+  dotSmDirFromConfig,
+  findDotSmConfig,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import {
   enqueueColdStart,
   ensureMeshInbox,
@@ -8,7 +14,7 @@ import {
   runWhoami,
   validateAllRoleIndexes,
 } from "@seat-mesh/tmux";
-import { ensureMissingRoleTemplates, runInit } from "./init.js";
+import { ensureAgentsCliDoc, ensureMissingRoleTemplates, runInit } from "./init.js";
 
 export function runAgentContextInit(
   loaded: LoadedProfile,
@@ -22,6 +28,14 @@ export function runAgentContextInit(
     ensureMissingRoleTemplates(dotSmDirFromConfig(cfg));
   }
 
+  const smDir = cfg ? dotSmDirFromConfig(cfg) : path.join(workspace, SM_DIR);
+  const agentsDoc = ensureAgentsCliDoc(smDir, { workspace, forceRefresh: true });
+  if (agentsDoc.created.length || agentsDoc.refreshed.length) {
+    console.log(
+      `OK: AGENTS.md ${[...agentsDoc.created, ...agentsDoc.refreshed].map((p) => path.relative(workspace, p) || p).join(", ")}`,
+    );
+  }
+
   const validation = validateAllRoleIndexes(loaded);
   let allOk = validation.ok;
   for (const fail of validation.failures) {
@@ -32,9 +46,9 @@ export function runAgentContextInit(
 
   console.log("--- agent context init ---");
   console.log("1. Read every path under read_first (in order) for your role.");
-  console.log("2. Run ./sm.sh whoami - hub + open TASKS inline.");
-  console.log("3. Workers: stamp seat FOCUS; minis: ./sm.sh mini done when slice done.");
-  console.log("4. Run ./sm.sh agent for scoped can/cannot on this pane.");
+  console.log("2. Run seatmesh agent whoami - hub + open TASKS inline.");
+  console.log("3. Workers: stamp seat FOCUS; minis: seatmesh agent mini done when slice done.");
+  console.log("4. Run seatmesh agent for scoped can/cannot on this pane.");
   console.log("fix_missing=edit .sm/roles/*.yaml or add files under workspace root");
 
   ensureMeshInbox(loaded, { quiet: true });

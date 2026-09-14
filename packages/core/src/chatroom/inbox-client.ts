@@ -231,3 +231,55 @@ export async function ackCheckback(
     return { ok: false, error: err.message ?? String(e) };
   }
 }
+
+export interface ClearAckEndedResult {
+  ok: boolean;
+  id?: string;
+  error?: string;
+}
+
+/**
+ * Close an ACK row after a peer reply (`peer … --ended <id>`).
+ * Sync curl so the CLI does not exit before the ledger clears.
+ */
+export function clearAckEndedSync(
+  inboxBase: string,
+  id: string,
+  note: string,
+): ClearAckEndedResult {
+  const base = inboxBase.replace(/\/$/, "");
+  const payload = JSON.stringify({
+    id: String(id || "").trim(),
+    note: String(note || "").trim().slice(0, 200) || "peer --ended",
+  });
+  const r = spawnSync(
+    "curl",
+    [
+      "-sS",
+      "-m",
+      "5",
+      "-X",
+      "POST",
+      `${base}/ack`,
+      "-H",
+      "Content-Type: application/json",
+      "-d",
+      payload,
+    ],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) {
+    return { ok: false, error: r.stderr?.trim() || r.stdout?.trim() || "curl /ack failed" };
+  }
+  try {
+    const json = JSON.parse(r.stdout || "{}") as {
+      ok?: boolean;
+      entry?: { id?: string };
+      error?: string;
+    };
+    if (!json.ok) return { ok: false, error: json.error ?? "ack clear failed" };
+    return { ok: true, id: json.entry?.id };
+  } catch {
+    return { ok: false, error: `bad /ack response: ${(r.stdout || "").slice(0, 120)}` };
+  }
+}

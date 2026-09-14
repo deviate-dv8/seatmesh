@@ -16,6 +16,8 @@ import {
   addBaseColumn,
   removeBaseColumn,
   listBaseColumns,
+  chatRoomConfigForLoaded,
+  clearAckEndedSync,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import { createRegistryForProfile } from "@seat-mesh/providers";
@@ -31,6 +33,10 @@ import {
   roleKindFromWhoami,
   requireCoordRole,
   requireInboxLifecycleRole,
+  assertAgentDispatch,
+  printAgentUnauthorized,
+  stripAgentFromArgv,
+  AGENT_META,
   capturePaneSnapshot,
   listSessionPanes,
   sessionAttach,
@@ -96,6 +102,7 @@ import {
   setPaneStatus,
   printSeatContexts,
   runPeek,
+  runPaneKind,
   runPaneMeta,
   runPpa,
   runToSlot,
@@ -123,6 +130,8 @@ import {
 import { parseAgentApplyArgs } from "@seat-mesh/core";
 import { buildChatCommands } from "./commands/chat-cli.js";
 import { buildCheckbackCommands } from "./commands/checkback-cli.js";
+import { buildTargetCommands } from "./commands/target-cli.js";
+import { buildAckCommands } from "./commands/ack-cli.js";
 import { buildNotifyCommand } from "./commands/notify-cli.js";
 import { buildPreviewCommand } from "./commands/preview-cli.js";
 import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
@@ -163,9 +172,11 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
 Setup (run once per project, by a human)
   start               init (if no .sm/ here) + session up, in one step
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
+  session init <sm-name> [--force] [--name NAME]   create .sm-<name>/ (multi-config)
   sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
   update [--dry-run] [--migrate] [--no-restart-inbox]
                                         refresh _vendor (file-by-file) + paths.json; restart inbox
+  version [--json] [--check-registry]   CLI vs npm latest vs profile .seatmesh-version
 
 Status / diagnostics
   report [--json] [--verbose]   stack status (one line default; --verbose = full section dump)
@@ -173,7 +184,7 @@ Status / diagnostics
   test                          smoke: layout, providers, inbox, proxy
 
 Session / layout (infra shape, operator or manager)
-  session attach|up|status
+  session attach|up|status|init <sm-name>
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
   layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
   layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
@@ -184,74 +195,112 @@ Session / layout (infra shape, operator or manager)
   labels                        re-apply @mesh_* + border strip
   inbox [--json] [--wait N] [--meta] | inbox list|resolve|log|instances|stop|restart
 
-Agent runtime (what a pane calls on itself, every turn)
-  whoami [target] [--validate] | cold-start [--inject] | seat init|now|assign|mark|task|remind
-  agent [target]              scoped can/cannot for this pane (profile role)
-  agent context [roles|init]  registered read_first/files; init scaffolds .sm + validates
-  func <id> <args...>         attached external (funcs: in mesh.config.yaml)
-  contexts [--json] | peek | pane-meta | ppa
-  switch | handoff | set | tag <target|self> <id|--auto> | title | status
-  night on|off|status | continue <slot|all>   (manager + night on)
-  slot-advice <slot> [--send] [note...]   (manager; worktree/DB/Redis heuristics)
-  prompt | remind | flush
+Agent runtime (pane — always via gateway)
+  agent                     scoped can/cannot for this pane
+  agent <cmd> …             run <cmd> if allowed; else UNAUTHORIZED
+  agent context [roles|init]  registered read_first/files; init scaffolds .sm
+  agent apply|preflight …   contract apply
 
-Coordination / comms (pane to pane)
-  assign <target> <text...>     FOCUS NOW + TASK + peer SENT (do not hand-edit FOCUS)
-  peer <target> <msg...>        FYI/ACK only — work goes through assign
-  to-slot | to-mini <msg...>    enqueue (daemon injects) — to-master retired, use room say
-  secretary start|dispatch|collect|status|watch …
-  mini list|spawn|prompt|done|dispatch-all
-  checkback start|list|cancel|cancel-all|reset|ack  (alias: patience)
-  coord expect <target> <hub> <snippet...>   arm coord-expect on manager (verify + re-assign)
-  room | chat | index | proxy | providers | manager | stack | profile show
-  notify <session> <check> [--url URL]   desktop toast (seat from TMUX pane)
-  notify yesno <title> <body> [--target secretary]   Yes/No links -> peer (notify-act)
-  preview <file...> [--set days] [--notify]   publish markdown to mdview.io
-  launch [--now] [targets…]
+  Shared/operator (outside agent — humans + session ops)
+  session | update | init | report | test | layout | save | inbox restart | target …
 
-  --profile <dir|yaml>   override config (default: .sm/ walk-up or bundled profile)
+  Examples: agent whoami | agent kind slot-1 | agent peer <t> "<msg>" | agent ack <id> "<note>" | agent cb list
+  Operator EOD: target add "finish s13 tickets" [--deadline eod|6h] · target list · target done <id> · target triage <id>
+
+  --profile <dir|yaml>   optional; default walk-up .sm/; multi-config: --profile .sm-<name>
 `);
 }
 
-async function main(): Promise<void> {
-  const { maybePrintVersionNudge } = await import("./ui/version-nudge.js");
-  maybePrintVersionNudge();
+function printPlainUsage(profileArg?: string): void {
+  if (profileArg) {
+    try {
+      usage(meshLoaded(profileArg));
+      return;
+    } catch {
+      /* fall through — plain help without profile load */
+    }
+  }
+  usage();
+}
 
+async function main(): Promise<void> {
   const { profile: profileArg, rest } = parseArgs(process.argv.slice(2));
   const [cmd, sub, ...tail] = rest;
 
-  if (!cmd || (cmd.startsWith("-") && cmd !== "-h" && cmd !== "--help")) {
-    const json = rest.includes("--json");
-    if (!profileArg && !findDotSmConfig()) {
-      const { printDiscoveryReport } = await import("./report/discovery-report.js");
-      const report = await printDiscoveryReport({ json });
-      process.exit(report.ok ? 0 : 1);
+  // Bare `npx seatmesh` / help: logo+version once per terminal; later invocations plain usage.
+  const helpCmd = cmd === "-h" || cmd === "--help" || cmd === "help";
+  const blankCmd = !cmd || (cmd.startsWith("-") && !helpCmd);
+  if (blankCmd || helpCmd) {
+    const { printSeatmeshBanner } = await import("./ui/banner.js");
+    const {
+      formatHelpVersionBlock,
+      installKindLabel,
+      readInstalledCliVersion,
+      resolveLatestRegistryVersion,
+    } = await import("./ui/version-nudge.js");
+    const showedBrand = printSeatmeshBanner({ tagline: true });
+    if (showedBrand) {
+      const installed = readInstalledCliVersion();
+      const latest = resolveLatestRegistryVersion(false);
+      for (const line of formatHelpVersionBlock(installed, latest, installKindLabel())) {
+        console.log(line);
+      }
+      console.log("");
     }
-    const loaded = meshLoaded(profileArg);
-    const { printStatusReport } = await import("./report/status-report.js");
-    const verbose = rest.includes("--verbose") || rest.includes("-v");
-    const report = await printStatusReport(loaded, { json, verbose });
-    process.exit(report.ok ? 0 : 1);
+    printPlainUsage(profileArg);
+    return;
   }
 
-  if (cmd === "-h" || cmd === "--help" || cmd === "help") {
+  const { maybePrintVersionNudge } = await import("./ui/version-nudge.js");
+  maybePrintVersionNudge();
+
+  if (cmd === "version") {
+    const { printVersionInfo } = await import("./ui/version-nudge.js");
+    let profileDir: string | undefined;
     try {
-      usage(profileArg ? meshLoaded(profileArg) : undefined);
+      profileDir = meshLoaded(profileArg).profileDir;
     } catch {
-      usage();
+      /* no profile — CLI only */
     }
+    printVersionInfo({
+      profileDir,
+      json: rest.includes("--json"),
+      forceRegistryCheck: rest.includes("--check-registry"),
+    });
     return;
   }
 
   if (cmd === "update") {
     const { runUpdate } = await import("./setup/update.js");
-    const { isNpxEphemeralInstall } = await import("./ui/version-nudge.js");
+    const {
+      formatInstallStatusLine,
+      isNpxEphemeralInstall,
+      readInstalledCliVersion,
+      resolveLatestRegistryVersion,
+      semverLess,
+    } = await import("./ui/version-nudge.js");
     const dryRun = rest.includes("--dry-run");
     const migrate = rest.includes("--migrate");
     const noRestartInbox = rest.includes("--no-restart-inbox");
+    const installed = readInstalledCliVersion();
+    const npmLatest = resolveLatestRegistryVersion(true);
+    console.log(formatInstallStatusLine(installed, npmLatest));
     const r = runUpdate({ profileArg, dryRun, migrate });
     console.log(`OK: update dryRun=${dryRun} migrate=${migrate}`);
-    console.log(`  package: ${r.packageVersion}${r.previousVersion ? ` (was ${r.previousVersion})` : ""}`);
+    console.log(`  CLI running: ${r.packageVersion}`);
+    if (r.previousVersion != null) {
+      console.log(
+        `  profile .seatmesh-version: ${r.previousVersion} (last profile update — not npm "installed")`,
+      );
+    } else {
+      console.log(`  profile .seatmesh-version: (none yet)`);
+    }
+    if (npmLatest) console.log(`  npm latest: ${npmLatest}`);
+    if (npmLatest && semverLess(installed, npmLatest)) {
+      console.error(
+        `  WARN: CLI ${installed} < npm ${npmLatest} — upgrade: npm install -g seatmesh@latest  or  npx seatmesh@latest update`,
+      );
+    }
     console.log(`  paths: ${r.pathsManifest}`);
     for (const line of r.refreshed) console.log(`  refreshed: ${line}`);
     for (const line of r.skipped) console.log(`  skipped (unchanged): ${line}`);
@@ -329,7 +378,7 @@ async function main(): Promise<void> {
     } catch {
       /* non-fatal */
     }
-    console.log("  next: npx seatmesh session up  (or ./sm.sh if wired)");
+    console.log("  next: seatmesh session up");
     return;
   }
 
@@ -355,6 +404,36 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "session") {
+    if (sub === "init") {
+      const { normalizeSmProfileDir } = await import("@seat-mesh/core");
+      const rawName = tail[0];
+      if (!rawName || rawName.startsWith("-")) {
+        console.error("usage: session init <sm-name> [--force] [--name NAME]");
+        console.error("  creates .sm-<name>/ (default project config is still .sm via: init)");
+        console.error("  then: seatmesh --profile .sm-<name> session up");
+        process.exit(2);
+      }
+      const force = tail.includes("--force");
+      const nameIdx = tail.indexOf("--name");
+      const profileName =
+        nameIdx >= 0 && tail[nameIdx + 1] ? tail[nameIdx + 1] : undefined;
+      const smDirName = normalizeSmProfileDir(rawName);
+      const r = runInit({ force, name: profileName, smDirName });
+      console.log(`OK: session init ${r.smDir}`);
+      console.log(`  config: ${r.configPath}`);
+      console.log(`  created: ${r.created.length} file(s)`);
+      if (r.skipped.length) console.log(`  skipped (exists): ${r.skipped.length}`);
+      try {
+        const { upsertGlobalSession } = await import("@seat-mesh/core");
+        await upsertGlobalSession(meshLoaded(r.configPath));
+      } catch {
+        /* non-fatal */
+      }
+      console.log(`  next: seatmesh --profile ${smDirName} session up`);
+      console.log(`  agents: seatmesh --profile ${smDirName} agent …`);
+      console.log(`  default .sm/ still needs no --profile (walk-up)`);
+      return;
+    }
     const loaded = meshLoaded(profileArg);
     const touchRegistry = async () => {
       try {
@@ -380,7 +459,7 @@ async function main(): Promise<void> {
       sessionStatus(loaded);
       return;
     }
-    console.error("usage: session attach|up|status");
+    console.error("usage: session attach|up|status|init <sm-name>");
     process.exit(2);
   }
 
@@ -599,7 +678,7 @@ async function main(): Promise<void> {
 
   if (cmd === "to-master") {
     // FRAMEWORK-QUEUE #1 (AGENT-FUNC-GUARDS.md): to-master retired — chat-first comms.
-    console.error('DEPRECATED: use ./sm.sh room say [-r managers] "DONE|BLOCKED|…"');
+    console.error('DEPRECATED: use seatmesh --profile .sm agent room say [-r managers] "DONE|BLOCKED|…"');
     process.exit(2);
   }
 
@@ -650,10 +729,34 @@ async function main(): Promise<void> {
   if (cmd === "peer") {
     const loaded = meshLoaded(profileArg);
     let direct = false;
+    let endedId: string | undefined;
     const args: string[] = [];
-    for (const a of [sub, ...tail].filter((x): x is string => x != null && x !== "")) {
-      if (a === "--direct" || a === "--now") direct = true;
-      else args.push(a);
+    const rawArgs = [sub, ...tail].filter((x): x is string => x != null && x !== "");
+    for (let i = 0; i < rawArgs.length; i++) {
+      const a = rawArgs[i]!;
+      if (a === "--direct" || a === "--now") {
+        direct = true;
+        continue;
+      }
+      if (a === "--ended" || a === "--ack") {
+        const id = rawArgs[i + 1];
+        if (!id || id.startsWith("-")) {
+          console.error("usage: peer … --ended <ack-id>");
+          process.exit(2);
+        }
+        endedId = id;
+        i++;
+        continue;
+      }
+      if (a.startsWith("--ended=") || a.startsWith("--ack=")) {
+        endedId = a.slice(a.indexOf("=") + 1).trim();
+        if (!endedId) {
+          console.error("usage: peer … --ended <ack-id>");
+          process.exit(2);
+        }
+        continue;
+      }
+      args.push(a);
     }
     if (args[0] === "verify") {
       requireCoordRole(loaded, "peer verify");
@@ -668,19 +771,31 @@ async function main(): Promise<void> {
     const rawMsg = textParts.join(" ").trim();
     if (!target || !rawMsg) {
       console.error(
-        "usage: peer verify [target] | peer [--direct] <manager|secretary|slot-N|mini-N|@alias:seat|pane> <msg...>",
+        "usage: peer verify [target] | peer [--direct] [--ended <ack-id>] <manager|secretary|slot-N|mini-N|@alias:seat|pane> <msg...>",
       );
       process.exit(2);
     }
+    const finishEnded = () => {
+      if (!endedId) return;
+      const cfg = chatRoomConfigForLoaded(loaded);
+      const res = clearAckEndedSync(cfg.inboxBase, endedId, `peer -> ${target}: ${rawMsg}`);
+      if (!res.ok) {
+        console.error(`WARN: peer sent but --ended failed: ${res.error ?? "?"}`);
+        return;
+      }
+      console.log(`ok ended ack=${res.id ?? endedId}`);
+    };
     try {
       const remote = parseRemotePeerTarget(target);
       if (remote) {
         runRemotePeer(loaded, remote.alias, remote.seat, rawMsg);
+        finishEnded();
         return;
       }
       // Workers + minis: universal peer (to-slot/to-mini/enqueue). Coords keep manager stamp.
       try {
         runPeer(loaded, target, rawMsg);
+        finishEnded();
         return;
       } catch (e) {
         if ((e as Error).message !== "__peer_coord__") throw e;
@@ -693,7 +808,7 @@ async function main(): Promise<void> {
           reg,
           target,
           rawMsg,
-          { manager: true },
+          { manager: true, force: true },
         );
         console.log(
           `SENT: peer --direct -> ${target} pane=${paneId} provider=${providerId} token=${token ?? "-"} via=${via ?? "direct"}`,
@@ -713,6 +828,7 @@ async function main(): Promise<void> {
             : `SENT: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`;
         console.log(line);
       }
+      finishEnded();
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -933,6 +1049,21 @@ async function main(): Promise<void> {
     const mode = modeRaw === "full" ? "full" : "status";
     try {
       runPeek(loaded, reg, target, mode);
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "kind" || cmd === "what" || cmd === "typeof") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const args = [sub, ...tail].filter((a): a is string => Boolean(a));
+    const json = args.includes("--json");
+    const target = args.find((a) => a !== "--json") ?? "here";
+    try {
+      runPaneKind(loaded, reg, target, { json });
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -1318,28 +1449,48 @@ async function main(): Promise<void> {
   if (cmd === "agent") {
     const loaded = meshLoaded(profileArg);
     const reg = createRegistryForProfile(loaded.profile);
-    if (sub === "apply") {
-      const { bundle, opts } = parseAgentApplyArgs(tail);
-      applyAgentContractBundle(loaded, reg, bundle, opts);
-      return;
-    }
-    if (sub === "preflight") {
-      const { bundle, opts } = parseAgentApplyArgs(tail);
-      applyAgentContractBundle(loaded, reg, bundle, { ...opts, preflight: true, dryRun: true });
-      return;
-    }
-    if (sub === "context") {
-      if (tail[0] === "init") {
-        const code = runAgentContextInit(loaded, { coldStartInject: tail.includes("--inject") });
-        process.exit(code);
+    if (sub && AGENT_META.has(sub)) {
+      if (sub === "apply") {
+        const { bundle, opts } = parseAgentApplyArgs(tail);
+        applyAgentContractBundle(loaded, reg, bundle, opts);
+        return;
       }
-      if (tail[0] === "roles") {
-        process.exit(printAgentContextAllRoles(loaded));
+      if (sub === "preflight") {
+        const { bundle, opts } = parseAgentApplyArgs(tail);
+        applyAgentContractBundle(loaded, reg, bundle, { ...opts, preflight: true, dryRun: true });
+        return;
       }
-      const targetArg = tail.find((a) => !a.startsWith("-"));
-      process.exit(printAgentContext(loaded, targetArg));
+      if (sub === "context") {
+        if (tail[0] === "init") {
+          const code = runAgentContextInit(loaded, { coldStartInject: tail.includes("--inject") });
+          process.exit(code);
+        }
+        if (tail[0] === "roles") {
+          process.exit(printAgentContextAllRoles(loaded));
+        }
+        const targetArg = tail.find((a) => !a.startsWith("-"));
+        process.exit(printAgentContext(loaded, targetArg));
+      }
     }
-    const w = runWhoami(loaded, sub || tail[0]);
+
+    // Gateway: agent <cmd> … → authz then re-enter as top-level <cmd>
+    if (sub && !AGENT_META.has(sub)) {
+      const decision = assertAgentDispatch(loaded, sub, tail);
+      if (decision.kind === "card-target") {
+        const w = runWhoami(loaded, decision.target);
+        printAgentCard(w);
+        return;
+      }
+      if (decision.kind !== "allow") {
+        printAgentUnauthorized(decision);
+        process.exit(2);
+      }
+      process.argv = stripAgentFromArgv(process.argv);
+      return main();
+    }
+
+    // Bare `agent` — own card
+    const w = runWhoami(loaded, "here");
     printAgentCard(w);
     return;
   }
@@ -1360,7 +1511,7 @@ async function main(): Promise<void> {
     }
     if (loaded.profile.external.default === "deny") {
       console.error(`UNAUTHORIZED: func ${id} denied (external.default=deny)`);
-      console.error("hint: ./sm.sh agent");
+      console.error("hint: seatmesh --profile .sm agent");
       process.exit(2);
     }
     try {
@@ -1370,7 +1521,7 @@ async function main(): Promise<void> {
       const index = loadRoleIndex(paths.rolesDir, kind);
       if (!roleAllows(index.funcs, id)) {
         console.error(`UNAUTHORIZED: func ${id} denied for role=${kind}`);
-        console.error("hint: ./sm.sh agent");
+        console.error("hint: seatmesh --profile .sm agent");
         process.exit(2);
       }
     } catch {
@@ -1419,7 +1570,7 @@ async function main(): Promise<void> {
 
   if (cmd === "whoami" || cmd === "where") {
     if (cmd === "where") {
-      console.error("note: where is deprecated — use ./sm.sh whoami");
+      console.error("note: where is deprecated — use seatmesh --profile .sm agent whoami");
     }
     const loaded = meshLoaded(profileArg);
     const json = rest.includes("--json");
@@ -1525,10 +1676,11 @@ async function main(): Promise<void> {
         const prov = reg.detect(snap);
         const det = prov?.detect(snap);
         const state = prov?.composerState(snap) ?? { phase: "plain_shell" };
+        const role = snap.options.mesh_role?.trim() || "plain";
         const slot = snap.options.mesh_slot || "-";
         const ports = snap.options.mesh_ports || "-";
         console.log(
-          `${paneId}\t${prov?.id ?? "?"}\t${det?.resumeId ?? "-"}\t${state.phase}${state.limitKind ? `:${state.limitKind}` : ""}\tslot=${slot}\tports=${ports}\t${snap.windowName}`,
+          `${paneId}\trole=${role}\t${prov?.id ?? "?"}\t${det?.resumeId ?? "-"}\t${state.phase}${state.limitKind ? `:${state.limitKind}` : ""}\tslot=${slot}\tports=${ports}\t${snap.windowName}`,
         );
       }
       return;
@@ -1616,7 +1768,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cmd === "checkback" || cmd === "patience") {
+  if (cmd === "checkback" || cmd === "patience" || cmd === "cb") {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
     const branch = buildCheckbackCommands(getLoaded);
@@ -1626,6 +1778,38 @@ async function main(): Promise<void> {
     }
     try {
       await branch.parseAsync([sub, ...tail], { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
+    }
+    return;
+  }
+
+  if (cmd === "target" || cmd === "targets") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildTargetCommands(getLoaded);
+    if (!sub) {
+      branch.outputHelp();
+      return;
+    }
+    try {
+      await branch.parseAsync([sub, ...tail], { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
+    }
+    return;
+  }
+
+  if (cmd === "ack") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildAckCommands(getLoaded);
+    try {
+      await branch.parseAsync(rest.slice(1), { from: "user" });
     } catch (e) {
       const err = e as { code?: string };
       if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;

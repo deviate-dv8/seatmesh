@@ -189,6 +189,6 @@ export function balanceLeadCommand(
   console.log(
     `OK: balance ON interval=${interval} lead=${leadResolved.paneId} balancees=${doc.balancees.join(",")}`,
   );
-  console.log("  tick kind=balance-lead-tick (daemon + ./sm.sh balance run)");
-  console.log("  off: ./sm.sh balance off");
+  console.log("  tick kind=balance-lead-tick (daemon + seatmesh --profile .sm balance run)");
+  console.log("  off: seatmesh --profile .sm balance off");
 }

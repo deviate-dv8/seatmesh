@@ -6,6 +6,7 @@ import {
   clearOcLimitBannerForPane,
   maybeEndRateLimitEpisode,
   newConnectivityRecoveryState,
+  shouldActivateProxyDownEpisode,
   shouldChainRotateUntilAfterSmart,
   shouldNotifyProxyDownStuck,
   smartRestartCooldownLeftSec,
@@ -13,6 +14,13 @@ import {
   updatePaneConnectStreak,
   updateRateLimitEpisode,
 } from "./connectivity-recovery.js";
+
+describe("shouldActivateProxyDownEpisode (PROXY-DOWN vs OC-LIMIT)", () => {
+  it("never arms PROXY-DOWN from ipify alone — confirmed connect only", () => {
+    expect(shouldActivateProxyDownEpisode({ anyConnectConfirmed: false })).toBe(false);
+    expect(shouldActivateProxyDownEpisode({ anyConnectConfirmed: true })).toBe(true);
+  });
+});
 
 describe("updateIpifyProbeStreak (debounce shallow ipify failures)", () => {
   it("does not confirm down on the first failure", () => {

@@ -8,7 +8,12 @@ import {
   writePathsManifest,
   type LoadedProfile,
 } from "@seat-mesh/core";
-import { readInstalledCliVersion } from "../ui/version-nudge.js";
+import {
+  readInstalledCliVersion,
+  readProfileSeatmeshVersion,
+  resolveLatestRegistryVersion,
+  semverLess,
+} from "../ui/version-nudge.js";
 import { runMigrateRuntime, type MigrateRuntimeResult } from "./migrate-runtime.js";
 
 export interface UpdateOptions {
@@ -28,22 +33,13 @@ export interface UpdateResult {
   changed: boolean;
 }
 
-const SEATMESH_VERSION_FILE = ".seatmesh-version";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // update.ts lives in src/setup/ (dist/setup/), templates sit at packages/cli/templates/
 const VENDOR_ROOT = path.join(__dirname, "..", "..", "templates", "init");
 
-function readProfileVersion(profileDir: string): string | null {
-  const p = path.join(profileDir, SEATMESH_VERSION_FILE);
-  if (!fs.existsSync(p)) return null;
-  const v = fs.readFileSync(p, "utf8").trim();
-  return v || null;
-}
-
 function writeProfileVersion(profileDir: string, version: string, dryRun: boolean): void {
   if (dryRun) return;
-  fs.writeFileSync(path.join(profileDir, SEATMESH_VERSION_FILE), `${version}\n`, "utf8");
+  fs.writeFileSync(path.join(profileDir, ".seatmesh-version"), `${version}\n`, "utf8");
 }
 
 /**
@@ -99,11 +95,27 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
   const skipped: string[] = [];
   const dryRun = Boolean(opts.dryRun);
   const packageVersion = readInstalledCliVersion();
-  const previousVersion = readProfileVersion(loaded.profileDir);
+  const previousVersion = readProfileSeatmeshVersion(loaded.profileDir);
 
   const rolesVendorSrc = path.join(VENDOR_ROOT, "roles");
   const rolesVendorDest = path.join(loaded.profileDir, "roles", "_vendor");
   syncVendorTree(rolesVendorSrc, rolesVendorDest, refreshed, skipped, dryRun);
+
+  const agentsSrc = path.join(VENDOR_ROOT, "AGENTS.md");
+  const agentsDest = path.join(loaded.profileDir, "AGENTS.md");
+  syncVendorFile(agentsSrc, agentsDest, refreshed, skipped, dryRun);
+  if (!dryRun && fs.existsSync(agentsSrc)) {
+    const rootAgents = path.join(loaded.workspace, "AGENTS.md");
+    if (!fs.existsSync(rootAgents)) {
+      const pointer =
+        `# Agent brief\n\n` +
+        `Mesh CLI defaults live in \`.sm/AGENTS.md\` (engine-owned).\n` +
+        `Every pane: \`seatmesh agent\` · \`seatmesh agent whoami\`.\n\n` +
+        fs.readFileSync(agentsSrc, "utf8");
+      fs.writeFileSync(rootAgents, pointer);
+      refreshed.push(rootAgents);
+    }
+  }
 
   const contractsVendorSrc = path.join(VENDOR_ROOT, "contracts", "_vendor");
   const contractsVendorDest = path.join(contractsDirFor(loaded), "_vendor");

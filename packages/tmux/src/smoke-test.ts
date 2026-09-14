@@ -88,7 +88,7 @@ function testPaneTargets(loaded: LoadedProfile): SmokeResult {
 function testMeshInbox(loaded: LoadedProfile): SmokeResult {
   const port = meshInboxPort(loaded);
   const h = inboxHealth(port);
-  if (!h) return row("mesh-inbox", false, "mesh-inbox DOWN — ./sm.sh reload or ./sm.sh inbox");
+  if (!h) return row("mesh-inbox", false, "mesh-inbox DOWN — seatmesh --profile .sm reload or seatmesh --profile .sm inbox");
   if (h.engine !== "@seat-mesh/daemon") {
     return row(
       "mesh-inbox",
@@ -150,7 +150,7 @@ function testSecretaryPane(loaded: LoadedProfile): SmokeResult {
   return row(
     "secretary-pane",
     hasCli,
-    hasCli ? `live CLI on ${r.paneId}` : `pane ${r.paneId} is plain shell — ./sm.sh secretary start`,
+    hasCli ? `live CLI on ${r.paneId}` : `pane ${r.paneId} is plain shell — seatmesh --profile .sm agent secretary start`,
   );
 }
 

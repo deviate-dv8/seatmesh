@@ -221,7 +221,7 @@ export function launchSession(
   const basePanes = listWindowPaneIds(session, layout.base.window);
 
   if (want.has("manager-b") || want.has("master-b") || want.has("co-manager")) {
-    console.warn("manager-b removed — use a worker slot or ./sm.sh room say -r managers for coordination");
+    console.warn("manager-b removed — use a worker slot or seatmesh --profile .sm agent room say -r managers for coordination");
   }
 
   if (wantAll || want.has("manager") || want.has("master")) {

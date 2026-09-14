@@ -191,7 +191,17 @@ export function loadLaunchState(loaded: LoadedProfile): AgentsStateFile {
   const meshFile = meshAgentsJsonPath(loaded);
   const mesh = loadMeshAgentsAt(meshFile);
   if (mesh) return meshToLegacyAgentsState(mesh);
-  return loadAgentsStateAt(agentsJsonPath(loaded));
+  const legacy = agentsJsonPath(loaded);
+  if (fs.existsSync(legacy)) return loadAgentsStateAt(legacy);
+  // Fresh init: mesh-agents.json may exist under corrected path; else empty seed.
+  return {
+    panes: [],
+    conventions: {
+      secretary_default_cli: "opencode",
+      mini_default_cli: "opencode",
+      launch_skips_empty: true,
+    },
+  };
 }
 
 /**

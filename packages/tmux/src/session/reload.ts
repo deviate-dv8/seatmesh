@@ -36,7 +36,7 @@ export function reloadMesh(loaded: LoadedProfile, opts: ReloadOptions = {}): voi
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
-    throw new Error(`session '${session}' missing — ./sm.sh session up`);
+    throw new Error(`session '${session}' missing — seatmesh --profile .sm session up`);
   }
 
   if (!opts.skipBuild) {

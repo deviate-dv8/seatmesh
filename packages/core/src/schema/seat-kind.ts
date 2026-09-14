@@ -3,7 +3,7 @@
  * Consumer column ids are config, not engine enum members.
  */
 
-export const SEAT_KINDS = ["manager", "secretary", "worker", "mini"] as const;
+export const SEAT_KINDS = ["manager", "secretary", "worker", "mini", "plain"] as const;
 export type SeatKind = (typeof SEAT_KINDS)[number];
 
 /** Stable column id from the profile (`manager`, `lead-west`, …). */
@@ -37,7 +37,7 @@ export function expandColumnAlias(raw: string): string[] {
  */
 export function seatKindFromId(id: string, kinds?: ColumnKinds | null): SeatKind {
   const raw = id.trim().toLowerCase();
-  if (!raw) return "worker";
+  if (!raw || raw === "plain" || raw === "unlabeled") return "plain";
   if (kinds?.[raw] && isSeatKind(kinds[raw])) return kinds[raw];
   for (const alias of expandColumnAlias(raw)) {
     if (kinds?.[alias] && isSeatKind(kinds[alias])) return kinds[alias];
@@ -66,6 +66,7 @@ export function isCoordKind(id: string, kinds?: ColumnKinds | null): boolean {
 }
 
 export function defaultCliForKind(kind: SeatKind): string {
+  if (kind === "plain") return "empty";
   return kind === "secretary" ? "opencode" : "agent";
 }
 

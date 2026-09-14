@@ -13,3 +13,19 @@ export interface NotifyActLink {
   url: string;
   token: string;
 }
+
+/** Browser decision card (Info) — title/body + Yes/No act links; not one-shot. */
+export interface NotifyActCard {
+  id: string;
+  title: string;
+  body: string;
+  infoUrl: string;
+  links: NotifyActLink[];
+  expiresAt: number;
+}
+
+export interface NotifyActRegisterCardInput {
+  title: string;
+  body: string;
+}
+

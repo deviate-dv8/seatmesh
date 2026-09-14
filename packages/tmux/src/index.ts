@@ -1,6 +1,7 @@
 export * from "./agents/whoami.js";
 export * from "./agents/authz-guard.js";
 export * from "./agents/agent-card.js";
+export * from "./agents/agent-dispatch.js";
 export * from "./agents/agent-context.js";
 export * from "./lib/resolve-pane.js";
 export * from "./session/session.js";
@@ -33,6 +34,7 @@ export * from "./roles/title-status.js";
 export * from "./inject/focus-brief.js";
 export * from "./roles/contexts.js";
 export * from "./roles/peek.js";
+export * from "./roles/pane-kind.js";
 export * from "./roles/pane-meta-cli.js";
 export * from "./roles/slot-advice.js";
 export * from "./roles/ppa.js";

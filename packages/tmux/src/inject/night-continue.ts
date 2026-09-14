@@ -17,7 +17,7 @@ export function nightEnabled(loaded: LoadedProfile): boolean {
 
 function requireNight(loaded: LoadedProfile): void {
   if (nightEnabled(loaded)) return;
-  throw new Error("refused: night mode is off (./sm.sh night on)");
+  throw new Error("refused: night mode is off (seatmesh --profile .sm night on)");
 }
 
 function inboxPost(port: number, pathname: string, body: Record<string, unknown>): boolean {

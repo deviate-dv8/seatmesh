@@ -1,8 +1,11 @@
 # Whoami-only. Standing rules live in always-on host dots, not this file.
 banner:
   - "prompts=mesh-copy.ts consts only — never paste patterns.md into a pane"
-  - "fresh_summon=./sm.sh whoami first; later peer is a task"
+  - "fresh_summon=seatmesh agent whoami first; later peer is a task"
   - "no_reconfirm=finish open TODOs; do not ask operator to continue"
+  - "operator_eyes=beta: seatmesh agent notify \"…\" \"…\" --url <link> | notify yesno \"<title>\" \"<body>\""
 read_first:
+  - path: .sm/AGENTS.md
+    note: seatmesh CLI gateway — agent <cmd>; notify for operator eyes + --url
   - path: docs/ONE-PATH.md
     note: one command per job

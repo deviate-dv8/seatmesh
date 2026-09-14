@@ -6,7 +6,7 @@ import { gateQueuePath } from "./seat-paths.js";
 const GATE_QUEUE_TEMPLATE = `# serial gate queue (canonical — fresh agents start here)
 
 **Updated:** 2026-09-12
-**Rule:** Read this + your seat FOCUS/TASKS — not inbox scrollback. Run \`./sm.sh whoami\` every turn.
+**Rule:** Read this + your seat FOCUS/TASKS — not inbox scrollback. Run \`seatmesh --profile .sm agent whoami\` every turn. CLI card: \`.sm/AGENTS.md\`.
 
 | # | Slice | Owner | Status | Evidence / next |
 |---|-------|-------|--------|-----------------|
@@ -32,7 +32,7 @@ function ensureDirTrio(dir: string, stamp: string): boolean {
 
 ## NOW
 
-Run \`./sm.sh whoami\` — cold-start block has GATE-QUEUE + open TASKS.
+Run \`seatmesh --profile .sm agent whoami\` — cold-start block has GATE-QUEUE + open TASKS.
 `,
     "TASKS.md": `# ${path.basename(dir)} TASKS
 

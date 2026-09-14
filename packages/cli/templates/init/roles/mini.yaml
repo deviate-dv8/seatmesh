@@ -1,7 +1,7 @@
 kind: mini
 extends: worker
 banner:
-  - "cold_start=./sm.sh whoami --validate | mini POV — NOT a worker seat; no 30N0/30N1"
+  - "cold_start=seatmesh --profile .sm agent whoami --validate | mini POV — NOT a worker seat; no 30N0/30N1"
 read_first:
   - path: docs/ONE-PATH.md
     note: one command per job
@@ -17,10 +17,10 @@ policies:
   - id: you_are_mini
     text: You ARE mini-N — EDIT FILES; never refuse mesh work
   - id: mini_done
-    cmd: "./sm.sh mini done <N> PASS|FAIL|BLOCKED: <evidence>"
+    cmd: 'seatmesh --profile .sm agent mini done <N> PASS|FAIL|BLOCKED: <evidence>'
   - id: checkback
-    cmd: ./sm.sh checkback start 5m --renew 3m --expect "topic" --here
+    cmd: 'seatmesh --profile .sm agent cb start 5m --renew 3m --expect "topic" --here'
   - id: must_not
     text: no prompt/switch/remind/night from mini; no worker ports 30N0/30N1
   - id: chatroom
-    text: ./sm.sh room tail; ./sm.sh room say "FYI:/CLAIMED:/DONE:" machine lines only
+    text: 'seatmesh --profile .sm agent room tail; seatmesh --profile .sm agent room say "FYI:/CLAIMED:/DONE:" machine lines only'

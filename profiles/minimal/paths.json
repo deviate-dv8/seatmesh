@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "profileDir": "/home/dan/Desktop/Work/zsign/services/seat-mesh/profiles/minimal",
-  "workspace": "/home/dan/Desktop/Work/zsign/services/seat-mesh",
+  "profileDir": "/home/dan/Desktop/Projects/seatmesh/profiles/minimal",
+  "workspace": "/home/dan/Desktop/Projects/seatmesh",
   "pathsScope": "profile",
   "paths": {
     "dataRoot": "profiles/minimal/runtime",

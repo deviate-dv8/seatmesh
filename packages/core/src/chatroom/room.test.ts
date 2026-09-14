@@ -133,13 +133,15 @@ describe("formatRoomCommsCheckback", () => {
     });
     expect(msg).toContain("inbound already has");
     expect(msg).toContain("peer");
+    expect(msg).toContain("cb cancel");
+    expect(msg).toContain("queued");
     expect(
       formatRoomCommsCheckback(
         "chat-room:managers peer update (msg)",
         { role: "manager" },
         "manager-2",
       ),
-    ).toContain('seatmesh --profile .sm peer manager-2 "<msg>"');
+    ).toContain('seatmesh agent peer manager-2 "<msg>"');
     expect(parseRoomCommsExpect("chat-room:supervise peer update (claim)")?.slug).toBe(
       "supervise",
     );
@@ -151,6 +153,17 @@ describe("formatRoomCommsCheckback", () => {
     });
     expect(msg).not.toContain("room say");
     expect(msg).not.toContain("room tail");
+  });
+
+  it("embeds cancel id when provided", () => {
+    const msg = formatRoomCommsCheckback(
+      "chat-room:global peer update (broadcast)",
+      { role: "secretary" },
+      null,
+      { verifyOnly: true, id: "cb-peer-1234567890-abcdef" },
+    );
+    expect(msg).toContain("cb cancel peer-12345");
+    expect(msg).toContain("chat reply does NOT cancel");
   });
 });
 
@@ -167,7 +180,7 @@ describe("formatRoomCoordNotify", () => {
     expect(msg).toContain("[mesh-inbox-room] supervise | mini-5 | claim");
     expect(msg).toContain("CLAIMED: proxy-restart lead slice");
     expect(msg).toContain("(+14 more unseen)");
-    expect(msg).toContain('seatmesh --profile .sm peer mini-5 "<msg>"');
+    expect(msg).toContain('seatmesh agent peer mini-5 "<msg>"');
     expect(msg).not.toContain("room tail");
   });
 });
@@ -183,8 +196,8 @@ describe("formatRoomPeerNotify", () => {
       { unseen: 2 },
     );
     expect(msg).toContain("[mesh-inbox-room] team-room | worker-3 | fyi 2 unseen");
-    expect(msg).toContain("seatmesh --profile .sm room tail -r team-room -n 15");
-    expect(msg).toContain('seatmesh --profile .sm peer slot-3 "<msg>"');
+    expect(msg).toContain("seatmesh agent room tail -r team-room -n 15");
+    expect(msg).toContain('seatmesh agent peer slot-3 "<msg>"');
     expect(msg).not.toContain("long body that must not appear");
     expect(msg).not.toContain("standing:");
   });
@@ -201,7 +214,7 @@ describe("formatRoomDirectPm", () => {
       { role: "worker", slot: 6 },
     );
     expect(msg).toContain("[agent-worker-slot-3] room peer-3-6-abc");
-    expect(msg).toContain('seatmesh --profile .sm peer slot-3 "<msg>"');
+    expect(msg).toContain('seatmesh agent peer slot-3 "<msg>"');
   });
 });
 
@@ -210,8 +223,11 @@ describe("formatGenericCheckback", () => {
     const msg = formatGenericCheckback(
       "master ACK review of opencode provider TS fix (digest queued 400ac9c9)",
       { role: "manager" },
+      { id: "cb-digest-aa" },
     );
     expect(msg).toContain("inbox list | grep 400ac9c9");
+    expect(msg).toContain("cb cancel digest-aa");
+    expect(msg).toContain("queued");
   });
 });
 

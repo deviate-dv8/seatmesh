@@ -1,13 +1,25 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { formatMeshSteeringInject, type PaneOpRow } from "@seat-mesh/core";
+import { randomUUID } from "node:crypto";
+import {
+  type AckOpenInput,
+  type AckRow,
+  closeAckRow,
+  formatMeshSteeringInject,
+  openAcks,
+  openAcksForSeat,
+  type PaneOpRow,
+  trimAsk,
+} from "@seat-mesh/core";
 import {
   dedupeJsonlRowsById,
   type CheckbackRow,
   type PeerRow,
   type ToMasterRow,
 } from "./jsonl-store.js";
+import * as targetJsonl from "./target-jsonl.js";
+export type { TargetRow } from "./target-jsonl.js";
 
 interface SqliteDb {
   exec(sql: string): void;
@@ -95,6 +107,15 @@ CREATE TABLE IF NOT EXISTS pane_ops (
   id TEXT PRIMARY KEY,
   row_json TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ack (
+  id TEXT PRIMARY KEY,
+  seat TEXT NOT NULL,
+  acked_at TEXT,
+  row_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ack_open ON ack(seat, acked_at);
 
 CREATE INDEX IF NOT EXISTS idx_inbox_pending ON inbox(sent, resolved);
 CREATE INDEX IF NOT EXISTS idx_peer_pending ON peer(sent);
@@ -193,6 +214,9 @@ export class SqliteStore {
   get checkbackPath(): string {
     return path.join(this.stateDir, "CHECKBACK.jsonl");
   }
+  get targetPath(): string {
+    return path.join(this.stateDir, "TARGET.jsonl");
+  }
   get inboxPath(): string {
     return path.join(this.stateDir, "INBOX.jsonl");
   }
@@ -201,6 +225,116 @@ export class SqliteStore {
   }
   get paneOpsPath(): string {
     return path.join(this.stateDir, "PANE_OPS.jsonl");
+  }
+  get ackPath(): string {
+    return path.join(this.stateDir, "ACK.jsonl");
+  }
+
+  readTargets(): import("./target-jsonl.js").TargetRow[] {
+    return targetJsonl.readTargets(this.targetPath);
+  }
+  upsertTarget(row: import("./target-jsonl.js").TargetRow): import("./target-jsonl.js").TargetRow {
+    return targetJsonl.upsertTarget(this.targetPath, row);
+  }
+  findTarget(id: string): import("./target-jsonl.js").TargetRow | null {
+    return targetJsonl.findTarget(this.targetPath, id);
+  }
+  markTargetDone(id: string): import("./target-jsonl.js").TargetRow | null {
+    return targetJsonl.markTargetStatus(this.targetPath, id, "done");
+  }
+  cancelTarget(id: string): import("./target-jsonl.js").TargetRow | null {
+    return targetJsonl.markTargetStatus(this.targetPath, id, "cancelled");
+  }
+  cancelActiveTargetsWithGoal(goal: string): number {
+    return targetJsonl.cancelActiveTargetsWithGoal(this.targetPath, goal);
+  }
+
+  readAcks(): AckRow[] {
+    return this.db
+      .prepare("SELECT row_json FROM ack ORDER BY id")
+      .all()
+      .map((row: unknown) => JSON.parse(String((row as { row_json: string }).row_json)) as AckRow);
+  }
+
+  writeAcks(rows: AckRow[]): void {
+    const del = this.db.prepare("DELETE FROM ack");
+    const ins = this.db.prepare("INSERT INTO ack(id, seat, acked_at, row_json) VALUES (?, ?, ?, ?)");
+    this.db.transaction(() => {
+      del.run();
+      for (const r of rows) ins.run(r.id, r.seat, r.ackedAt ?? null, JSON.stringify(r));
+    })();
+  }
+
+  upsertAck(row: AckRow): AckRow {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO ack(id, seat, acked_at, row_json) VALUES (?, ?, ?, ?)",
+      )
+      .run(row.id, row.seat, row.ackedAt ?? null, JSON.stringify(row));
+    return row;
+  }
+
+  openAck(input: AckOpenInput): AckRow {
+    const ask = trimAsk(input.ask);
+    const dup = openAcksForSeat(this.readAcks(), input.seat).find((r) => r.ask === ask);
+    if (dup) return dup;
+    const row: AckRow = {
+      id: input.id ?? `ack-${randomUUID().replace(/-/g, "").slice(0, 10)}`,
+      at: input.at ?? new Date().toISOString(),
+      seat: input.seat,
+      paneId: input.paneId,
+      source: input.source,
+      ask,
+      reminders: 0,
+      ...(input.from ? { from: input.from } : {}),
+    };
+    return this.upsertAck(row);
+  }
+
+  findAck(id: string): AckRow | null {
+    const needle = String(id || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^ack-/, "");
+    if (!needle) return null;
+    const rows = this.readAcks();
+    return (
+      rows.find((r) => r.id.toLowerCase() === needle) ??
+      rows.find((r) => r.id.toLowerCase().replace(/^ack-/, "").startsWith(needle)) ??
+      null
+    );
+  }
+
+  ackAck(
+    id: string,
+    by: AckRow["ackBy"] = "explicit",
+    note?: string,
+  ): { ok: boolean; row?: AckRow; error?: string } {
+    const row = this.findAck(id);
+    if (!row) return { ok: false, error: "not found" };
+    if (row.ackedAt) return { ok: false, error: `already acked at ${row.ackedAt}` };
+    closeAckRow(row, by, note);
+    this.upsertAck(row);
+    return { ok: true, row };
+  }
+
+  ackAllAcks(seat?: string, by: AckRow["ackBy"] = "operator"): number {
+    const rows = this.readAcks();
+    const want = seat?.trim().toLowerCase();
+    const now = new Date().toISOString();
+    let n = 0;
+    for (const r of rows) {
+      if (r.ackedAt) continue;
+      if (want && r.seat.trim().toLowerCase() !== want) continue;
+      closeAckRow(r, by, "cleared by operator", now);
+      this.upsertAck(r);
+      n++;
+    }
+    return n;
+  }
+
+  countOpenAcks(): number {
+    return openAcks(this.readAcks()).length;
   }
 
   readCheckbacks(): CheckbackRow[] {

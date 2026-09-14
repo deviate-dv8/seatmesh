@@ -12,3 +12,6 @@ export * from "./comms-checkback.js";
 export * from "./fanout-routing.js";
 export * from "./notify-act.js";
 export * from "./notify-act-client.js";
+export * from "./mdview-publish.js";
+export * from "./eod.js";
+export * from "./target-client.js";

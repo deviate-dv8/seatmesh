@@ -1,6 +1,7 @@
 kind: worker
+extends: common
 banner:
-  - "cold_start=./sm.sh whoami --validate | seat FOCUS + TASKS every turn"
+  - "cold_start=seatmesh --profile .sm agent whoami --validate | seat FOCUS + TASKS every turn"
 read_first:
   - path: docs/ONE-PATH.md
     note: one command per job
@@ -12,10 +13,10 @@ files:
   - .sm/README.md
 policies:
   - id: comms
-    cmd: ./sm.sh to-master "<ACK|DONE|BLOCKED|PROVED: ...>"
+    cmd: 'seatmesh --profile .sm agent peer manager "<ACK|DONE|BLOCKED|PROVED: …>"'
   - id: peer
-    cmd: ./sm.sh to-slot <N> "<msg>"
+    cmd: 'seatmesh --profile .sm agent to-slot <N> "<msg>"'
   - id: checkback
-    cmd: ./sm.sh checkback start 5m --renew 3m --expect "topic" --here
+    cmd: 'seatmesh --profile .sm agent cb start 5m --renew 3m --expect "topic" --here'
   - id: chatroom
-    text: ./sm.sh room tail at turn start; ./sm.sh room say "CLAIMED:/DONE:/FYI:" machine lines
+    text: 'seatmesh --profile .sm agent room tail at turn start; seatmesh --profile .sm agent room say "CLAIMED:/DONE:/FYI:" machine lines'

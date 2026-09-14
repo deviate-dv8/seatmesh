@@ -15,7 +15,10 @@ export function resolveGuardRole(w: WhoamiResult): {
   seatKind: string;
   extraDeny: CommsAction[];
 } {
-  const r = w.role.toLowerCase();
+  const r = w.role.trim().toLowerCase();
+  if (!r || r === "plain") {
+    return { guardRole: "plain", seatKind: "plain", extraDeny: [] };
+  }
   if (r === "manager-mini") {
     return { guardRole: "mini", seatKind: "mini", extraDeny: [] };
   }
@@ -25,17 +28,22 @@ export function resolveGuardRole(w: WhoamiResult): {
   if (r === "manager") {
     return { guardRole: "manager", seatKind: "manager", extraDeny: [] };
   }
+  if (r === "worker") {
+    return { guardRole: "worker", seatKind: "worker", extraDeny: [] };
+  }
   return { guardRole: "worker", seatKind: "worker", extraDeny: [] };
 }
 
 const ACTION_COMMANDS: Record<CommsAction, string[]> = {
   "send.toMaster": [m("to-master <msg>")],
   "send.peer": [
+    m('peer <target> "<msg>" [--ended <ack-id>]'),
     m("to-slot <N> <msg>"),
     m("to-mini <N> <msg>"),
     m('room say [-r slug] <msg>'),
   ],
   "send.coord": [
+    m('peer <coord> "<msg>" [--ended <ack-id>]'),
     m("room broadcast <msg>"),
     m('room say [-r slug] <msg>'),
     m("to-master <coord>"),
@@ -45,6 +53,7 @@ const ACTION_COMMANDS: Record<CommsAction, string[]> = {
     m("mini list | prompt | done | kill | reassign"),
   ],
   "prompt.worker": [
+    m('assign <target> "<msg>"'),
     m("prompt <slot> <msg>"),
     m("remind <slot|all> [note]"),
     m("switch|handoff <target> <cli> [reason]"),
@@ -57,16 +66,25 @@ const ACTION_COMMANDS: Record<CommsAction, string[]> = {
   "board.mutate": ["board column moves (operator only)"],
 };
 
-/** Shared baseline — every in-session agent. */
+/**
+ * Shared baseline — every in-session agent (via `agent <cmd>` gateway).
+ * patterns.md: one surface; card lists exactly what `agent` will allow.
+ */
 const BASE_COMMANDS = [
-  m("agent"),
+  m(""), // → seatmesh agent  (card)
   m("whoami [target]"),
-  m("checkback start|list|cancel ..."),
+  m('notify "<session>" "<check>" [--url <link>]   ← operator eyes (beta)'),
+  m('notify info|md "<title>" --md <file>|--body "…"   ← craft Info on /act/card UI'),
+  m('notify yesno "<title>" "<blurb>" [--md file]   ← Info+Yes/No on same UI card'),
+  m('ack <id> "<note>" | ack | ack clear'),
+  m("cb list | cb cancel <id>   ← STOP renew (chat does NOT)"),
+  m('cb start <dur> --expect "…"'),
+  m('peer <target> "<msg>" [--ended <ack-id>]'),
   m("room tail [-r slug]"),
   m("contexts"),
   m("peek <target> status|full"),
-  m("inbox (health)"),
-  m("profile show"),
+  m("kind <target>   ← agent vs terminal (alias: what | typeof)"),
+  m("inbox"),
 ];
 
 const ROLE_EXTRA_CAN: Record<string, string[]> = {
@@ -81,7 +99,7 @@ const ROLE_EXTRA_CAN: Record<string, string[]> = {
     m("secretary dispatch|collect|watch on|off"),
     m("mini spawn (tester|code-reviewer|helper only)"),
   ],
-  worker: ["workspace notify script (operator prove)"],
+  worker: [],
   mini: [m("mini done <N> PASS|FAIL: ...")],
 };
 
@@ -140,19 +158,21 @@ export function buildAgentCard(w: WhoamiResult): {
   const portsBit = w.ports ? `ports=${w.ports}` : "";
 
   const lines: string[] = [
-    `you_are=${w.role.toUpperCase()}`,
+    `you_are=${w.role ? w.role.toUpperCase() : "PLAIN"}`,
     `seat_kind=${seatKind}`,
     `guard_role=${guardRole}`,
     ...(slotBit ? [slotBit] : []),
     ...(portsBit ? [portsBit] : []),
-    `scope=${m("agent")} (profile role — not full whoami hub)`,
+    `scope=${m("")} <cmd> … — only listed can; else UNAUTHORIZED`,
     "--- can ---",
     ...can.map((c) => `  ${c}`),
     "--- cannot ---",
     ...(cannot.length ? cannot.map((c) => `  ${c}`) : ["  (none beyond operator gates)"]),
     "---",
     `full_hub=${m("whoami")}`,
+    "fyi=follow-ups / more inbox while busy are queued — inject when idle",
     "one_path=services/seatmesh/docs/ONE-PATH.md",
+    "operator=session|update|init|report|inbox restart — without agent",
   ];
 
   return { lines, can, cannot };

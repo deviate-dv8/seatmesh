@@ -32,4 +32,24 @@ describe("notify-act registry", () => {
     expect(result.ok).toBe(true);
     expect(logs.some((l) => l.includes("NOTIFY-ACT ping"))).toBe(true);
   });
+
+  it("registerCard returns infoUrl and getCard until expiry", () => {
+    const reg = createNotifyActRegistry();
+    const links = reg.register(
+      [
+        { label: "Yes", type: "ping", params: {} },
+        { label: "No", type: "ping", params: {} },
+      ],
+      300,
+      "http://127.0.0.1:31670",
+    );
+    const card = reg.registerCard(
+      { title: "Ship?", body: "Blue button ok?", links },
+      300,
+      "http://127.0.0.1:31670",
+    );
+    expect(card.infoUrl).toContain("/act/card/");
+    expect(reg.getCard(card.id)?.title).toBe("Ship?");
+    expect(reg.getCard(card.id)?.links).toHaveLength(2);
+  });
 });

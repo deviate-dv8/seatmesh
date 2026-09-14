@@ -1,5 +1,9 @@
 import boxen from "boxen";
 import cfonts from "cfonts";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { renderLogoMark } from "./logo-art.js";
 import { terminalStyleEnabled, tintBrandBlueGradient } from "./logo-color.js";
 
@@ -23,9 +27,14 @@ export type BannerOpts = {
   subtitle?: string;
   /** Shown centered under the title block (default text: SEATMESH_TAGLINE). */
   tagline?: boolean | string;
+  /** Print even if this terminal already saw the logo. */
+  force?: boolean;
 };
 
 const TITLE_FONT = "block";
+
+/** Stamp TTL — new login / long-lived pts still get a fresh logo occasionally. */
+const BANNER_STAMP_TTL_MS = 12 * 60 * 60 * 1000;
 
 function stripAnsi(text: string): string {
   return text.replace(/\x1b\[[0-9;]*m/g, "");
@@ -97,9 +106,74 @@ function resolveBannerOpts(opts?: string | BannerOpts): BannerOpts {
   return opts ?? {};
 }
 
-/** Brand header: logo + title + optional centered tagline. */
-export function printSeatmeshBanner(opts?: string | BannerOpts): void {
-  const { subtitle, tagline: taglineOpt } = resolveBannerOpts(opts);
+function bannerCacheDir(): string {
+  if (process.env.SEATMESH_BANNER_CACHE_DIR?.trim()) {
+    return process.env.SEATMESH_BANNER_CACHE_DIR.trim();
+  }
+  const base = process.env.XDG_CACHE_HOME || path.join(os.homedir(), ".cache");
+  return path.join(base, "seatmesh", "banner-once");
+}
+
+/** Stable id for this terminal: tmux pane, else tty device. */
+export function terminalBannerKey(): string {
+  const pane = process.env.TMUX_PANE?.trim();
+  if (pane) return `tmux:${pane}`;
+  const r = spawnSync("tty", { encoding: "utf8" });
+  const tty = (r.stdout ?? "").trim();
+  if (r.status === 0 && tty && tty !== "not a tty") return `tty:${tty}`;
+  // Non-interactive / piped — treat as always-plain (no logo spam in scripts).
+  return "";
+}
+
+function bannerStampPath(key: string): string {
+  const safe = key.replace(/[^a-zA-Z0-9._+-]/g, "_");
+  return path.join(bannerCacheDir(), `${safe}.stamp`);
+}
+
+/**
+ * First call in this terminal → true (and marks shown). Later calls → false.
+ * SEATMESH_BANNER=1 force show; =0 force skip. Empty key (no tty) → false.
+ */
+export function consumeTerminalBannerSlot(): boolean {
+  const force = process.env.SEATMESH_BANNER?.trim();
+  if (force === "0" || force === "false" || force === "off") return false;
+  if (force === "1" || force === "true" || force === "always") return true;
+
+  const key = terminalBannerKey();
+  if (!key) return false;
+
+  const stamp = bannerStampPath(key);
+  try {
+    const st = fs.statSync(stamp);
+    if (Date.now() - st.mtimeMs < BANNER_STAMP_TTL_MS) return false;
+  } catch {
+    /* missing — first show */
+  }
+  try {
+    fs.mkdirSync(path.dirname(stamp), { recursive: true });
+    fs.writeFileSync(stamp, `${new Date().toISOString()}\n`);
+  } catch {
+    /* still show once even if stamp fails */
+  }
+  return true;
+}
+
+/** Whether this invocation should print the brand logo (once per terminal). */
+export function shouldPrintSeatmeshBanner(force = false): boolean {
+  if (force) return true;
+  return consumeTerminalBannerSlot();
+}
+
+/**
+ * Brand header: logo + title + optional centered tagline.
+ * Once per terminal (TTY / tmux pane) unless `force` or SEATMESH_BANNER=1.
+ * Returns true if the logo was printed.
+ */
+export function printSeatmeshBanner(opts?: string | BannerOpts): boolean {
+  const resolved = resolveBannerOpts(opts);
+  if (!shouldPrintSeatmeshBanner(Boolean(resolved.force))) return false;
+
+  const { subtitle, tagline: taglineOpt } = resolved;
   const tagline =
     taglineOpt === true
       ? SEATMESH_TAGLINE
@@ -139,4 +213,5 @@ export function printSeatmeshBanner(opts?: string | BannerOpts): void {
   }
   if (subtitle) console.log(frameSubtitle(subtitle));
   console.log("");
+  return true;
 }

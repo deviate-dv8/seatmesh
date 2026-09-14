@@ -13,6 +13,8 @@ export interface ConnectivitySnapshot {
     rebootWifiBounce: boolean;
     smartRestart: boolean;
     rotateMaxAttempts: number;
+    waitIpMaxSec: number;
+    waitIpPollSec: number;
     cooldownMs: number;
     ipifyFailBeforeRecovery: number;
   };

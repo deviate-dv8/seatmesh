@@ -294,7 +294,7 @@ export function miniSpawn(
 
   const paneId = ensureMiniCli(loaded, registry, n);
   const prefix = opts.viaSecretary === false ? SUPERVISOR_PREFIX : SECRETARY_PREFIX;
-  const brief = `${prefix}FRESH SUMMON. First action: run ./sm.sh whoami (no flags). Then this task.
+  const brief = `${prefix}FRESH SUMMON. First action: run seatmesh --profile .sm agent whoami (no flags). Then this task.
 MINI-TASK id=${n} role=${role}: ${task}
 
 You are mini-${n} (NOT a worker seat). Parallel job for manager only. When done: report via mini done ${n} PASS|FAIL: <evidence>. Then stop.`;

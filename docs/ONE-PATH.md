@@ -18,10 +18,10 @@ raw-paste into tmux from scripts when a command exists.
 
 | Need | Command |
 |------|---------|
-| What can I run (scoped) | `agent [target]` |
+| What can I run (scoped) | `agent` / `agent <cmd>` |
 | Who am I / hub inline | `whoami [target]` |
 | Validate role-index paths | `whoami --validate` |
-| Role briefing inject | fresh launch/switch/restart injects FRESH SUMMON — agent runs `./sm.sh whoami` |
+| Role briefing inject | fresh launch/switch/restart injects FRESH SUMMON — agent runs `seatmesh --profile .sm agent whoami` |
 | Ensure seat templates | `seat init` (also runs on reload / session up) |
 | Give a seat work | `assign <target> <text>` — FOCUS NOW + TASK + peer SENT. Do not hand-edit FOCUS. |
 | Flip seat Mark | `seat mark <target> <OPEN\|BUSY\|BLOCKED>` |
@@ -38,7 +38,7 @@ raw-paste into tmux from scripts when a command exists.
 
 **CLI vs agent methods:** living forum + triage table
 `tasks/seat-mesh/forums/cli-usage-forum.md` (grep-first; do not ingest whole file each turn).
-Use `./sm.sh agent` for scoped **can/cannot**; use forum **COLLAPSE/METHOD** rows when proposing new surface.
+Use `seatmesh --profile .sm agent` for scoped **can/cannot**; use forum **COLLAPSE/METHOD** rows when proposing new surface.
 
 | Goal | Command |
 |------|---------|
@@ -53,6 +53,8 @@ Use `./sm.sh agent` for scoped **can/cannot**; use forum **COLLAPSE/METHOD** row
 | Poll later | `checkback start 5m --renew 3m --expect "…" --here` |
 | Reset / ack intercept | `checkback reset <id> 5m` · `checkback ack <id> yes\|no` |
 | Operator toast (plain) | `notify <session> <check> [--url URL]` |
+| Rich notify (mdview) | `notify info\|md "<title>" --md <file>\|--body "…" [--image <path>]` |
+| Yes / No decide | `notify yesno "<title>" "<blurb>" [--md file] [--target seat]` |
 | Dan Yes/No → agent | `notify yesno <title> <body> [--target secretary]` |
 
 **Multi-manager coordination:** `room say -r managers "SYNC: …"` (shared ledger).
@@ -70,6 +72,7 @@ Targets for `peer`: `manager`, `secretary`, `slot-N`, `mini-N`, pane id.
 | Switch CLI type | `switch <target> <agent\|claude\|kiro\|opencode\|empty>` |
 | Rescue stuck composer | `flush <target>` |
 | Pane status / scrollback | `peek <target> status\|full` |
+| Agent vs terminal? | `kind <target>` (aliases: `what`, `typeof`) |
 | Performance index | `ppa [perf-index]` |
 | Pane op queue | `ops list\|clear` |
 

@@ -22,13 +22,23 @@ describe("claudeInputDraft (FQ-inject-co-typed-pane)", () => {
     expect(claudeInputDraft("Thinking...\n")).toBe("");
   });
 
-  it("ignores a dimmed suggested-reply chip sandwiched between dividers (not a live draft)", () => {
+  it("reads auto-mode live composer between dividers", () => {
+    const tail =
+      "✻ Baked for 35s · done 10:12 AM\n" +
+      "─".repeat(40) +
+      "\n❯ some text here for manager-1 to test\n" +
+      "─".repeat(40) +
+      "\n  ⏵⏵ auto mode on (shift+tab to cycle)\n";
+    expect(claudeInputDraft(tail)).toBe("some text here for manager-1 to test");
+  });
+
+  it("ignores a scrollback chip without auto-mode footer", () => {
     const tail =
       "✨ Baked for 4m 13s · done 9:44 PM\n" +
       "─".repeat(40) +
       "\n❯ yes post it\n" +
       "─".repeat(40) +
-      "\n  ⏭⏭ auto mode on (shift+tab to cycle)\n";
+      "\n";
     expect(claudeInputDraft(tail)).toBe("");
   });
 });
@@ -46,13 +56,27 @@ describe("isDecorativeChromeNeighbor", () => {
 });
 
 describe("composerFromCapture (border/typing status)", () => {
-  it("does not report typing for a suggestion chip flanked by dividers, even with empty composer", () => {
+  it("reports typing for auto-mode composer row between dividers (live secretary pane)", () => {
+    const tail =
+      "✻ Baked for 35s · done 10:12 AM\n" +
+      "─".repeat(40) +
+      "\n❯ some text here for manager-1 to test\n" +
+      "─".repeat(40) +
+      "\n  ⏵⏵ auto mode on (shift+tab to cycle)\n";
+    const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
+    expect(composerFromCapture(pane, "claude")).toEqual({
+      phase: "typing",
+      draftFingerprint: "some text here for manager-1 to test",
+    });
+  });
+
+  it("does not report typing for a scrollback chip without auto-mode footer", () => {
     const tail =
       "✨ Baked for 4m 13s · done 9:44 PM\n" +
       "─".repeat(40) +
       "\n❯ yes post it\n" +
       "─".repeat(40) +
-      "\n  ⏭⏭ auto mode on (shift+tab to cycle)\n";
+      "\n";
     const pane = { captureTail: tail } as Parameters<typeof composerFromCapture>[0];
     expect(composerFromCapture(pane, "claude")).toEqual({ phase: "empty" });
   });

@@ -5,6 +5,7 @@ export const SlotRoleSchema = z.enum([
   "secretary",
   "worker",
   "mini",
+  "plain",
 ]);
 
 export type SlotRole = z.infer<typeof SlotRoleSchema>;

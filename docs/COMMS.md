@@ -113,14 +113,15 @@ toasts (no workspace `notify.sh`). Inbox/CPE recovery toasts stay plain text via
 **CLI (from repo with profile):**
 
 ```bash
-seatmesh --profile .sm notify yesno "<title>" "<body>"
-seatmesh --profile .sm notify yesno "Reply to agent" "Approve the mesh change?" \
-  --yes-msg "Dan notify reply: YES" --target secretary
+seatmesh notify yesno "<title>" "<body>"
+seatmesh notify yesno "Approve the mesh change?" "Details…" --target manager
+# agent pane: reply seat defaults to whoami (slot-N / manager / …)
+seatmesh agent notify yesno "Ship CTA?" "Preview http://localhost:5080/"
 ```
 
-**Library:** `sendYesNoToast(loaded, title, body, yesMsg, yesTarget?)` — default target
-`secretary`; No peers `Dan notify reply: NO` to the same target. Custom actions:
-`yesNoNotifyActActions()` + `sendDesktopToastWithActLinks()`.
+**Library:** `sendYesNoToast(loaded, title, body, { target?, yesMsg?, noMsg? })` —
+default target = whoami seat, else `manager`. Clicks peer `[operator-decide] YES|NO — title`.
+Opens Info card (`/act/card/…`) in the browser. Toast body uses plain URLs (notify-send safe).
 
 **Action types** (`packages/core/src/chatroom/notify-act.ts`): `peer`, `inbox-resolve`,
 `checkback-ack`, `ping`. Registry + execute: `packages/daemon/src/notify-act.ts` on the

@@ -105,7 +105,7 @@ export function buildColdStartBrief(
       lines.push(readTrimmed(queuePath, MAX_QUEUE));
     }
   } else {
-    lines.push(`(missing ${queuePath} — run ./sm.sh seat init)`);
+    lines.push(`(missing ${queuePath} — run seatmesh --profile .sm seat init)`);
   }
 
   if (focusPath) {
@@ -121,13 +121,13 @@ export function buildColdStartBrief(
 
   lines.push(
     "",
-    "RULES: ./sm.sh whoami every turn | update TASKS checkbox | row minis -> lead not manager",
+    "RULES: seatmesh --profile .sm agent whoami every turn | update TASKS checkbox | row minis -> lead not manager",
   );
 
   return lines.join("\n");
 }
 
-/** Role index (banner + read_first + policies + files) plus hub — same material as ./sm.sh whoami inject path. */
+/** Role index (banner + read_first + policies + files) plus hub — same material as seatmesh --profile .sm whoami inject path. */
 export function buildFullColdStartBrief(
   loaded: LoadedProfile,
   w: WhoamiResult,

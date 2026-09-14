@@ -62,12 +62,15 @@ describe("buildOperatorNotifyTitle", () => {
 });
 
 describe("buildOperatorNotifyBody", () => {
-  it("adds Check line and optional url", () => {
+  it("adds Check line without pasting URL into body", () => {
     expect(buildOperatorNotifyBody("about", "eyeball UI", "http://localhost:5080")).toContain(
       "Check: eyeball UI",
     );
-    expect(buildOperatorNotifyBody("about", "eyeball UI", "http://localhost:5080")).toContain(
+    expect(buildOperatorNotifyBody("about", "eyeball UI", "http://localhost:5080")).not.toContain(
       "http://localhost:5080",
+    );
+    expect(buildOperatorNotifyBody("about", "eyeball UI", "http://localhost:5080")).not.toContain(
+      "Tap Open",
     );
   });
 });

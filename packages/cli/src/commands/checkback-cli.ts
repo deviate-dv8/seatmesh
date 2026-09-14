@@ -73,6 +73,7 @@ function printEntry(e: CheckbackEntry): void {
 export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command {
   const checkback = new Command("checkback")
     .alias("patience")
+    .alias("cb")
     .description("Mesh inbox poll-later (daemon injects Check: on expiry)");
 
   checkback

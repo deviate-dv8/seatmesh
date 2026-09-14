@@ -245,7 +245,7 @@ export function injectPromptDirect(
   }
   if (!opts.force && (state.phase === "typing" || state.phase === "busy")) {
     throw new Error(
-      `pane ${resolved.paneId} composer phase=${state.phase} — clear draft or wait; use seatmesh --profile .sm room say -r managers or seat QUEUE.md`,
+      `pane ${resolved.paneId} composer phase=${state.phase} — clear draft or wait; use seatmesh --profile .sm agent room say -r managers or seat QUEUE.md`,
     );
   }
   if (!opts.force && (provider.id === "claude" || provider.id === "cursor-agent")) {

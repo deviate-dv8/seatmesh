@@ -16,7 +16,7 @@ const base: PeerRow = {
   fromAgent: "worker-6",
   targetPane: "%3",
   targetLabel: "slot-1",
-  msg: "slot-1 3010/3011 | [mesh-inbox-room] global | worker-6 | fyi 18 unseen\nVerify: ./sm.sh room tail -n 15",
+  msg: "slot-1 3010/3011 | [mesh-inbox-room] global | worker-6 | fyi 18 unseen\nVerify: seatmesh room tail -n 15",
   sent: false,
 };
 
@@ -68,7 +68,7 @@ describe("shouldSkipManagerStatusRoomPing", () => {
         ...base,
         roomSlug: "managers",
         targetLabel: "manager",
-        msg: "manager | [mesh-inbox-room] managers | secretary | msg (+7 more unseen)\nSTATUS tick: PROG\nVerify: ./sm.sh room tail -r managers -n 15",
+        msg: "manager | [mesh-inbox-room] managers | secretary | msg (+7 more unseen)\nSTATUS tick: PROG\nVerify: seatmesh room tail -r managers -n 15",
       }),
     ).toBe(true);
   });

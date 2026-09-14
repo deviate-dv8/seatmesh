@@ -127,7 +127,7 @@ export function resolvePaneTarget(
     if (!paneId) {
       return {
         error:
-          "not in tmux — pass a target: ./sm.sh whoami <1-8|slot-N|manager|mini-N|%id>",
+          "not in tmux — pass a target: seatmesh --profile .sm agent whoami <1-8|slot-N|manager|mini-N|%id>",
       };
     }
     const row =
@@ -173,7 +173,12 @@ export function resolvePaneTarget(
   const miniMatch = raw.match(/^(?:mini|manager-mini)-(\d+)$/);
   if (miniMatch) {
     const n = miniMatch[1];
-    const row = findInMesh(ctx, (p) => p.mini === n || p.slot === `mini-${n}`);
+    const row = findInMesh(
+      ctx,
+      (p) =>
+        (p.mini === n || p.slot === `mini-${n}`) &&
+        (p.role === "manager-mini" || Boolean(p.mini)),
+    );
     if (!row) return { error: `mini-${n} pane not found` };
     return { paneId: row.paneId, row };
   }
@@ -193,7 +198,7 @@ export function resolvePaneTarget(
   const slotMatch = raw.match(/^(?:slot-)?(\d+)$/);
   if (slotMatch) {
     const slot = slotMatch[1];
-    const row = findInMesh(ctx, (p) => p.slot === slot);
+    const row = findInMesh(ctx, (p) => p.slot === slot && p.role === "worker");
     if (!row) {
       const live = liveSessionFromContext(ctx);
       return { error: `slot ${slot} pane not found in mesh session '${live}'` };

@@ -62,9 +62,10 @@ Engine canonical map: **`.sm/paths.json`** (generated on `init`, `update`, `prof
 
 ## CLI entry
 
-**Primary:** `npx seatmesh` (package bin alias — today: `seatmesh` / `./sm.sh` wrapper).
+**Primary:** `npx seatmesh` prints plain help (no status probe). Use `report` for stack status.
 
 ```bash
+npx seatmesh report            # stack status (was implicit default pre-1.0.3)
 npx seatmesh init              # create .sm/ + paths.json
 npx seatmesh update            # refresh locked vendor; rewrite paths.json; migrate hints
 npx seatmesh profile validate  # yaml + paths.json + missing dirs

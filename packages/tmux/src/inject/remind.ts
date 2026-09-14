@@ -28,15 +28,15 @@ function buildRemindMessage(
   let msg =
     `${prefix} slot-${slot} ports ${ports || "?"} - ` +
     "REMIND (from operator via manager): Update your seat context now.\n" +
-    "1) ./sm.sh whoami\n" +
+    "1) seatmesh agent whoami\n" +
     "2) Edit seat files: FOCUS.md (NOW only + Mark), TASKS.md (todos), REMINDER.md (self-queue).\n" +
     "   Report whether your session TASKS are done (open checkboxes count).\n" +
     "   Mark OPEN only if all session TASKS are done/cleared; else Mark BUSY or BLOCKED (operator preference).\n" +
     "3) Stamp **Tmux seat:** on your ACTIVE-FOCUS block if you own one.\n" +
-    "4) Re-read .agent/agent-seats.md Worker POV - to signal the master you MUST shell:\n" +
-    "   ./sm.sh room say <msg> (chat-only reply is not a master signal).\n" +
-    "   Operator-first: for eyeball/approve/prove, notify script FIRST then room say (never ask master to toast operator).\n" +
-    "   Peer seats: ./sm.sh room say (live CLI only; no merge authority).\n" +
+    "4) Re-read .sm/AGENTS.md — to signal the master you MUST shell:\n" +
+    "   seatmesh agent room say <msg> (chat-only reply is not a master signal).\n" +
+    "   Operator-first (beta): eyeball → notify \"…\" \"…\" --url <link>; decide → notify yesno \"<title>\" \"<body>\"; then room say (never ask chat for a toast).\n" +
+    "   Peer seats: seatmesh agent room say (live CLI only; no merge authority).\n" +
     `   Slot ${slot}, ports ${ports} (paired only).`;
   if (note) msg += `\nOperator note: ${note}`;
   return msg;

@@ -45,6 +45,19 @@ export const DEFAULT_GUARDS: Record<SlotRole, SlotGuard> = {
       "board.mutate",
     ],
   },
+  plain: {
+    role: "plain",
+    allow: ["snapshot.cold", "nav.log"],
+    deny: [
+      "send.toMaster",
+      "send.peer",
+      "send.coord",
+      "spawn.mini",
+      "prompt.worker",
+      "merge",
+      "board.mutate",
+    ],
+  },
 };
 
 export function guardAllows(role: SlotRole, action: CommsAction): boolean {

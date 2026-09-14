@@ -13,6 +13,7 @@ import {
 } from "@seat-mesh/core";
 import { capturePaneSnapshot, listMeshMonitorPanes } from "@seat-mesh/tmux";
 import { notifyConnectivityStatus, type ResumeWaveMeta } from "./oc-resume.js";
+import { syncCarrierIpProbe } from "./oc-resume-broadcast.js";
 
 const PROXY_UP_COOLDOWN_MS = 60_000;
 /** After an episode clears, ignore stale oc-connect re-arm unless streak re-confirms. */
@@ -101,8 +102,8 @@ export function updateRateLimitEpisode(
 }
 
 /**
- * Pure decision: after Proxy-SMART exits, should rotate-until run next?
- * Mirrors inbox-server.mjs shouldRunRotateUntilAfterSmart — chain rotate-until
+ * Pure decision: after Proxy-SMART exits, should wait-ip run next?
+ * Mirrors inbox-server.mjs shouldRunRotateUntilAfterSmart — chain wait-ip poll
  * when SMART was skipped (cooldown), failed, or the carrier IP did not change.
  */
 export function shouldChainRotateUntilAfterSmart(input: {
@@ -232,6 +233,17 @@ export function newConnectivityRecoveryState(): ConnectivityRecoveryState {
  * "still down" toast sent yet, to warrant telling operator it's stuck (not silent)?
  * Exported for unit testing without tmux/process spawning.
  */
+/**
+ * PROXY-DOWN episode vs OC-LIMIT (rate-limit) — keep separate.
+ * - PROXY-DOWN: confirmed oc-connect transport failure only (debounced pane streak).
+ * - OC-LIMIT: instant wait-ip / carrier rotate; never fold ipify blips or rate-limit into PROXY-DOWN.
+ */
+export function shouldActivateProxyDownEpisode(input: {
+  anyConnectConfirmed: boolean;
+}): boolean {
+  return input.anyConnectConfirmed;
+}
+
 export function shouldNotifyProxyDownStuck(
   state: Pick<ConnectivityRecoveryState, "proxyDownEpisodeStartAt" | "proxyDownStuckNotified">,
   nowMs: number = Date.now(),
@@ -499,20 +511,15 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
   );
   if (!carrierOk && !ipifyConfirmedDown && !anyConnect) {
     log(
-      `ipify probe fail streak ${ipifyStreak}/${ipifyThreshold} — defer PROXY-DOWN recovery`,
+      `ipify probe fail streak ${ipifyStreak}/${ipifyThreshold} — OC-LIMIT owns rotate when rate-limited; PROXY-DOWN needs confirmed connect`,
     );
   }
-  // Ipify blips alone must not start PROXY-DOWN / cpe-proxy-up — need OC connect errors and/or
-  // an active rate-limit episode before treating carrier ipify as down for recovery.
-  const ipifyDownForRecovery =
-    ipifyConfirmedDown && (anyRateLimit || state.rateLimitEpisodeActive);
-  let proxyDownNow = anyConnect || ipifyDownForRecovery;
+  let proxyDownNow = shouldActivateProxyDownEpisode({ anyConnectConfirmed: anyConnect });
   const wasDown = state.proxyDownActive;
   const rearmBlocked =
     !wasDown &&
     proxyDownNow &&
     anyConnect &&
-    !ipifyDownForRecovery &&
     carrierOk &&
     Date.now() - lastProxyDownClearAt < PROXY_DOWN_REARM_COOLDOWN_MS;
   if (rearmBlocked) {
@@ -582,16 +589,15 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
         "Wait for resume-sent then complete toasts. Ack is automatic when limit screens clear.",
         "starting",
       );
-      const rotateMax = conn.policy?.rotateMaxAttempts ?? 15;
       maybeRunOcLimitRecovery(
         hooks,
+        conn,
         workspace,
         proxyPort,
         fromIp,
         state,
         log,
         resumeOpenCodePanes,
-        rotateMax,
       );
     } else {
       log("OC-LIMIT episode active — recovery already ran this episode (skip proxy restart)");
@@ -628,96 +634,116 @@ function maybeRunProxyUp(
 }
 
 /**
- * OC-LIMIT (rate-limit) recovery: Proxy-SMART restart first when off cooldown,
- * else cpe-proxy-rotate-until.sh directly. Chains rotate-until after a SMART
- * run that was skipped/failed/no-op, then notifies operator + resumes OC panes on
- * any real carrier IP change. Mirrors inbox-server.mjs runOcLimitRecoveryAsync.
+ * OC-LIMIT (rate-limit) recovery: default wait-ip poll (no CPE reboot loop).
+ * Optional Proxy-SMART when policy.smartRestart; chains wait-ip after SMART
+ * skip/fail/unchanged IP. Resumes OC panes on real carrier IP change.
+ * Mirrors inbox-server.mjs runOcLimitRecoveryAsync.
  */
 function maybeRunOcLimitRecovery(
   hooks: ReturnType<typeof resolveConnectivityHooks>,
+  conn: NonNullable<import("@seat-mesh/core").MeshProfile["connectivity"]>,
   workspace: string,
   proxyPort: number,
   fromIp: string | null,
   state: ConnectivityRecoveryState,
   log: (line: string) => void,
   resumeOpenCodePanes: ConnectivityPollInput["resumeOpenCodePanes"],
-  rotateMaxAttempts = 15,
 ): void {
+  const waitMaxSec = conn.policy?.waitIpMaxSec ?? 3600;
+  const waitPollSec = conn.policy?.waitIpPollSec ?? 30;
+  const useSmart = conn.policy?.smartRestart === true;
   const now = Date.now();
   if (state.recoveryRunning) return;
   if (state.rateLimitRecoveryStarted) return;
-  if (now - state.lastRotateAt < ROTATE_COOLDOWN_MS) return;
+  // First OC-LIMIT rising edge: instant wait-ip (no ipify gate). Cooldown only blocks re-runs.
+  if (state.lastRotateAt > 0 && now - state.lastRotateAt < ROTATE_COOLDOWN_MS) return;
 
   state.recoveryRunning = true;
   state.rateLimitRecoveryStarted = true;
   state.lastRotateAt = now;
 
-  const finish = (toIp: string | null, reason: string) => {
+  const finish = (toIp: string | null, reason: string, opts?: { forceResume?: boolean }) => {
     state.recoveryRunning = false;
     const ipChanged = Boolean(toIp && fromIp && toIp !== fromIp);
-    if (!ipChanged) {
+    if (!ipChanged && !opts?.forceResume) {
       log(
         `OC-LIMIT recovery done reason=${reason} ip=${toIp ?? "?"} — skip resume wave (no carrier change)`,
       );
       return;
     }
-    log(`OC-LIMIT recovery done -> resume wave reason=${reason} ${fromIp} -> ${toIp}`);
+    log(
+      `OC-LIMIT recovery done -> resume wave reason=${reason} ${fromIp ?? "?"} -> ${toIp ?? "?"}${opts?.forceResume ? " (forced)" : ""}`,
+    );
     setImmediate(() => resumeOpenCodePanes(reason, { fromIp, toIp }));
   };
 
-  const runRotateUntil = (reason: string) => {
+  const runWaitIp = (reason: string) => {
     const script = hooks?.rotate;
     if (!script || !fs.existsSync(script)) {
       log(`OC-LIMIT recovery: connectivity.hooks.rotate missing (${script ?? "unset"})`);
       state.recoveryRunning = false;
       return;
     }
-    log(`OC-LIMIT -> async ${path.basename(script)} (${reason}) max=${rotateMaxAttempts}`);
-    const rotateEnv = { CPE_ROTATE_MAX_ATTEMPTS: String(rotateMaxAttempts) };
+    log(
+      `OC-LIMIT -> async ${path.basename(script)} (${reason}) max=${waitMaxSec}s poll=${waitPollSec}s`,
+    );
+    const waitEnv = {
+      CPE_WAIT_MAX_SEC: String(waitMaxSec),
+      CPE_WAIT_POLL_SEC: String(waitPollSec),
+    };
     const started = runScriptAsync(
       workspace,
       script,
       log,
-      "rotate-until",
+      "wait-ip",
       (code) => {
-        log(`rotate-until exit=${code}`);
+        log(`wait-ip exit=${code}`);
+        const toIp = syncCarrierIpProbe(workspace, proxyPort) ?? carrierIpCached();
+        if (toIp) lastKnownGoodIp = toIp;
         scheduleIpifyProbe(workspace, proxyPort);
-        finish(carrierIpCached(), "rotate-until");
+        finish(toIp, "wait-ip", { forceResume: code === 0 });
       },
-      rotateEnv,
+      waitEnv,
     );
     if (!started) state.recoveryRunning = false;
   };
 
+  if (!useSmart) {
+    log("OC-LIMIT -> wait-ip (smartRestart=false, no reboot loop)");
+    runWaitIp("oc-limit");
+    return;
+  }
+
   const cooldownLeft = smartRestartCooldownLeftSec();
   if (cooldownLeft > 0) {
-    log(`OC-LIMIT Proxy-SMART cooldown ${cooldownLeft}s -> rotate-until path`);
-    runRotateUntil("smart-cooldown");
+    log(`OC-LIMIT Proxy-SMART cooldown ${cooldownLeft}s -> wait-ip path`);
+    runWaitIp("smart-cooldown");
     return;
   }
 
   const smartScript = hooks?.smartRestart;
   if (!smartScript || !fs.existsSync(smartScript)) {
-    log(`OC-LIMIT rising-edge but hooks.smartRestart missing -> rotate-until`);
-    runRotateUntil("no-smart-script");
+    log(`OC-LIMIT rising-edge but hooks.smartRestart missing -> wait-ip`);
+    runWaitIp("no-smart-script");
     return;
   }
 
   log(`OC-LIMIT rising-edge -> async ${path.basename(smartScript)}`);
   const started = runScriptAsync(workspace, smartScript, log, "cpe-proxy-smart-restart", (code) => {
     log(`cpe-proxy-smart-restart exit=${code}`);
+    const ipAfter = syncCarrierIpProbe(workspace, proxyPort) ?? carrierIpCached();
+    if (ipAfter) lastKnownGoodIp = ipAfter;
     scheduleIpifyProbe(workspace, proxyPort);
-    const ipAfter = carrierIpCached();
     if (shouldChainRotateUntilAfterSmart({ exitCode: code, ipBefore: fromIp, ipAfter })) {
       const chainReason = code === SMART_RESTART_COOLDOWN_EXIT_CODE ? "smart-cooldown" : "smart-unchanged";
       notifyConnectivityStatus(
         workspace,
         "OC-LIMIT",
-        `Proxy-SMART did not clear it (${chainReason}). Escalating to cpe-proxy-rotate-until.sh.`,
+        `Proxy-SMART did not clear it (${chainReason}). Waiting for new carrier IP (no reboot).`,
         "Wait for resume-sent then complete toasts.",
         "escalating",
       );
-      runRotateUntil(chainReason);
+      runWaitIp(chainReason);
       return;
     }
     finish(ipAfter, "proxy-smart-restart");

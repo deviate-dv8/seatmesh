@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>seatmesh · decide</title>
+  <link rel="stylesheet" href="./targets.css" />
+  <style>
+    .panel {
+      padding: 1.25rem;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      max-width: 40rem;
+    }
+    .steps { color: var(--muted); margin: 0 0 1rem; padding-left: 1.2rem; }
+    .steps li { margin: 0.35rem 0; }
+    .btn {
+      display: inline-block;
+      padding: 0.55rem 1.15rem;
+      text-decoration: none;
+      font-weight: 600;
+      border-radius: 2px;
+      border: 1px solid transparent;
+      margin: 0.25rem 0.4rem 0.25rem 0;
+    }
+    .btn-yes { background: var(--yes); color: #061018; }
+    .btn-info { background: transparent; color: var(--info); border-color: var(--line); }
+    .btn-link { background: var(--accent); color: #061018; }
+    code.url { word-break: break-all; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">seatmesh</div>
+    <nav>
+      <a href="./">Targets</a>
+      <a class="on" href="./decide.html">Decide</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h1>Decide (beta)</h1>
+      <p class="lede">
+        Agent <code>notify yesno</code> shows a toast with native
+        <strong>Info / Yes / No</strong> buttons (Linux notify-send) and opens the
+        browser decision card. Yes/No peer the reply seat as
+        <code>PRIORITY [operator-decide]</code>. Raw <code>/act/v1</code> URLs are not dumped in the toast (they are not clickable there).
+
+      </p>
+      <ol class="steps">
+        <li>Agent: <code>seatmesh agent notify yesno "&lt;title&gt;" "&lt;body&gt;"</code></li>
+        <li>Toast: click <strong>Info</strong> → this UI’s decision card (<code>/act/card/…</code>)</li>
+        <li>On the card (or toast): <strong>Yes</strong> / <strong>No</strong></li>
+      </ol>
+      <p class="lede">Try the live demo (fresh one-shot links):</p>
+      <a class="btn btn-link" href="./demo-yesno">Open Yes / No demo</a>
+      <a class="btn btn-info" href="./">Back to Targets</a>
+    </section>
+  </main>
+
+  <footer>
+    Toast Info URL looks like <code class="url">http://127.0.0.1:&lt;port&gt;/act/card/&lt;id&gt;</code>
+  </footer>
+</body>
+</html>

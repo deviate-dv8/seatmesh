@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Mesh inbox supervisor — keeps mesh-inbox-server alive (crash restart + dist HMR).
- * Started by ./sm.sh engine (session up / reload / ensureMeshInbox), not by hand.
+ * Started by seatmesh --profile .sm engine (session up / reload / ensureMeshInbox), not by hand.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   const serverJs = resolveDaemonScript("mesh-inbox-server.js");
 
   if (!fs.existsSync(serverJs)) {
-    console.error(`mesh-inbox-supervisor: missing ${serverJs} — run ./sm.sh reload`);
+    console.error(`mesh-inbox-supervisor: missing ${serverJs} — run seatmesh --profile .sm reload`);
     process.exit(1);
   }
 

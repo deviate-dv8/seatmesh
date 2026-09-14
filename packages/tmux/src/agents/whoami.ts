@@ -37,8 +37,7 @@ function tmuxDisplay(pane: string, format: string): string | null {
 }
 
 function detectRole(pane: string): string {
-  const role = tmuxDisplay(pane, "#{@mesh_role}") ?? "worker";
-  return role || "worker";
+  return tmuxDisplay(pane, "#{@mesh_role}")?.trim() ?? "";
 }
 
 function detectSlot(pane: string): number | null {
@@ -61,7 +60,7 @@ export function runWhoami(loaded: LoadedProfile, target?: string): WhoamiResult 
   const { paneId: pane, row } = resolved;
   const inTmux = Boolean(pane);
 
-  let role = "worker";
+  let role = "";
   let slot: number | null = null;
   let slotLabel: string | null = null;
   let ports: string | null = null;
@@ -181,7 +180,7 @@ export function printWhoami(loaded: LoadedProfile, target?: string): void {
   console.log(`data_root=${paths.dataRoot}`);
   if (w.window) console.log(`window=${w.window}`);
   if (w.paneId) console.log(`pane=${w.paneId}`);
-  console.log(`you_are=${w.role.toUpperCase()}`);
+  console.log(`you_are=${w.role ? w.role.toUpperCase() : "PLAIN"}`);
   if (w.slotLabel) console.log(`slot=${w.slotLabel}`);
   else if (w.slot != null) console.log(`slot=${w.slot}`);
   if (w.ports) console.log(`ports=${w.ports}`);

@@ -1,0 +1,135 @@
+import { Command } from "commander";
+import {
+  type AckRow,
+  type LoadedProfile,
+  chatRoomConfigForLoaded,
+  formatAckStatusLine,
+  openAcks,
+} from "@seat-mesh/core";
+import { ensureMeshInbox, meshInboxPort } from "@seat-mesh/tmux";
+
+function requireMeshInbox(loaded: LoadedProfile): void {
+  if (ensureMeshInbox(loaded, { quiet: true })) return;
+  const port = meshInboxPort(loaded);
+  console.error(
+    `FAIL: mesh inbox down on :${port} (auto-start failed) — run: seatmesh inbox restart`,
+  );
+  process.exit(1);
+}
+
+function inboxBase(loaded: LoadedProfile): string {
+  return chatRoomConfigForLoaded(loaded).inboxBase.replace(/\/$/, "");
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const body = (await res.json()) as T & { ok?: boolean; error?: string };
+  if (!res.ok) {
+    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`);
+  }
+  return body;
+}
+
+function printRow(row: AckRow): void {
+  console.log(formatAckStatusLine(row));
+}
+
+async function listAcks(
+  loaded: LoadedProfile,
+  opts: { all?: boolean; seat?: string; json?: boolean },
+): Promise<void> {
+  const q = new URLSearchParams();
+  if (opts.all) q.set("all", "1");
+  if (opts.seat) q.set("seat", opts.seat);
+  const data = await fetchJson<{ entries: AckRow[] }>(
+    `${inboxBase(loaded)}/ack?${q}`,
+  );
+  let rows = data.entries ?? [];
+  if (!opts.all) rows = openAcks(rows);
+  if (opts.json) {
+    console.log(JSON.stringify({ entries: rows }, null, 2));
+    return;
+  }
+  if (!rows.length) {
+    console.log(opts.all ? "no ack rows" : "no open asks");
+    return;
+  }
+  for (const r of rows) printRow(r);
+}
+
+export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
+  const ack = new Command("ack").description(
+    "Unanswered asks ledger — clear with: ack <id> \"<one line>\"",
+  );
+
+  ack
+    .command("list")
+    .alias("ls")
+    .description("List open asks (default). --all includes cleared.")
+    .option("--all", "include acked rows")
+    .option("--seat <id>", "filter by seat (secretary, manager, worker-1)")
+    .option("--json", "raw JSON")
+    .action(async (opts: { all?: boolean; seat?: string; json?: boolean }) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      await listAcks(loaded, opts);
+    });
+
+  ack
+    .command("clear")
+    .description("Clear every open ask (optional --seat)")
+    .option("--seat <id>", "only this seat")
+    .action(async (opts: { seat?: string }) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      const data = await fetchJson<{ cleared: number }>(`${inboxBase(loaded)}/ack/clear`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ seat: opts.seat }),
+      });
+      console.log(`ok cleared=${data.cleared}`);
+    });
+
+  ack
+    .argument("[id]", "ack id or prefix to clear")
+    .argument("[note...]", "one-line note of what was done")
+    .option("--all", "with no id: list includes cleared")
+    .option("--seat <id>", "filter list by seat")
+    .option("--json", "list as JSON")
+    .action(
+      async (
+        id: string | undefined,
+        noteParts: string[] | undefined,
+        opts: { all?: boolean; seat?: string; json?: boolean },
+      ) => {
+        const loaded = getLoaded();
+        requireMeshInbox(loaded);
+
+        if (!id) {
+          await listAcks(loaded, opts);
+          return;
+        }
+
+        const note = (noteParts ?? []).join(" ").trim();
+        if (!note) {
+          console.error('usage: ack <id> "<one line of what you did>"');
+          process.exit(2);
+        }
+        const data = await fetchJson<{ entry?: AckRow; error?: string }>(
+          `${inboxBase(loaded)}/ack`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ id, note }),
+          },
+        );
+        if (!data.entry) {
+          console.error(`ack: FAIL ${data.error ?? "?"}`);
+          process.exit(1);
+        }
+        console.log(`ok id=${data.entry.id} seat=${data.entry.seat} note=${note}`);
+      },
+    );
+
+  return ack;
+}

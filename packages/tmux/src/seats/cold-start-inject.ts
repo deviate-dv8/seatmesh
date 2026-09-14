@@ -87,7 +87,7 @@ export function enqueueColdStart(
     fromSlot: "mesh-cold-start",
   });
   if (!resp?.ok) {
-    throw new Error("FAIL: cold-start enqueue — run: ./sm.sh inbox restart");
+    throw new Error("FAIL: cold-start enqueue — run: seatmesh --profile .sm inbox restart");
   }
   recordColdStartEnqueue(loaded, resolved.paneId, targetLabel, fingerprint);
   return { skipped: false, fingerprint };

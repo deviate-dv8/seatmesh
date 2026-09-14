@@ -19,7 +19,7 @@ export interface RoomCommsReplyContext {
 
 /** Compact seat token (harness `worker_inject_stamp` spirit: `slot-N ports P/P`). */
 export function formatCompactSeat(ctx: RoomCommsReplyContext = { role: "worker" }): string {
-  const role = ctx.role || "worker";
+  const role = ctx.role || "plain";
   if (role === "manager" || role === "master") return "manager";
   if (role === "secretary" || role.startsWith("secretary-") || role.startsWith("manager-")) {
     return role;
@@ -92,7 +92,7 @@ export function formatPeerReplyCmd(fromRole: string): string {
   return seatmeshCmd(`peer ${fromRole} "<msg>"`);
 }
 
-/** Map room/ledger agent id to the one `./sm.sh peer` target (no second harness). */
+/** Map room/ledger agent id to the one `seatmesh --profile .sm peer` target (no second harness). */
 export function peerTargetFromAgentId(from: string): string {
   const id = from.trim();
   if (!id || id === "master") return "manager";
@@ -112,14 +112,47 @@ export function formatReplyToSender(from: string): string {
   return `SHELL (required — chat-only "received" does NOT file): ${shell}`;
 }
 
+function shortCheckbackId(id: string): string {
+  return id.replace(/^cb-/, "").slice(0, 10);
+}
+
+/**
+ * Always on every Check: inject. Agents otherwise reply in chat, ignore the
+ * renew, and get infinite re-fires — cancel is the only stop.
+ * Also: more peer/inbox while busy is queued, not lost (do not panic-reply).
+ */
+export function formatCheckbackCancelHint(id?: string | null): string {
+  const cancel = id?.trim()
+    ? seatmeshCmd(`cb cancel ${shortCheckbackId(id)}`)
+    : `${seatmeshCmd("cb list")} → ${seatmeshCmd("cb cancel <id>")}`;
+  return (
+    `SHELL (required to STOP renew — chat reply does NOT cancel): ${cancel}\n` +
+    `FYI: follow-ups / more inbox while busy are queued — they inject when idle; do not infinite-reply this Check.`
+  );
+}
+
+export interface CheckNudgeOpts {
+  /** CHECKBACK.jsonl id — prefer so cancel is one shell line. */
+  id?: string | null;
+}
+
 /** Short checkback / patience nudge (not a full playbook). */
-export function formatCheckNudge(ctx: RoomCommsReplyContext, expect: string, hint: string): string {
-  return `${formatCompactSeat(ctx)} | Check: ${expect} — ${hint}`;
+export function formatCheckNudge(
+  ctx: RoomCommsReplyContext,
+  expect: string,
+  hint: string,
+  opts: CheckNudgeOpts = {},
+): string {
+  return (
+    `${formatCompactSeat(ctx)} | Check: ${expect} — ${hint}\n` +
+    formatCheckbackCancelHint(opts.id)
+  );
 }
 
 export interface RoomCommsCheckbackOpts {
   /** Daemon poll-later — no Reply: peer footer (keep working on hub). */
   verifyOnly?: boolean;
+  id?: string | null;
 }
 
 /** Engineering reply block for room-comms checkback injects (compact). */
@@ -134,7 +167,7 @@ export function formatRoomCommsCheckback(
     : from?.trim()
       ? formatReplyToSender(from)
       : "inbound already has Reply: peer <sender>";
-  return formatCheckNudge(ctx, expect, hint);
+  return formatCheckNudge(ctx, expect, hint, { id: opts.id });
 }
 
 export interface RoomPeerNotifyOpts {
@@ -205,6 +238,7 @@ export function parseRoomCallExpect(
 export function formatRoomCallCheckback(
   expect: string,
   ctx: RoomCommsReplyContext = { role: "worker" },
+  opts: CheckNudgeOpts = {},
 ): string {
   const parsed = parseRoomCallExpect(expect);
   const callId = parsed?.callId ?? "?";
@@ -213,9 +247,10 @@ export function formatRoomCallCheckback(
       ctx,
       expect,
       `room accept ${callId} | room decline ${callId}`,
+      opts,
     );
   }
-  return formatCheckNudge(ctx, expect, `room calls (${callId})`);
+  return formatCheckNudge(ctx, expect, `room calls (${callId})`, opts);
 }
 
 export function formatRoomCallInvite(
@@ -254,6 +289,7 @@ export function formatRoomCallResolved(
 export function formatGenericCheckback(
   expect: string,
   ctx: RoomCommsReplyContext = { role: "worker" },
+  opts: CheckNudgeOpts = {},
 ): string {
   const digestId = expect.match(/digest queued ([a-f0-9-]+)/i)?.[1];
   if (digestId) {
@@ -261,10 +297,11 @@ export function formatGenericCheckback(
       ctx,
       expect,
       `inbox list | grep ${digestId.slice(0, 8)}`,
+      opts,
     );
   }
   if (/proxy ipify|OC-LIMIT|Cannot connect/i.test(expect)) {
-    return formatCheckNudge(ctx, expect, "proxy status");
+    return formatCheckNudge(ctx, expect, "proxy status", opts);
   }
-  return formatCheckNudge(ctx, expect, "checkback list | cancel <id>");
+  return formatCheckNudge(ctx, expect, "verify once then cancel", opts);
 }

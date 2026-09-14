@@ -3,6 +3,7 @@ import { meshRuntimePaths } from "@seat-mesh/core";
 import { JsonlStore } from "./jsonl-store.js";
 import { migrateJsonlDirToSqlite, SqliteStore } from "./sqlite-store.js";
 
+export type { AckRow } from "@seat-mesh/core";
 export type { CheckbackRow, PeerRow, ToMasterRow, PeerKind } from "./jsonl-store.js";
 export {
   isInboxDelivered,

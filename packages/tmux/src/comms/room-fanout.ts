@@ -61,7 +61,7 @@ function peerContextForPane(
   const meta = paneMetaForPane(paneId);
   const slotNum = meta?.slot ? Number(meta.slot) : null;
   return {
-    role: meta?.role || "worker",
+    role: meta?.role || "plain",
     slot: slotNum && !Number.isNaN(slotNum) ? slotNum : null,
     mini: meta?.mini || null,
     ports: meta?.ports || null,

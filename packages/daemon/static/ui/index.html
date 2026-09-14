@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>seatmesh · targets</title>
+  <link rel="stylesheet" href="./targets.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">seatmesh</div>
+    <nav>
+      <a class="on" href="./">Targets</a>
+      <a href="./decide.html">Decide</a>
+    </nav>
+    <div class="meta" id="meta">…</div>
+  </header>
+
+  <main>
+    <section class="compose">
+      <h1>Targets</h1>
+      <p class="lede">
+        A <strong>scope</strong> is the whole goal (e.g. remaining s13 tickets). Manager/secretary break it into
+        <strong>slices</strong> with their own deadlines and balance workers.
+      </p>
+      <form id="add-form">
+        <label class="sr">Goal</label>
+        <input id="goal" name="goal" required placeholder="finish remaining s13 tickets" autocomplete="off" />
+        <div class="row">
+          <label>
+            Deadline
+            <input id="deadline" name="deadline" value="eod" placeholder="eod | 6h | ISO" />
+          </label>
+          <label>
+            Kind
+            <select id="kind">
+              <option value="scope">scope (whole goal)</option>
+              <option value="slice">slice (under scope)</option>
+            </select>
+          </label>
+          <label id="under-wrap" class="hidden">
+            Under scope id
+            <input id="under" placeholder="tgt-…" />
+          </label>
+          <button type="submit">Add</button>
+        </div>
+        <p id="form-err" class="err" hidden></p>
+      </form>
+    </section>
+
+    <section class="list-head">
+      <h2>Active</h2>
+      <label class="chk"><input type="checkbox" id="show-all" /> show done/cancelled</label>
+      <button type="button" id="refresh" class="ghost">Refresh</button>
+    </section>
+    <div id="list" class="list"></div>
+    <p id="empty" class="empty" hidden>No targets yet.</p>
+  </main>
+
+  <footer>
+    CLI: <code>seatmesh target add "…"</code> ·
+    <code>seatmesh target triage &lt;id&gt;</code> ·
+    notify: <code>seatmesh agent notify yesno</code> → toast <strong>Info · Yes · No</strong> ·
+    <a href="./decide.html">Decide</a>
+  </footer>
+  <script src="./targets.js" type="module"></script>
+</body>
+</html>

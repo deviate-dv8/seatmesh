@@ -32,12 +32,23 @@ export interface PathsManifestDoc {
 /** Resolve a harness path from mesh.config (profileDir-relative by default). */
 export function resolveHarnessPath(loaded: LoadedProfile, rel: string): string {
   const scope = loaded.profile.paths?.scope ?? "profile";
-  const raw = rel.trim();
+  let raw = rel.trim();
   if (path.isAbsolute(raw)) return path.normalize(raw);
+  // Init templates used to prefix `.sm/` even with paths.scope=profile (profileDir
+  // is already `.sm` / `.sm-<id>`), which produced `.sm/.sm/agents.json`. Strip once.
+  if (scope === "profile") {
+    const base = path.basename(loaded.profileDir);
+    if (base === ".sm" || base.startsWith(".sm-")) {
+      if (raw === ".sm" || raw === base) raw = ".";
+      else if (raw.startsWith(".sm/") || raw.startsWith(`${base}/`)) {
+        raw = raw.slice(raw.indexOf("/") + 1);
+      }
+    }
+  }
   if (scope === "workspace") {
     return path.normalize(path.resolve(loaded.workspace, raw));
   }
-  return path.normalize(path.resolve(loaded.profileDir, raw));
+  return path.normalize(path.resolve(loaded.profileDir, raw === "." ? "" : raw));
 }
 
 export function pathsScope(loaded: LoadedProfile): PathsScope {

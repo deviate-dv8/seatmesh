@@ -54,6 +54,19 @@ describe("paths-manifest", () => {
     expect(resolveHarnessPath(loaded, "seats")).toBe(path.join(sm, "seats"));
   });
 
+  it("strips accidental .sm/ prefix when profileDir is already .sm", () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), "sm-paths-"));
+    const sm = path.join(ws, ".sm");
+    fs.mkdirSync(sm, { recursive: true });
+    const loaded = stubLoaded(sm, ws);
+    expect(resolveHarnessPath(loaded, ".sm/mesh-agents.json")).toBe(
+      path.join(sm, "mesh-agents.json"),
+    );
+    expect(resolveHarnessPath(loaded, ".sm/agents.json")).toBe(path.join(sm, "agents.json"));
+    expect(resolveHarnessPath(loaded, ".sm/runtime")).toBe(path.join(sm, "runtime"));
+    expect(resolveHarnessPath(loaded, ".sm/seats")).toBe(path.join(sm, "seats"));
+  });
+
   it("writes paths.json", () => {
     const ws = fs.mkdtempSync(path.join(os.tmpdir(), "sm-paths-"));
     const sm = path.join(ws, ".sm");

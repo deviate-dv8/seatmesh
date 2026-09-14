@@ -228,7 +228,7 @@ export function runSlotAdvice(
     fromSlot: "manager",
   });
   if (!resp?.ok) {
-    throw new Error("FAIL: slot-advice enqueue (inbox down?) — run: ./sm.sh inbox restart");
+    throw new Error("FAIL: slot-advice enqueue (inbox down?) — run: seatmesh --profile .sm inbox restart");
   }
   console.log(`sent slot-advice -> slot-${slot} ${resolved.paneId} (daemon inject when idle)`);
   return { slot, report, sent: true };

@@ -50,7 +50,7 @@ function peerContextForPane(paneId: string, loaded: LoadedProfile) {
   const meta = paneMetaForPane(paneId);
   const slotNum = meta?.slot ? Number(meta.slot) : null;
   return {
-    role: meta?.role || "worker",
+    role: meta?.role || "plain",
     slot: slotNum && !Number.isNaN(slotNum) ? slotNum : null,
     mini: meta?.mini || null,
     ports: meta?.ports || null,
@@ -215,7 +215,7 @@ export async function runRoomAccept(loaded: LoadedProfile, callId: string): Prom
   });
 
   console.log(`ok accepted call=${call.shortId} room=${call.roomSlug}`);
-  console.log(`comms: ./sm.sh room tail -r ${call.roomSlug} -n 10`);
+  console.log(`comms: seatmesh --profile .sm agent room tail -r ${call.roomSlug} -n 10`);
 }
 
 export function runRoomDecline(

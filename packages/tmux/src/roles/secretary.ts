@@ -205,7 +205,7 @@ export function secretaryRestart(
 
   const resolved = resolvePaneTarget("secretary", loaded);
   if ("error" in resolved) {
-    throw new Error(`${resolved.error} - run: ./sm.sh secretary start`);
+    throw new Error(`${resolved.error} - run: seatmesh --profile .sm agent secretary start`);
   }
   const paneId = resolved.paneId;
 
@@ -337,7 +337,7 @@ export function secretaryMeshWatch(
   ensureMeshInbox(loaded, { quiet: true });
   const health = inboxHealth(inboxPort(loaded));
   if (!health) {
-    throw new Error("inbox DOWN — run: ./sm.sh reload (or inbox restart)");
+    throw new Error("inbox DOWN — run: seatmesh --profile .sm reload (or inbox restart)");
   }
 
   const base = inboxBase(loaded);
@@ -354,7 +354,7 @@ export function secretaryMeshWatch(
 
   const resolved = resolvePaneTarget("secretary", loaded);
   if ("error" in resolved) {
-    throw new Error(`${resolved.error} — run: ./sm.sh secretary start`);
+    throw new Error(`${resolved.error} — run: seatmesh --profile .sm agent secretary start`);
   }
 
   const secs = parseDurationSeconds(interval);
@@ -496,7 +496,7 @@ export function secretarySupervise(
   const mgrResolved = resolvePaneTarget(mgrIds[0] ?? "manager", loaded);
   const extraMgrs = mgrIds.slice(1).map((id) => ({ id, resolved: resolvePaneTarget(id, loaded) }));
   if ("error" in secResolved) {
-    throw new Error(`${secResolved.error} — run: ./sm.sh secretary restart`);
+    throw new Error(`${secResolved.error} — run: seatmesh --profile .sm agent secretary restart`);
   }
   if ("error" in mgrResolved) {
     throw new Error(`${mgrResolved.error} — manager pane missing`);
@@ -661,7 +661,7 @@ export function secretaryStatus(loaded: LoadedProfile): void {
   if ("error" in resolved) {
     console.log("secretary: NOT RUNNING");
     console.log(`  ${resolved.error}`);
-    console.log("  fix: ./sm.sh secretary start");
+    console.log("  fix: seatmesh --profile .sm agent secretary start");
     return;
   }
   console.log(`secretary: pane=${resolved.paneId}`);
@@ -704,7 +704,7 @@ export function secretaryCollect(
           loaded,
           registry,
           id,
-          `STALE: still open. File ./sm.sh mini done ${id} PASS|FAIL: <evidence> when finished — supervisor will not accept chat-only done.`,
+          `STALE: still open. File seatmesh --profile .sm agent mini done ${id} PASS|FAIL: <evidence> when finished — supervisor will not accept chat-only done.`,
         );
       } catch (e) {
         console.error(`nudge mini-${id} failed: ${(e as Error).message}`);
@@ -731,7 +731,7 @@ export function secretaryDispatch(
       secretaryMeshWatch(loaded, "on", "5m");
       console.log("OK: secretary dispatched minis + mesh-watch ON 5m");
       console.log(
-        `  collect: ${runtimePathHint(loaded.workspace, meshRuntimePaths(loaded).miniDone)} + ./sm.sh mini list`,
+        `  collect: ${runtimePathHint(loaded.workspace, meshRuntimePaths(loaded).miniDone)} + seatmesh --profile .sm agent mini list`,
       );
     },
   );

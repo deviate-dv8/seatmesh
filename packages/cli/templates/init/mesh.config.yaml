@@ -58,12 +58,12 @@ seats:
     mini: "mini-{n}"
 
 state:
-  meshAgentsJson: .sm/mesh-agents.json
-  agentsJson: .sm/agents.json
+  meshAgentsJson: mesh-agents.json
+  agentsJson: mesh-agents.json
   autoScrapeIntervalMs: 600000
 
 data:
-  root: .sm/runtime
+  root: runtime
 
 roles:
   dir: roles
@@ -87,7 +87,7 @@ ports:
   worker: "30{n}0/30{n}1"
 
 chatRooms:
-  root: .sm/chat-rooms
+  root: chat-rooms
   globalSlug: global
   checkback:
     duration: 5m

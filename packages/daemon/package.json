@@ -1,6 +1,6 @@
 {
   "name": "@seat-mesh/daemon",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "module",
   "description": "Inbox orchestrator \u2014 sole pane writer; BullMQ workers drain queues.",
   "main": "./dist/index.js",
@@ -27,6 +27,7 @@
     "access": "public"
   },
   "files": [
-    "dist"
+    "dist",
+    "static"
   ]
 }

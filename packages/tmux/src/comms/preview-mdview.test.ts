@@ -25,18 +25,10 @@ describe("publishOneMdview", () => {
     for (const f of fs.readdirSync(tmp)) fs.unlinkSync(path.join(tmp, f));
   });
 
-  it("fails when file missing", () => {
-    const r = publishOneMdview(tmp, "nope.md", 1);
+  it("fails when file missing", async () => {
+    const r = await publishOneMdview(tmp, "nope.md", 1);
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/not found/);
-  });
-
-  it("fails when publish script missing", () => {
-    const md = path.join(tmp, "a.md");
-    fs.writeFileSync(md, "# hi\n");
-    const r = publishOneMdview(tmp, md, 1);
-    expect(r.ok).toBe(false);
-    expect(r.error).toMatch(/publish-mdview/);
   });
 });
 

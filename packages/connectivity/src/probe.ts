@@ -46,6 +46,8 @@ export async function snapshotConnectivity(
     rebootWifiBounce: false,
     smartRestart: false,
     rotateMaxAttempts: 15,
+    waitIpMaxSec: 3600,
+    waitIpPollSec: 30,
     cooldownMs: 1_800_000,
     ipifyFailBeforeRecovery: 15,
   };

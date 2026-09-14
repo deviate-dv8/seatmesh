@@ -1,8 +1,10 @@
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import {
   chatRoomConfigForLoaded,
+  formatCheckbackCancelHint,
   formatCompactSeat,
   formatGenericCheckback,
+  formatPeerBulkDigest,
   formatRoomCallCheckback,
   formatRoomCommsCheckback,
   isRoomCallExpect,
@@ -13,13 +15,14 @@ import {
   meshInboxDigestIncomplete,
   loadBalanceVendorContract,
   contractsDirFor,
-  hubLockActive,
   isManagerKind,
   isSecretaryKind,
   meshInboxBalanceLeadTick,
   meshInboxBalanceStatus,
   parseRoomCommsExpect,
   resolveAgentId,
+  takePeerBulkBatch,
+  type PeerBulkItem,
 } from "@seat-mesh/core";
 import {
   buildMiniCampaignDigest,
@@ -39,8 +42,10 @@ import type { CheckbackRow, ToMasterRow } from "../store/create-queue-store.js";
 import {
   paintMeshBorders,
   paintMeshBordersAsync,
+  repaintMeshPaneBorder,
   type BorderPaintConnectivity,
 } from "../border/border-paint.js";
+import { fireDueTargets } from "../target/target-fire.js";
 import { deliverToPane } from "../inject/inject-delivery.js";
 import {
   armCcLimitRetryCheckback,
@@ -53,30 +58,19 @@ import {
 import type { QueueStore } from "../store/create-queue-store.js";
 import { isInboxDelivered, isPeerDelivered } from "../store/create-queue-store.js";
 import { drainPaneOpsOnce, type PaneOpsDrainCtx } from "../inbox/pane-ops-drain.js";
-import { armRecipientCheckbackAfterPeer } from "../peer/peer-comms-checkback.js";
 import {
   deferCheckbackAfterFailedFire,
   sortDueCheckbackIndices,
 } from "../checkback/checkback-fire.js";
-import {
-  isAckClassPeer,
-  parkPeerToBacklog,
-  pendingPeerRows,
-  promotePeerBacklog,
-  shouldBacklogPeerHold,
-} from "../peer/peer-backlog.js";
-import {
-  markPeerRowSkipped,
-  shouldSkipDeliveredColdStart,
-  shouldSkipDuplicateColdStartResummon,
-  shouldSkipGlobalWorkerRoomPing,
-  shouldSkipManagerStatusRoomPing,
-  isThinRoomUnseenPing,
-} from "../peer/peer-skip.js";
+import { pendingPeerRows, promotePeerBacklog } from "../peer/peer-backlog.js";
+import { drainPeerPaneBulk, refreshAndGroupPeers } from "../peer/peer-bulk-drain.js";
 import { deliveryHoldForPane } from "../inbox/delivery-hold.js";
-import { refreshPeerTargetPane } from "../peer/peer-target-resolve.js";
 import { evaluateInboxOverload } from "../inbox/inbox-overload.js";
-import { markColdStartDelivered } from "@seat-mesh/tmux";
+import {
+  ackSweepTick,
+  openAckForDeliveredInbox,
+} from "../ack/ack-sweep.js";
+import { notePaneDeliveryHold } from "../inject/pane-hold.js";
 
 export interface MeshOrchestratorCtx {
   loaded: LoadedProfile;
@@ -88,6 +82,7 @@ export interface MeshOrchestratorCtx {
   minisWindow: string;
   log: (line: string) => void;
   ocLimitedPaneIds: Set<string>;
+  connectPaneIds?: Set<string>;
   proxyDownActive?: boolean;
   paneOps?: PaneOpsDrainCtx;
 }
@@ -96,7 +91,22 @@ function borderConnectivity(ctx: MeshOrchestratorCtx): BorderPaintConnectivity {
   return {
     proxyDownActive: ctx.proxyDownActive === true,
     ocLimitedPaneIds: ctx.ocLimitedPaneIds,
+    connectPaneIds: ctx.connectPaneIds ?? new Set(),
   };
+}
+
+function repaintPaneBanner(ctx: MeshOrchestratorCtx, paneId: string, label: string): void {
+  repaintMeshPaneBorder(
+    ctx.registry,
+    ctx.store,
+    paneId,
+    borderConnectivity(ctx),
+    isSecretaryKind(label),
+    label,
+    ctx.store.stateDir,
+    undefined,
+    ctx.loaded,
+  );
 }
 
 function gateDelivery(
@@ -142,21 +152,33 @@ export function isAckClassInbox(row: ToMasterRow): boolean {
   return /^(ACK|FYI|STAND-?BY|BUSY|MCP-?SYNCED)\b/i.test(msg);
 }
 
+function inboxLaneFrom(row: ToMasterRow): string {
+  const from = String(row.from ?? "").trim();
+  const slot = row.slot != null ? String(row.slot) : "";
+  if (from === "secretary" || from === "manager" || slot === "secretary" || slot === "manager") {
+    return from || slot;
+  }
+  if (/^\d+$/.test(slot)) return `slot-${slot}`;
+  return from || slot || "unknown";
+}
+
 function drainInboxLaneOnce(
   ctx: MeshOrchestratorCtx,
   lane: "secretary" | "manager",
 ): DrainTickResult {
   const rows = ctx.store.readInbox();
-  const row = rows.find((r) => {
+  const pending = rows.filter((r) => {
     if (r.resolved || isInboxDelivered(r)) return false;
     const ack = isAckClassInbox(r);
     return lane === "secretary" ? ack : !ack;
   });
-  if (!row) return { attempted: 0, delivered: 0, held: 0 };
+  if (!pending.length) return { attempted: 0, delivered: 0, held: 0 };
 
-  if (row.sent && !row.sentAt) {
-    ctx.log(`INBOX forge-reset id=${row.id} (sent:true without sentAt/deliverPane)`);
-    row.sent = false;
+  for (const row of pending) {
+    if (row.sent && !row.sentAt) {
+      ctx.log(`INBOX forge-reset id=${row.id} (sent:true without sentAt/deliverPane)`);
+      row.sent = false;
+    }
   }
 
   const secPane = meshSecretaryPane(ctx.session, ctx.baseWindow);
@@ -164,29 +186,54 @@ function drainInboxLaneOnce(
   const targetPane = lane === "secretary" ? secPane : mgrPane;
   if (!targetPane) return { attempted: 0, delivered: 0, held: 0 };
 
-  const payload = ctx.store.formatInboxInject(row, lane);
+  const { batch } = takePeerBulkBatch(pending);
   const gate = gateDelivery(ctx, targetPane);
   if (gate.blocked) {
-    ctx.log(`INBOX held id=${row.id} lane=${lane} reason=${gate.reason}`);
+    notePaneDeliveryHold(targetPane, gate.reason ?? "hold");
+    ctx.log(`INBOX held id=${batch[0]!.id} lane=${lane} reason=${gate.reason}`);
     return { attempted: 1, delivered: 0, held: 1 };
   }
-  const result = deliverToPane(targetPane, payload, ctx.registry, { loaded: ctx.loaded,
-      workspace: ctx.loaded.workspace });
+
+  const useBulk = batch.length > 1;
+  const payload = useBulk
+    ? formatPeerBulkDigest({
+        seat: lane,
+        items: batch.map(
+          (r): PeerBulkItem => ({
+            from: inboxLaneFrom(r),
+            body: ctx.store.formatInboxInject(r, lane),
+          }),
+        ),
+        more: Math.max(0, pending.length - batch.length),
+      })
+    : ctx.store.formatInboxInject(batch[0]!, lane);
+
+  const result = deliverToPane(targetPane, payload, ctx.registry, {
+    loaded: ctx.loaded,
+    workspace: ctx.loaded.workspace,
+  });
   if (!result.ok) {
-    ctx.log(`INBOX held id=${row.id} lane=${lane} reason=${result.reason}`);
+    notePaneDeliveryHold(targetPane, result.reason);
+    ctx.log(`INBOX held id=${batch[0]!.id} lane=${lane} reason=${result.reason}`);
     return { attempted: 1, delivered: 0, held: 1 };
   }
   const at = new Date().toISOString();
-  row.sent = true;
-  row.sentAt = at;
-  row.deliveredTo = lane === "secretary" ? "secretary" : "manager";
-  row.deliverPane = targetPane;
-  row.deliverMode = result.mode;
+  for (const row of batch) {
+    row.sent = true;
+    row.sentAt = at;
+    row.deliveredTo = lane === "secretary" ? "secretary" : "manager";
+    row.deliverPane = targetPane;
+    row.deliverMode = result.mode;
+    openAckForDeliveredInbox(ctx, row, lane, targetPane);
+  }
   ctx.store.writeInbox(rows);
   ctx.log(
-    `INBOX inject id=${row.id} lane=${lane} slot=${row.slot ?? "-"} to=${row.deliveredTo} provider=${result.providerId} mode=${result.mode} verified=${result.verified}`,
+    useBulk
+      ? `INBOX inject bulk=${batch.length} lane=${lane} provider=${result.providerId} mode=${result.mode} verified=${result.verified}`
+      : `INBOX inject id=${batch[0]!.id} lane=${lane} slot=${batch[0]!.slot ?? "-"} to=${batch[0]!.deliveredTo} provider=${result.providerId} mode=${result.mode} verified=${result.verified}`,
   );
-  return { attempted: 1, delivered: 1, held: 0 };
+  repaintPaneBanner(ctx, targetPane, lane === "secretary" ? "secretary" : "manager");
+  return { attempted: 1, delivered: batch.length, held: 0 };
 }
 
 /** Harness parity: secretary ACK lane + manager substance lane each poll tick. */
@@ -199,9 +246,6 @@ export function drainInboxOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
     held: sec.held + mgr.held,
   };
 }
-
-/** Permanent skip only — empty seats / no_provider must backlog until a CLI loads. */
-const PEER_SKIP_REASONS = new Set(["no_snapshot"]);
 
 const PEER_KIND_PRIORITY: Record<string, number> = {
   prompt: 0,
@@ -232,157 +276,20 @@ export function drainPeerOnce(ctx: MeshOrchestratorCtx): DrainTickResult {
   let attempted = 0;
   let delivered = 0;
   let held = 0;
+  /** One substance paste per pane per tick — DIGEST folds ≤5 into that paste. */
+  const injectedThisTick = new Set<string>();
 
-  for (const row of pending) {
-    if (row.sent && !row.sentAt) {
-      ctx.log(`PEER forge-reset id=${row.id} (sent:true without proof)`);
-      row.sent = false;
-    }
+  const { byPane, held: heldRefresh } = refreshAndGroupPeers(ctx, pending);
+  held += heldRefresh;
 
-    const { paneId: livePane, rerouted } = refreshPeerTargetPane(ctx.loaded, row);
-    if (rerouted) {
-      ctx.log(
-        `PEER reroute id=${row.id.slice(0, 8)} ${row.targetLabel} ${row.targetPane}->${livePane}`,
-      );
-      row.targetPane = livePane;
-      const all = ctx.store.readPeer();
-      const ri = all.findIndex((r) => r.id === row.id);
-      if (ri >= 0) {
-        all[ri]!.targetPane = livePane;
-        ctx.store.writePeer(all);
-      }
+  for (const [paneId, paneRows] of byPane) {
+    const r = drainPeerPaneBulk(ctx, paneId, paneRows, gateDelivery, injectedThisTick);
+    attempted += r.attempted;
+    delivered += r.delivered;
+    held += r.held;
+    if (r.delivered > 0) {
+      repaintPaneBanner(ctx, paneId, paneRows[0]!.targetLabel || "");
     }
-
-    if (shouldSkipDeliveredColdStart(row)) {
-      markPeerRowSkipped(ctx.store, row);
-      if (row.fromSlot === "mesh-cold-start") {
-        markColdStartDelivered(ctx.loaded, row.targetPane);
-      }
-      ctx.log(`PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=cold-start-already-delivered`);
-      continue;
-    }
-
-    if (shouldSkipDuplicateColdStartResummon(row, ctx.loaded)) {
-      markPeerRowSkipped(ctx.store, row);
-      ctx.log(
-        `PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=cold-start-resummon-dup`,
-      );
-      continue;
-    }
-
-    if (shouldSkipGlobalWorkerRoomPing(row)) {
-      markPeerRowSkipped(ctx.store, row);
-      ctx.log(`PEER skip id=${row.id} -> ${row.targetLabel} reason=global-worker-thin-fyi`);
-      continue;
-    }
-
-    if (shouldSkipManagerStatusRoomPing(row)) {
-      markPeerRowSkipped(ctx.store, row);
-      ctx.log(`PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=manager-status-room`);
-      continue;
-    }
-
-    if (
-      hubLockActive(ctx.loaded.workspace) &&
-      isAckClassPeer(row.msg) &&
-      (isManagerKind(row.targetLabel) || isSecretaryKind(row.targetLabel))
-    ) {
-      markPeerRowSkipped(ctx.store, row);
-      ctx.log(`PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=hub-lock`);
-      continue;
-    }
-
-    const isColdStart = row.fromSlot === "mesh-cold-start";
-    const gate = gateDelivery(ctx, row.targetPane, { isColdStart });
-    if (gate.blocked) {
-      if (isThinRoomUnseenPing(row)) {
-        markPeerRowSkipped(ctx.store, row);
-        ctx.log(
-          `PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=thin-room-busy:${gate.reason}`,
-        );
-        continue;
-      }
-      ctx.log(`PEER held id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=${gate.reason}`);
-      held++;
-      continue;
-    }
-
-    attempted++;
-    const roomPing = row.kind === "room";
-    const thinRoomPing = roomPing && /\[mesh-inbox-room\]/.test(row.msg);
-    const toManager =
-      isManagerKind(row.targetLabel) ||
-      row.targetLabel === "master" ||
-      isManagerKind(paneMetaForPane(row.targetPane)?.role ?? "");
-    const lightweight = isAckClassPeer(row.msg) || roomPing;
-    const result = deliverToPane(row.targetPane, row.msg, ctx.registry, {
-      lightweight,
-      // Verify cursor-agent pastes — skipVerify hid the pane_input_off inject drop.
-      // OpenCode/claude still skip inside deliverToPane when provider needs it.
-      // Thin room ledger pings bypass coord idle-settle (manager/manager-b/secretary) —
-      // except humanCoTyped panes (profile layout.base.humanCoTyped), which never get that bypass.
-      roomPing: thinRoomPing || (roomPing && !toManager),
-      loaded: ctx.loaded,
-      workspace: ctx.loaded.workspace,
-    });
-    if (!result.ok) {
-      if (PEER_SKIP_REASONS.has(result.reason)) {
-        const rows = ctx.store.readPeer();
-        const i = rows.findIndex((r) => r.id === row.id);
-        if (i >= 0) {
-          rows[i]!.sent = true;
-          rows[i]!.sentAt = new Date().toISOString();
-          rows[i]!.deliverPane = "skipped";
-          rows[i]!.deliverMode = "idle";
-          ctx.store.writePeer(rows);
-        }
-        if (isColdStart) {
-          markColdStartDelivered(ctx.loaded, row.targetPane);
-        }
-        ctx.log(`PEER skip id=${row.id} -> ${row.targetLabel} reason=${result.reason}`);
-        continue;
-      }
-      if (shouldBacklogPeerHold(result.reason, row.msg)) {
-        if (isThinRoomUnseenPing(row)) {
-          markPeerRowSkipped(ctx.store, row);
-          ctx.log(
-            `PEER skip id=${row.id.slice(0, 8)} -> ${row.targetLabel} reason=thin-room-no-backlog:${result.reason}`,
-          );
-          continue;
-        }
-        parkPeerToBacklog(ctx.store, row, result.reason, ctx.log);
-        continue;
-      }
-      ctx.log(`PEER held id=${row.id} reason=${result.reason}`);
-      held++;
-      continue;
-    }
-    const rows = ctx.store.readPeer();
-    const i = rows.findIndex((r) => r.id === row.id);
-    if (i >= 0) {
-      const at = new Date().toISOString();
-      rows[i]!.sent = true;
-      rows[i]!.sentAt = at;
-      rows[i]!.deliverPane = row.targetPane;
-      rows[i]!.deliverMode = result.mode;
-      rows[i]!.injectedPane = row.targetPane;
-      rows[i]!.injectedAt = at;
-      ctx.store.writePeer(rows);
-    }
-    const from =
-      row.kind === "room"
-        ? row.fromSlot
-        : row.kind === "prompt" || row.kind === "remind"
-          ? row.fromSlot
-          : `slot-${row.fromSlot}`;
-    ctx.log(
-      `PEER inject ${row.kind} -> ${row.targetLabel} from ${from} provider=${result.providerId} mode=${result.mode}`,
-    );
-    if (isColdStart) {
-      markColdStartDelivered(ctx.loaded, row.targetPane);
-    }
-    armRecipientCheckbackAfterPeer(ctx.store, ctx.loaded, row);
-    delivered++;
   }
 
   return { attempted, delivered, held };
@@ -582,7 +489,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         continue;
       }
       const meta = pane ? paneMetaForPane(pane) : null;
-      const role = meta?.role ?? "worker";
+      const role = meta?.role || "plain";
       const leadRole = isManagerKind(role) ? role : null;
       const msg = leadRole
         ? meshInboxCcLimitRetryContinue(leadRole)
@@ -617,8 +524,9 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         continue;
       }
       const msg =
-        `[mesh-inbox] intent=checkback-verify manager | Check: ${row.expect.slice(0, 100)} — ` +
-        `${outcome.retried ? "re-assigned" : "stale"} (${outcome.reason}); nudge ${parsed?.target ?? "lead"}`;
+        `manager | Check: ${row.expect.slice(0, 100)} — ` +
+        `${outcome.retried ? "re-assigned" : "stale"} (${outcome.reason}); nudge ${parsed?.target ?? "lead"}\n` +
+        formatCheckbackCancelHint(row.id);
       const r = deliverToPane(pane, msg, ctx.registry, {
         skipVerify: true,
         intent: "checkback-verify",
@@ -648,14 +556,18 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       }
     } else if (row.expect && (row.kind === "room-call" || isRoomCallExpect(row.expect))) {
       const meta = pane ? paneMetaForPane(pane) : null;
-      const msg = formatRoomCallCheckback(row.expect, {
-        role: meta?.role || row.recipientLabel || "worker",
-        slot: meta?.slot,
-        mini: meta?.mini,
-        ports: meta?.ports,
-        workerCount: ctx.loaded.profile.session.workerCount,
-        miniMax: ctx.loaded.profile.session.miniMax,
-      });
+      const msg = formatRoomCallCheckback(
+        row.expect,
+        {
+          role: meta?.role || row.recipientLabel || "plain",
+          slot: meta?.slot,
+          mini: meta?.mini,
+          ports: meta?.ports,
+          workerCount: ctx.loaded.profile.session.workerCount,
+          miniMax: ctx.loaded.profile.session.miniMax,
+        },
+        { id: row.id },
+      );
       const r = deliverToPane(pane, msg, ctx.registry, {
         skipVerify: true,
         intent: "checkback-verify",
@@ -674,7 +586,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       const meta = pane ? paneMetaForPane(pane) : null;
       const parsed = parseRoomCommsExpect(row.expect);
       const selfId = resolveAgentId({
-        role: meta?.role || row.recipientLabel || "worker",
+        role: meta?.role || row.recipientLabel || "plain",
         slot: meta?.slot != null ? Number(meta.slot) : null,
         mini: meta?.mini ?? null,
       });
@@ -693,7 +605,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       const msg = formatRoomCommsCheckback(
         row.expect,
         {
-          role: meta?.role || row.recipientLabel || "worker",
+          role: meta?.role || row.recipientLabel || "plain",
           slot: meta?.slot,
           mini: meta?.mini,
           ports: meta?.ports,
@@ -701,7 +613,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
           miniMax: ctx.loaded.profile.session.miniMax,
         },
         from,
-        { verifyOnly: true },
+        { verifyOnly: true, id: row.id },
       );
       const r = deliverToPane(pane, msg, ctx.registry, {
         skipVerify: true,
@@ -717,7 +629,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
     } else {
       const meta = pane ? paneMetaForPane(pane) : null;
       const cbCtx = {
-        role: meta?.role || row.recipientLabel || "worker",
+        role: meta?.role || row.recipientLabel || "plain",
         slot: meta?.slot,
         mini: meta?.mini,
         ports: meta?.ports,
@@ -725,7 +637,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         miniMax: ctx.loaded.profile.session.miniMax,
       };
       const expect = row.expect ?? row.kind;
-      const msg = formatGenericCheckback(expect, cbCtx);
+      const msg = formatGenericCheckback(expect, cbCtx, { id: row.id });
       const r = deliverToPane(pane, msg, ctx.registry, {
         skipVerify: true,
         intent: "checkback-verify",
@@ -761,6 +673,8 @@ export function orchestratorDrainTick(ctx: MeshOrchestratorCtx): DrainTickResult
   const a = drainInboxOnce(ctx);
   const b = drainPeerOnce(ctx);
   fireDueCheckbacks(ctx);
+  fireDueTargets({ store: ctx.store, loaded: ctx.loaded, log: ctx.log });
+  ackSweepTick(ctx);
   paintMeshBorders(
     ctx.loaded,
     ctx.registry,
@@ -791,6 +705,10 @@ export async function orchestratorDrainTickAsync(ctx: MeshOrchestratorCtx): Prom
   const b = drainPeerOnce(ctx);
   await yieldEventLoop();
   fireDueCheckbacks(ctx);
+  await yieldEventLoop();
+  fireDueTargets({ store: ctx.store, loaded: ctx.loaded, log: ctx.log });
+  await yieldEventLoop();
+  ackSweepTick(ctx);
   await yieldEventLoop();
   await paintMeshBordersAsync(
     ctx.loaded,

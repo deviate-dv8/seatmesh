@@ -1,4 +1,4 @@
-import type { BaseColumn, LoadedProfile } from "@seat-mesh/core";
+import type { BaseColumn, ColumnKinds, LoadedProfile } from "@seat-mesh/core";
 import {
   baseColumnIds,
   defaultCliForKind,
@@ -87,7 +87,7 @@ export function columnWidthsPx(
   usable: number,
   cols: BaseColumn[],
   secPct: number,
-  kinds?: Record<string, "manager" | "secretary" | "worker" | "mini">,
+  kinds?: ColumnKinds,
 ): number[] {
   const n = cols.length;
   if (n === 0 || usable < 1) return cols.map(() => 0);

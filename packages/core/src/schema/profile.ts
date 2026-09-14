@@ -5,7 +5,11 @@ import { UxSchema } from "./ux.js";
 const ConnectivityPolicySchema = z.object({
   rebootWifiBounce: z.boolean().default(false),
   smartRestart: z.boolean().default(false),
+  /** Legacy reboot-loop cap (cpe-proxy-rotate-until.sh); OC-LIMIT default is wait-ip poll. */
   rotateMaxAttempts: z.number().int().min(0).default(15),
+  /** Max seconds to poll ipify for a new carrier IP (no CPE reboot). */
+  waitIpMaxSec: z.number().int().min(60).default(3600),
+  waitIpPollSec: z.number().int().min(5).default(30),
   cooldownMs: z.number().int().min(0).default(1_800_000),
   /** Consecutive ipify probe failures before PROXY-DOWN recovery (wifi-probe / cpe-proxy-up). */
   ipifyFailBeforeRecovery: z.number().int().min(1).default(15),

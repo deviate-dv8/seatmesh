@@ -23,6 +23,8 @@ describe("seat kinds vs open column ids", () => {
     expect(seatKindFromId("secretary-2")).toBe("secretary");
     expect(seatKindFromId("mini-3")).toBe("mini");
     expect(seatKindFromId("slot-4")).toBe("worker");
+    expect(seatKindFromId("")).toBe("plain");
+    expect(seatKindFromId("plain")).toBe("plain");
   });
 
   it("profile kinds map overrides prefix", () => {

@@ -4,6 +4,12 @@ import { coordComposerDraft } from "@seat-mesh/providers";
 /** Post-generate / empty-composer settle (manager + secretary only). */
 export const COORD_IDLE_SETTLE_MS = Number(process.env.MESH_INBOX_IDLE_SETTLE_MS ?? 1500);
 
+/**
+ * Stable draft age before AFK deliver+restore (inject saves/restores human text).
+ * Matches zsign legacy INBOX_STUCK_SEC intent — do not wipe; paste DIGEST around it.
+ */
+export const COORD_STUCK_DRAFT_SEC = Number(process.env.MESH_INBOX_STUCK_SEC ?? 45);
+
 let profileSkipTypingGate = false;
 
 /** TEMP bypass: profile daemon.skipTypingGate or MESH_INBOX_SKIP_TYPING_GATE=1 */
@@ -29,6 +35,7 @@ export interface CoordGateResult {
   phase: CoordGatePhase;
   canDeliver: boolean;
   settleInSec?: number;
+  clearInSec?: number;
   draftFp?: string;
 }
 
@@ -36,6 +43,8 @@ interface PaneGateState {
   wasBusy: boolean;
   lastBusyEndedAt: number;
   idleReadySince: number;
+  draftFp: string;
+  draftSince: number;
 }
 
 const gateByPane = new Map<string, PaneGateState>();
@@ -43,7 +52,13 @@ const gateByPane = new Map<string, PaneGateState>();
 function gateState(paneId: string): PaneGateState {
   let s = gateByPane.get(paneId);
   if (!s) {
-    s = { wasBusy: false, lastBusyEndedAt: 0, idleReadySince: 0 };
+    s = {
+      wasBusy: false,
+      lastBusyEndedAt: 0,
+      idleReadySince: 0,
+      draftFp: "",
+      draftSince: 0,
+    };
     gateByPane.set(paneId, s);
   }
   return s;
@@ -81,9 +96,24 @@ function stripMeshForDraft(captureTail: string): string {
     .join("\n");
 }
 
+function trackDraftAge(st: PaneGateState, draftFp: string | undefined, nowMs: number): number {
+  const fp = draftFp?.trim() ?? "";
+  if (!fp) {
+    st.draftFp = "";
+    st.draftSince = 0;
+    return 0;
+  }
+  if (fp !== st.draftFp) {
+    st.draftFp = fp;
+    st.draftSince = nowMs;
+  }
+  return st.draftSince ? (nowMs - st.draftSince) / 1000 : 0;
+}
+
 /**
  * Manager/secretary inject gate: never paste while generating or typing;
  * after generate ends, wait full COORD_IDLE_SETTLE_MS before idle inject.
+ * Stable draft ≥ COORD_STUCK_DRAFT_SEC → deliver with restore (AFK stuck-draft).
  */
 export function classifyCoordDelivery(
   paneId: string,
@@ -101,9 +131,16 @@ export function classifyCoordDelivery(
     return { phase: "wait-not-ready", canDeliver: false };
   }
 
+  // Operator / prove bypass — paste even with draft (inject restores human draft).
+  if (inboxSkipTypingGate()) {
+    return { phase: "idle", canDeliver: true };
+  }
+
   if (state.phase === "busy") {
     st.wasBusy = true;
     st.idleReadySince = 0;
+    st.draftFp = "";
+    st.draftSince = 0;
     return { phase: "wait-busy", canDeliver: false };
   }
 
@@ -117,11 +154,25 @@ export function classifyCoordDelivery(
     state.draftFingerprint?.trim() ||
     coordComposerDraft(stripMeshForDraft(captureTail), providerId) ||
     undefined;
+  const draftAgeSec = trackDraftAge(st, draftFp, nowMs);
   const holdTyping =
     !inboxSkipTypingGate() && (state.phase === "typing" || Boolean(draftFp));
   if (holdTyping) {
     st.idleReadySince = 0;
-    return { phase: "wait-typing", canDeliver: false, draftFp };
+    if (COORD_STUCK_DRAFT_SEC > 0 && draftAgeSec >= COORD_STUCK_DRAFT_SEC) {
+      // AFK: same fingerprint long enough — inject will save/clear/restore.
+      return {
+        phase: "idle",
+        canDeliver: true,
+        draftFp,
+        clearInSec: 0,
+      };
+    }
+    const clearInSec =
+      COORD_STUCK_DRAFT_SEC > 0
+        ? Math.max(0, Math.ceil(COORD_STUCK_DRAFT_SEC - draftAgeSec))
+        : undefined;
+    return { phase: "wait-typing", canDeliver: false, draftFp, clearInSec };
   }
 
   if (!composerIdleReady(state, captureTail, providerId)) {

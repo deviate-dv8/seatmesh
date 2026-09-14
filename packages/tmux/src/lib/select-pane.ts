@@ -63,13 +63,13 @@ export function selectPaneUnfocused(args: string[]): void {
 /**
  * Run inject with the target pane able to receive programmatic input.
  *
- * tmux `select-pane -d` (pane_input_off) blocks *all* input — including
- * `send-keys` and `paste-buffer` from the daemon. So we must NOT disable
- * input for the inject window. If the pane was already locked (minis),
- * briefly unlock, inject, then restore the lock.
+ * tmux `select-pane -d` (pane_input_off) blocks *all* input — including daemon
+ * `send-keys` / `paste-buffer`. There is no "user-only" keyboard lock in tmux:
+ * inject must run with input enabled and rely on capture→buffer→clear→paste→restore
+ * (see inject.ts) so operator drafts are not sent with inbox mail.
  *
- * Active-pane focus is preserved so inject does not steal the operator's
- * cursor to the target.
+ * If the pane was already locked for minis, briefly unlock, inject, restore lock.
+ * Active-pane focus is preserved so inject does not steal the operator's cursor.
  */
 export function withPaneInjectLock(paneId: string, fn: () => void): void {
   withActivePanePreserved(paneId, () => {

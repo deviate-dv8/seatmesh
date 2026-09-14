@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { MeshProfile } from "../schema/profile.js";
 import { resolveFromWorkspace } from "../paths/paths.js";
 import { resolveHarnessPath } from "../paths/paths-manifest.js";
+import { resolveDaemonPort } from "../paths/runtime-paths.js";
 import type { LoadedProfile } from "../profile/profile.js";
 import { appendJsonlLine, readJsonlAll, readJsonlTail } from "../jsonl/store.js";
 import {
@@ -45,7 +46,12 @@ export function chatRoomConfig(profile: MeshProfile): ChatRoomConfig {
 
 export function chatRoomConfigForLoaded(loaded: LoadedProfile): ChatRoomConfig {
   const cfg = chatRoomConfig(loaded.profile);
-  return { ...cfg, rootAbs: resolveHarnessPath(loaded, cfg.root) };
+  const port = resolveDaemonPort(loaded.profile, loaded.workspace);
+  return {
+    ...cfg,
+    rootAbs: resolveHarnessPath(loaded, cfg.root),
+    inboxBase: `http://127.0.0.1:${port}`,
+  };
 }
 
 export function roomDir(workspace: string, cfg: ChatRoomConfig, slug: string): string {

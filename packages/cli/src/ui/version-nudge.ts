@@ -7,14 +7,28 @@ import { fileURLToPath } from "node:url";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const NPM_REGISTRY = "https://registry.npmjs.org";
 
-/** Public npm release track (shown in upgrade hint). */
-export const SEATMESH_RELEASE_NOTE = "Latest: seatmesh@1.0.2 (2026-09-14).";
+/** @deprecated Prefer dynamic registry check via {@link formatHelpVersionBlock}. */
+export const SEATMESH_RELEASE_NOTE = "See: seatmesh version --check-registry";
 
 export function readInstalledCliVersion(): string {
   // version-nudge.ts lives in src/ui/ (dist/ui/); package.json is at the package root.
   const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
   const raw = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as { version?: string };
   return raw.version?.trim() || "0.0.0";
+}
+
+/** Last `seatmesh update` stamp in a profile dir — not the running CLI version. */
+export function readProfileSeatmeshVersion(profileDir: string): string | null {
+  const p = path.join(profileDir, ".seatmesh-version");
+  if (!fs.existsSync(p)) return null;
+  const v = fs.readFileSync(p, "utf8").trim();
+  return v || null;
+}
+
+export function installKindLabel(): "dev checkout" | "npx cache" | "global/npm" {
+  if (!isRegistrySeatmeshInstall()) return "dev checkout";
+  if (isNpxEphemeralInstall()) return "npx cache";
+  return "global/npm";
 }
 
 /** True for global / npx installs — skip git monorepo `packages/cli/dist` dev path. */
@@ -110,9 +124,85 @@ export function resolveLatestRegistryVersion(force = false): string | null {
 
 export function formatVersionUpgradeHint(installed: string, latest: string): string {
   return (
-    `seatmesh: installed ${installed}; npm latest ${latest}. ${SEATMESH_RELEASE_NOTE} ` +
+    `seatmesh: this ${installed}; npm latest ${latest}. ` +
     `Upgrade: npm install -g seatmesh@latest  or  npx seatmesh@latest <cmd…>`
   );
+}
+
+/**
+ * Lines under the bare `npx seatmesh` / `--help` logo: installed vs registry + how to update.
+ */
+export function formatHelpVersionBlock(
+  installed: string,
+  latest: string | null,
+  kind: ReturnType<typeof installKindLabel> = installKindLabel(),
+): string[] {
+  const lines: string[] = [];
+  if (latest) {
+    if (semverLess(installed, latest)) {
+      lines.push(`version ${installed}  ·  npm latest ${latest}  ·  update available`);
+    } else if (semverLess(latest, installed)) {
+      lines.push(`version ${installed}  ·  npm latest ${latest}  ·  ahead of npm`);
+    } else {
+      lines.push(`version ${installed}  ·  npm latest ${latest}  ·  up to date`);
+    }
+  } else {
+    lines.push(`version ${installed}  ·  npm latest (offline / check failed)`);
+  }
+  if (kind === "dev checkout") {
+    lines.push(`install: dev checkout`);
+  } else if (kind === "npx cache") {
+    lines.push(`install: npx cache (ephemeral) — prefer: npm install -g seatmesh@latest`);
+  } else {
+    lines.push(`install: global/npm`);
+  }
+  if (latest && semverLess(installed, latest)) {
+    lines.push(`update:  npm install -g seatmesh@latest`);
+    lines.push(`     or:  npx seatmesh@latest update`);
+  } else {
+    lines.push(`update:  npm install -g seatmesh@latest  ·  npx seatmesh@latest update`);
+  }
+  return lines;
+}
+
+export interface VersionInfoOptions {
+  profileDir?: string;
+  json?: boolean;
+  forceRegistryCheck?: boolean;
+}
+
+/** `seatmesh version` — installed CLI vs npm latest vs profile stamp. */
+export function printVersionInfo(opts: VersionInfoOptions = {}): void {
+  const installed = readInstalledCliVersion();
+  const latest = resolveLatestRegistryVersion(Boolean(opts.forceRegistryCheck));
+  const kind = installKindLabel();
+  const profileStamp = opts.profileDir ? readProfileSeatmeshVersion(opts.profileDir) : null;
+
+  if (opts.json) {
+    console.log(
+      JSON.stringify(
+        {
+          cli: installed,
+          npmLatest: latest,
+          install: kind,
+          profileSeatmeshVersion: profileStamp,
+          upToDate: !latest || !semverLess(installed, latest),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
+  console.log(formatInstallStatusLine(installed, latest));
+  console.log(`  install: ${kind}`);
+  if (profileStamp != null) {
+    console.log(`  profile .seatmesh-version: ${profileStamp} (last profile update, not this CLI)`);
+  }
+  if (kind === "npx cache") {
+    console.log("  hint: npm install -g seatmesh@latest for a pinned CLI on PATH");
+  }
 }
 
 /** stderr hint when registry has a newer seatmesh (registry/npx/global installs only). */

@@ -107,7 +107,10 @@ function assignWorkerIdentities(loaded: LoadedProfile, session: string): void {
       stampWorkerSlot(loaded, m.paneId, n);
     }
   }
-  for (const paneId of listWindowPaneIds(session, workersWin)) {
+  const workerPanes = listWindowPaneIds(session, workersWin);
+  // Only label the first workerCount grid cells; extra panes stay blank for manual use.
+  for (let i = 0; i < Math.min(max, workerPanes.length); i++) {
+    const paneId = workerPanes[i]!;
     if (paneOpt(paneId, "mesh_role")) continue;
     const n = nextFreeSlot(used, max);
     if (n == null) break;
@@ -131,7 +134,9 @@ function assignMiniIdentities(loaded: LoadedProfile, session: string): void {
       stampMiniId(loaded, m.paneId, n, leadIds.has(String(n)));
     }
   }
-  for (const paneId of listWindowPaneIds(session, minisWin)) {
+  const miniPanes = listWindowPaneIds(session, minisWin);
+  for (let i = 0; i < Math.min(miniMax, miniPanes.length); i++) {
+    const paneId = miniPanes[i]!;
     if (paneOpt(paneId, "mesh_mini")) continue;
     let n = Number(paneOpt(paneId, "mesh_slot").replace(/^mini-/, ""));
     if (!Number.isFinite(n) || n < 1 || n > miniMax || used.has(n)) {

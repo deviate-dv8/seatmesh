@@ -11,9 +11,15 @@ export const MESH_INBOX_INTENTS = [
   "continue",
   "limit-retry",
   "status",
+  "ack-remind",
 ] as const;
 
 export type MeshInboxIntent = (typeof MESH_INBOX_INTENTS)[number];
+
+/** Intents whose whole point is the shell line — stripping the footer guts them. */
+export function intentKeepsShellFooter(intent: MeshInboxIntent): boolean {
+  return intent === "assign" || intent === "ack-remind";
+}
 
 export function isMeshInboxIntent(s: string): s is MeshInboxIntent {
   return (MESH_INBOX_INTENTS as readonly string[]).includes(s);

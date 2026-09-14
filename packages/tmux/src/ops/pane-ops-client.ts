@@ -134,6 +134,6 @@ export function submitPaneOp(
     const ahead = Number(resp.queueAhead ?? 0);
     const note = ahead > 0 ? ` (${ahead} ahead)` : "";
     console.log(`QUEUED pane-op ${id} ${kind}${note} — ${summary}`);
-    console.log("  daemon serializes launch/restart; check: ./sm.sh ops list");
+    console.log("  daemon serializes launch/restart; check: seatmesh --profile .sm ops list");
   }
 }

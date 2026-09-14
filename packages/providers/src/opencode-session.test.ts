@@ -59,6 +59,44 @@ Build auto · Big Pickle
     };
     expect(composerFromCapture(pane, "opencode").phase).not.toBe("limit");
   });
+
+  it("live busy composer wins over stale Cannot-connect in the same bottom band", () => {
+    const tail = `Cannot connect to API: The socket connection was closed unexpected
+Build auto · Big Pickle OpenCode Zen
+╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   esc interrupt               10.1K (5%)  ctrl+p commands`;
+    const pane: PaneSnapshot = {
+      paneId: "%1",
+      windowName: "base",
+      cwd: "/tmp",
+      currentCommand: "opencode",
+      captureTail: tail,
+      options: {},
+    };
+    expect(composerFromCapture(pane, "opencode")).toEqual({
+      phase: "busy",
+      busyLabel: "busy",
+    });
+  });
+
+  it("reports typing when OpenCode footer has a human draft", () => {
+    const tail = `hello from human draft
+Build auto · Big Pickle OpenCode Zen
+╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                              0.0K (0%)  ctrl+p commands`;
+    const pane: PaneSnapshot = {
+      paneId: "%1",
+      windowName: "base",
+      cwd: "/tmp",
+      currentCommand: "opencode",
+      captureTail: tail,
+      options: {},
+    };
+    expect(composerFromCapture(pane, "opencode")).toEqual({
+      phase: "typing",
+      draftFingerprint: "hello from human draft",
+    });
+  });
 });
 
 describe("resolveOpenCodeSessionForPane", () => {

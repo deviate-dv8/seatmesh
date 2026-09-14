@@ -1,9 +1,10 @@
-import type { LoadedProfile } from "@seat-mesh/core";
 import type {
+  NotifyActCard,
   NotifyActLink,
   NotifyActRegisterAction,
   NotifyActType,
 } from "@seat-mesh/core";
+import type { LoadedProfile } from "@seat-mesh/core";
 import { resolvePaneTarget } from "@seat-mesh/tmux";
 import type { PeerKind, PeerRow } from "../store/jsonl-store.js";
 
@@ -22,6 +23,14 @@ export interface NotifyActTokenRow {
   used: boolean;
 }
 
+export interface NotifyActCardRow {
+  id: string;
+  title: string;
+  body: string;
+  links: NotifyActLink[];
+  expiresAt: number;
+}
+
 export interface NotifyActExecuteCtx {
   loaded: LoadedProfile;
   store: NotifyActStore;
@@ -31,11 +40,15 @@ export interface NotifyActExecuteCtx {
 
 export function createNotifyActRegistry() {
   const tokens = new Map<string, NotifyActTokenRow>();
+  const cards = new Map<string, NotifyActCardRow>();
 
   function pruneExpired(): void {
     const now = Date.now();
     for (const [id, row] of tokens) {
       if (row.expiresAt <= now || row.used) tokens.delete(id);
+    }
+    for (const [id, row] of cards) {
+      if (row.expiresAt <= now) cards.delete(id);
     }
   }
 
@@ -66,6 +79,42 @@ export function createNotifyActRegistry() {
     return links;
   }
 
+  function registerCard(
+    input: { title: string; body: string; links: NotifyActLink[] },
+    ttlSec: number,
+    baseUrl: string,
+  ): NotifyActCard {
+    pruneExpired();
+    const ttl = Math.min(Math.max(ttlSec, 60), 86_400);
+    const base = baseUrl.replace(/\/$/, "");
+    const id = crypto.randomUUID();
+    const expiresAt = Date.now() + ttl * 1000;
+    const row: NotifyActCardRow = {
+      id,
+      title: input.title.trim() || "Decision",
+      body: input.body.trim(),
+      links: input.links,
+      expiresAt,
+    };
+    cards.set(id, row);
+    const infoUrl = `${base}/act/card/${id}`;
+    return {
+      id,
+      title: row.title,
+      body: row.body,
+      infoUrl,
+      links: row.links,
+      expiresAt,
+    };
+  }
+
+  function getCard(id: string): NotifyActCardRow | null {
+    pruneExpired();
+    const row = cards.get(id);
+    if (!row || row.expiresAt <= Date.now()) return null;
+    return row;
+  }
+
   function take(token: string): NotifyActTokenRow | null {
     pruneExpired();
     const row = tokens.get(token);
@@ -75,7 +124,7 @@ export function createNotifyActRegistry() {
     return row;
   }
 
-  return { register, take, pruneExpired };
+  return { register, registerCard, getCard, take, pruneExpired };
 }
 
 export type NotifyActRegistry = ReturnType<typeof createNotifyActRegistry>;
@@ -131,10 +180,15 @@ export async function executeNotifyAct(
         id: crypto.randomUUID(),
         at: now,
         kind,
-        fromSlot: "notify-act",
+        fromSlot: "operator",
+        fromAgent: "operator",
         fromPorts: null,
         targetPane: resolved.paneId,
-        targetLabel: resolved.row.slot || target,
+        targetLabel: resolved.row.slot?.startsWith("mini-")
+          ? resolved.row.slot
+          : resolved.row.slot && /^\d+$/.test(resolved.row.slot)
+            ? `slot-${resolved.row.slot}`
+            : resolved.row.slot || target,
         msg,
         sent: false,
       };
@@ -149,26 +203,4 @@ export async function executeNotifyAct(
     default:
       return { ok: false, summary: `Unknown action type.` };
   }
-}
-
-export function htmlActPage(title: string, body: string, ok: boolean): string {
-  const safeTitle = escapeHtml(title);
-  const safeBody = escapeHtml(body);
-  const color = ok ? "#2e7d32" : "#c62828";
-  return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>${safeTitle}</title>
-<style>body{font-family:system-ui,sans-serif;margin:2rem;max-width:40rem;line-height:1.45}
-h1{color:${color};font-size:1.25rem}a.btn{display:inline-block;margin-top:1rem;padding:.5rem 1rem;
-background:#1565c0;color:#fff;border-radius:6px;text-decoration:none;font-weight:600}</style>
-</head><body><h1>${safeTitle}</h1><p>${safeBody}</p>
-<a class="btn" href="/ui">Back to mesh UI</a>
-<p><small>seatmesh notify-act · one-shot</small></p></body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
