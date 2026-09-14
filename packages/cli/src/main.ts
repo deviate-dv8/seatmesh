@@ -42,6 +42,7 @@ import {
   sessionAttach,
   sessionUp,
   sessionStatus,
+  sessionSync,
   relayoutMeshSession,
   realignAllLayouts,
   reloadMesh,
@@ -184,14 +185,14 @@ Status / diagnostics
   test                          smoke: layout, providers, inbox, proxy
 
 Session / layout (infra shape, operator or manager)
-  session attach|up|status|init <sm-name>
+  session attach|up|status|sync|init <sm-name>
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
   layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
   layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
                                  N base columns (managers/secretaries) are config, not enum
   realign               resize-only: base ratio + worker/mini equal grids
   ops list|clear                pane-op queue (serial)
-  save|auto [--json] [--no-labels]   scrape session -> mesh-agents.json (+ labels; daemon auto-scrapes every 10m)
+  save|auto [--json] [--no-labels]   scrape session -> mesh-agents.json (+ labels; daemon auto-scrapes every 60s + detach hook)
   labels                        re-apply @mesh_* + border strip
   inbox [--json] [--wait N] [--meta] | inbox list|resolve|log|instances|stop|restart
 
@@ -252,7 +253,13 @@ async function main(): Promise<void> {
   }
 
   const { maybePrintVersionNudge } = await import("./ui/version-nudge.js");
-  maybePrintVersionNudge();
+  // Attach/session picker must not wait on npm view — operator is trying to get into tmux.
+  const skipNudge =
+    process.env.SEATMESH_SKIP_VERSION_CHECK === "1" ||
+    cmd === "session" ||
+    cmd === "sessions" ||
+    cmd === "start";
+  if (!skipNudge) maybePrintVersionNudge();
 
   if (cmd === "version") {
     const { printVersionInfo } = await import("./ui/version-nudge.js");
@@ -451,15 +458,22 @@ async function main(): Promise<void> {
       return;
     }
     if (sub === "attach" || !sub) {
-      await touchRegistry();
+      // Don't block tmux attach on registry I/O — fire and forget.
+      void touchRegistry();
       sessionAttach(loaded);
+      return;
+    }
+    if (sub === "sync") {
+      sessionSync(loaded);
+      console.log(`OK: session sync ${loaded.sessionName}`);
+      printMeshInboxStatus(loaded);
       return;
     }
     if (sub === "status") {
       sessionStatus(loaded);
       return;
     }
-    console.error("usage: session attach|up|status|init <sm-name>");
+    console.error("usage: session attach|up|status|sync|init <sm-name>");
     process.exit(2);
   }
 

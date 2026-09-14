@@ -7,7 +7,9 @@ import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
 import { ensureMeshInbox } from "../comms/inbox-bridge.js";
 import { launchSession } from "../agents/launch.js";
-import { ensureMeshSessionEnv } from "./session-env.js";
+import { ensureMeshSessionEnv, installSessionSaveHooks, spawnDetachedSessionSync } from "./session-env.js";
+import { saveMeshSession } from "./save-session.js";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { inboxHealth, meshInboxPort, meshInboxStatusLine } from "../comms/inbox-bridge.js";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
 import { assertRelayoutSafe } from "./layout-guard.js";
@@ -110,6 +112,38 @@ export function sessionUp(loaded: LoadedProfile): void {
   }
 
   ensureMeshInbox(loaded, { quiet: true });
+  installSessionSaveHooks(session, loaded);
+  try {
+    saveMeshSession(loaded, createRegistryForProfile(loaded.profile));
+  } catch {
+    /* non-fatal */
+  }
+}
+
+/**
+ * Inbox + coord repair + scrape — safe to run detached after attach so the
+ * operator is not stuck outside tmux waiting on health/coord sync.
+ */
+export function sessionSync(loaded: LoadedProfile): void {
+  const session = loaded.sessionName;
+  if (!tmuxHasSession(session)) {
+    throw new Error(`session '${session}' does not exist — seatmesh session up`);
+  }
+  ensureSeatFiles(loaded);
+  ensureMeshSessionEnv(session, {
+    workspaceId: loaded.workspaceId,
+    sessionName: loaded.sessionName,
+    workspace: loaded.workspace,
+    profilePath: loaded.profilePath,
+  });
+  installSessionSaveHooks(session, loaded);
+  ensureMeshInbox(loaded, { quiet: true });
+  logCoordSyncResults(syncCoordClisFromProfile(loaded, { trigger: "attach" }));
+  try {
+    saveMeshSession(loaded, createRegistryForProfile(loaded.profile));
+  } catch {
+    /* non-fatal */
+  }
 }
 
 export function sessionAttach(loaded: LoadedProfile): void {
@@ -117,15 +151,21 @@ export function sessionAttach(loaded: LoadedProfile): void {
   if (!tmuxHasSession(session)) {
     sessionUp(loaded);
   } else {
-    ensureSeatFiles(loaded);
+    // Fast path: stamp env + save hooks, kick sync to background, attach NOW.
+    // Previously ensureMeshInbox + coord-sync blocked for seconds–tens of seconds
+    // before tmux attach (npx attach felt broken / “5 years”).
     ensureMeshSessionEnv(session, {
       workspaceId: loaded.workspaceId,
       sessionName: loaded.sessionName,
       workspace: loaded.workspace,
       profilePath: loaded.profilePath,
     });
-    ensureMeshInbox(loaded, { quiet: true });
-    logCoordSyncResults(syncCoordClisFromProfile(loaded, { trigger: "attach" }));
+    installSessionSaveHooks(session, loaded);
+    if (process.env.SEATMESH_ATTACH_SYNC === "1") {
+      sessionSync(loaded);
+    } else {
+      spawnDetachedSessionSync(loaded);
+    }
   }
 
   if (process.env.TMUX) {

@@ -60,7 +60,7 @@ seats:
 state:
   meshAgentsJson: mesh-agents.json
   agentsJson: mesh-agents.json
-  autoScrapeIntervalMs: 600000
+  autoScrapeIntervalMs: 60000
 
 data:
   root: runtime

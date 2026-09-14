@@ -3,7 +3,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   loadProfile,
@@ -972,11 +972,13 @@ async function main(): Promise<void> {
       `mesh-inbox: listening http://127.0.0.1:${port} session=${session} storage=${rt.storageBackend}`,
     );
     scheduleHealthSnapRefresh();
+    // First scrape ASAP so resume ids land before a quick kill/reattach.
+    setTimeout(scheduleAutoScrape, 2_000);
   });
 
   const snapRefreshMs = Math.min(pollMs, 2000);
   setInterval(scheduleHealthSnapRefresh, snapRefreshMs);
-  setInterval(scheduleAutoScrape, Math.min(pollMs, 30_000));
+  setInterval(scheduleAutoScrape, Math.min(pollMs, 15_000));
   setInterval(scheduleDrain, pollMs);
 
   function onResumeAckPane(paneId: string): void {
@@ -1036,6 +1038,17 @@ async function main(): Promise<void> {
   }, pollMs);
 
   process.on("SIGTERM", () => {
+    try {
+      const alive = spawnSync("tmux", ["has-session", "-t", session], {
+        stdio: "ignore",
+      }).status === 0;
+      if (alive) {
+        saveMeshSession(loaded, registry);
+        log("shutdown scrape mesh-agents.json");
+      }
+    } catch (e) {
+      log(`shutdown scrape error ${(e as Error).message}`);
+    }
     if ("close" in store && typeof store.close === "function") {
       store.close();
     }

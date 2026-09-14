@@ -130,7 +130,8 @@ export async function pickSessionRow(rows: SessionRow[]): Promise<SessionRow | n
 
 export async function attachSessionProfile(profilePath: string): Promise<void> {
   const loaded = loadProfile(profilePath);
-  await upsertGlobalSession(loaded);
+  // Registry update must not delay tmux attach.
+  void upsertGlobalSession(loaded);
   sessionAttach(loaded);
 }
 

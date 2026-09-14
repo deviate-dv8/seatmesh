@@ -118,8 +118,8 @@ export const MeshProfileSchema = z.object({
     agentsJson: z.string().default("tmux-main-agents.json"),
     /** Mesh-owned slot state (CLI type + resume per slot). */
     meshAgentsJson: z.string().default("mesh-agents.json"),
-    /** Periodic scrape interval for `./sm.sh auto` (default 10 min). 0 = off. */
-    autoScrapeIntervalMs: z.number().int().min(0).default(600_000),
+    /** Periodic scrape of mesh-agents.json (default 60s). 0 = off. */
+    autoScrapeIntervalMs: z.number().int().min(0).default(60_000),
   }),
   daemon: z
     .object({
