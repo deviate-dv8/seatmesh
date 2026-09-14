@@ -18,7 +18,8 @@ export type MeshInboxIntent = (typeof MESH_INBOX_INTENTS)[number];
 
 /** Intents whose whole point is the shell line — stripping the footer guts them. */
 export function intentKeepsShellFooter(intent: MeshInboxIntent): boolean {
-  return intent === "assign" || intent === "ack-remind";
+  // checkback-verify: cancel shell must survive or agents chat "Ignored" forever.
+  return intent === "assign" || intent === "ack-remind" || intent === "checkback-verify";
 }
 
 export function isMeshInboxIntent(s: string): s is MeshInboxIntent {

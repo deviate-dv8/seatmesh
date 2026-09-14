@@ -191,20 +191,21 @@ export const ROOM_VERIFY_CONTINUE_HUB =
 
 /**
  * intent=checkback-verify inject copy (sole source).
- * Purpose: brief poll → agent CONTINUES hub work.
- * Failure mode this kills: agent chats "ok ignore / tell me to continue" and stalls.
+ * Purpose: one glance → KILL the poll in shell → CONTINUE hub.
+ * Failure modes this kills:
+ * - agent chats "Ignored / won't ack" and the Check re-fires forever
+ * - agent never sees cancel because they don't know the cmd
  */
 export const CHECKBACK_VERIFY = {
-  /** Lead verb — must read as work order, not a question. */
   continueVerb: "CONTINUE",
-  /** Ban meta-chat about the poll itself. */
   noBanter:
-    "Do NOT chat about this Check. Do NOT say ignore/ok/wait. Do NOT ask to continue. Resume FOCUS/TASKS now.",
-  /** Optional cancel — quiet, never the headline (daemon also auto-stops). */
-  optionalCancelPrefix: "(optional) stop further polls:",
+    "Chat \"Ignored\" / \"won't ack\" does NOTHING — the poll comes back. Do NOT narrate this Check.",
+  /** Required kill line — must survive delivery (intentKeepsShellFooter includes checkback-verify). */
+  killShellPrefix:
+    "SHELL (required — kill this poll NOW; chat does NOT cancel):",
 } as const;
 
-/** Full checkback-verify body for a seat (cancel id optional). */
+/** Full checkback-verify body for a seat (cancel id required for kill line). */
 export function meshInboxCheckbackVerify(opts: {
   seat: string;
   expect: string;
@@ -214,13 +215,13 @@ export function meshInboxCheckbackVerify(opts: {
   const glance = opts.expect.replace(/\s+/g, " ").trim().slice(0, 100);
   const hint = (opts.hint ?? "").trim();
   const hintBit = hint ? ` ${hint}.` : "";
+  const cancel = opts.cancelCmd?.trim();
   const lines = [
-    `${opts.seat} | ${MESH_INBOX_TAG} ${CHECKBACK_VERIFY.continueVerb}: glance (${glance}).${hintBit} Keep working your open hub.`,
+    `${opts.seat} | ${MESH_INBOX_TAG} ${CHECKBACK_VERIFY.continueVerb}: glance (${glance}).${hintBit} Then kill the poll and keep your hub.`,
     CHECKBACK_VERIFY.noBanter,
   ];
-  const cancel = opts.cancelCmd?.trim();
   if (cancel) {
-    lines.push(`${CHECKBACK_VERIFY.optionalCancelPrefix} ${cancel}`);
+    lines.push(`${CHECKBACK_VERIFY.killShellPrefix} ${cancel}`);
   }
   return lines.join("\n");
 }

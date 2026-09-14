@@ -22,6 +22,12 @@ describe("mesh-inbox-intent", () => {
     expect(stripReplyPeerFooter(raw)).toBe("line");
   });
 
+  it("keeps checkback-verify kill shell (Ignored-chat failure mode)", () => {
+    const { intentKeepsShellFooter } = require("./mesh-inbox-intent.js") as typeof import("./mesh-inbox-intent.js");
+    expect(intentKeepsShellFooter("checkback-verify")).toBe(true);
+    expect(intentKeepsShellFooter("continue")).toBe(false);
+  });
+
   it("hubLockActive is false when no lock file", () => {
     expect(hubLockActive("/tmp/no-such-workspace-zsign-test")).toBe(false);
   });

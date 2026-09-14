@@ -134,7 +134,7 @@ describe("formatRoomCommsCheckback", () => {
     expect(msg).toContain("inbound already has");
     expect(msg).toContain("peer");
     expect(msg).toContain("cb cancel");
-    expect(msg).toContain("optional");
+    expect(msg).toContain("SHELL (required — kill this poll NOW");
     expect(
       formatRoomCommsCheckback(
         "chat-room:managers peer update (msg)",
@@ -155,7 +155,7 @@ describe("formatRoomCommsCheckback", () => {
     expect(msg).not.toContain("room tail");
   });
 
-  it("verifyOnly is CONTINUE-first from mesh-copy CONSTS", () => {
+  it("verifyOnly is CONTINUE + required kill shell from mesh-copy CONSTS", () => {
     const msg = formatRoomCommsCheckback(
       "chat-room:global peer update (broadcast)",
       { role: "secretary" },
@@ -163,10 +163,9 @@ describe("formatRoomCommsCheckback", () => {
       { verifyOnly: true, id: "cb-peer-1234567890-abcdef" },
     );
     expect(msg).toContain("CONTINUE:");
-    expect(msg).toContain("Do NOT chat about this Check");
+    expect(msg).toContain('Chat "Ignored"');
+    expect(msg).toContain("SHELL (required — kill this poll NOW");
     expect(msg).toContain("cb cancel cb-peer-12345");
-    expect(msg).not.toContain("SHELL (required to STOP renew");
-    expect(msg).not.toMatch(/ok ignore|tell me to continue/i);
   });
 });
 
@@ -222,7 +221,7 @@ describe("formatRoomDirectPm", () => {
 });
 
 describe("formatGenericCheckback", () => {
-  it("CONTINUE hub from mesh-copy CONSTS", () => {
+  it("CONTINUE + required kill shell from mesh-copy CONSTS", () => {
     const msg = formatGenericCheckback(
       "master ACK review of opencode provider TS fix (digest queued 400ac9c9)",
       { role: "manager" },
@@ -230,8 +229,9 @@ describe("formatGenericCheckback", () => {
     );
     expect(msg).toContain("CONTINUE:");
     expect(msg).toContain("inbox list | grep 400ac9c9");
+    expect(msg).toContain("SHELL (required — kill this poll NOW");
     expect(msg).toContain("cb cancel cb-digest-aa");
-    expect(msg).toContain("Do NOT chat about this Check");
+    expect(msg).toContain('Chat "Ignored"');
   });
 });
 

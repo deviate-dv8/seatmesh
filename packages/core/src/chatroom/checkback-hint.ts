@@ -138,7 +138,7 @@ export interface CheckNudgeOpts {
 
 /**
  * intent=checkback-verify nudge — copy from mesh-copy.ts CONSTS only.
- * Agent must CONTINUE hub; cancel is optional footer.
+ * Agent must run cb cancel (shell) then CONTINUE hub. Chat "Ignored" is useless.
  */
 export function formatCheckNudge(
   ctx: RoomCommsReplyContext,
@@ -176,7 +176,7 @@ export function formatRoomCommsCheckback(
     : "inbound already has Reply: peer <sender>";
   return (
     `${formatCompactSeat(ctx)} | ${MESH_INBOX_TAG} Check: ${expect} — ${reply}\n` +
-    `(optional) stop further polls: ${formatCheckbackCancelHint(opts.id)}`
+    `SHELL (required — kill this poll NOW; chat does NOT cancel): ${formatCheckbackCancelHint(opts.id)}`
   );
 }
 

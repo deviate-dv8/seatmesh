@@ -538,6 +538,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
       workspace: ctx.loaded.workspace,
       });
       if (!r.ok) deferFailedFire(ctx, row, now, r.reason ?? "deliver");
+      else row.renewSec = 0;
       ctx.log(`coord-expect ${outcome.retried ? "retry" : "hold"} ${outcome.reason}`);
     } else if (row.kind === "balance-lead-tick") {
       let role = row.recipientLabel?.trim() || "";
@@ -582,7 +583,8 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");
         continue;
       }
-      ctx.log(`room-call checkback pane=${pane} expect=${row.expect}`);
+      row.renewSec = 0;
+      ctx.log(`room-call checkback pane=${pane} expect=${row.expect} (one-shot)`);
     } else if (
       row.expect &&
       (row.kind === "room-comms" || row.expect.startsWith("chat-room:"))
@@ -654,7 +656,10 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         deferFailedFire(ctx, row, now, r.reason ?? "deliver");
         continue;
       }
-      ctx.log(`checkback pane=${pane} expect=${expect.slice(0, 80)}`);
+      // One-shot verify — never renew. Agents chat "Ignored" instead of cancel;
+      // renewing that forever is the infinite-ignore loop.
+      row.renewSec = 0;
+      ctx.log(`checkback pane=${pane} expect=${expect.slice(0, 80)} (one-shot)`);
     }
 
     if (row.status !== "active") continue;
