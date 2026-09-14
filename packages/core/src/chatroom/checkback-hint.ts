@@ -1,4 +1,4 @@
-import { MESH_INBOX_ROOM_TAG, MESH_INBOX_TAG } from "../messages/mesh-copy.js";
+import { MESH_INBOX_ROOM_TAG, MESH_INBOX_TAG, meshInboxCheckbackVerify } from "../messages/mesh-copy.js";
 import { seatmeshCmd } from "../messages/cli-hints.js";
 
 /** Parse expect from room say checkback arm: `chat-room:<slug> peer update (<kind>)`. */
@@ -114,31 +114,21 @@ export function formatReplyToSender(from: string): string {
 
 /**
  * Prefix that matches store cancel (`id.startsWith(needle)`).
- * Keep the `cb-` prefix — stripping it made inject cancel lines miss the row
- * and agents burned turns on fake-success loops.
+ * Keep the `cb-` prefix — stripping it made inject cancel lines miss the row.
  */
 export function shortCheckbackId(id: string): string {
   const t = id.trim();
   if (!t) return t;
-  // Prefer a stable head including `cb-` (e.g. cb-peer-1234…).
   if (t.length <= 14) return t;
   return t.slice(0, 14);
 }
 
-/**
- * Always on every Check: inject. Agents otherwise reply in chat, ignore the
- * renew, and get infinite re-fires — cancel is the only stop.
- * Also: more peer/inbox while busy is queued, not lost (do not panic-reply).
- * After CHECKBACK_MAX_FIRES the daemon auto-stops renew; cancel only if still active.
- */
+/** Quiet cancel shell for checkback-verify (never the lead line — see mesh-copy CHECKBACK_VERIFY). */
 export function formatCheckbackCancelHint(id?: string | null): string {
   const cancel = id?.trim()
     ? seatmeshCmd(`cb cancel ${shortCheckbackId(id)}`)
     : `${seatmeshCmd("cb list")} → ${seatmeshCmd("cb cancel <id>")}`;
-  return (
-    `SHELL (required to STOP renew — chat reply does NOT cancel): ${cancel}\n` +
-    `FYI: follow-ups while busy are queued; renew auto-stops after a few Checks — do not loop cancel.`
-  );
+  return cancel;
 }
 
 export interface CheckNudgeOpts {
@@ -146,17 +136,22 @@ export interface CheckNudgeOpts {
   id?: string | null;
 }
 
-/** Short checkback / patience nudge (not a full playbook). */
+/**
+ * intent=checkback-verify nudge — copy from mesh-copy.ts CONSTS only.
+ * Agent must CONTINUE hub; cancel is optional footer.
+ */
 export function formatCheckNudge(
   ctx: RoomCommsReplyContext,
   expect: string,
   hint: string,
   opts: CheckNudgeOpts = {},
 ): string {
-  return (
-    `${formatCompactSeat(ctx)} | Check: ${expect} — ${hint}\n` +
-    formatCheckbackCancelHint(opts.id)
-  );
+  return meshInboxCheckbackVerify({
+    seat: formatCompactSeat(ctx),
+    expect,
+    hint,
+    cancelCmd: formatCheckbackCancelHint(opts.id),
+  });
 }
 
 export interface RoomCommsCheckbackOpts {
@@ -172,12 +167,17 @@ export function formatRoomCommsCheckback(
   from?: string | null,
   opts: RoomCommsCheckbackOpts = {},
 ): string {
-  const hint = opts.verifyOnly
-    ? "one verify; continue current hub (no chat reply)"
-    : from?.trim()
-      ? formatReplyToSender(from)
-      : "inbound already has Reply: peer <sender>";
-  return formatCheckNudge(ctx, expect, hint, { id: opts.id });
+  if (opts.verifyOnly) {
+    return formatCheckNudge(ctx, expect, "room ledger glance", { id: opts.id });
+  }
+  // Needs a peer reply — not a pure verify/continue poll.
+  const reply = from?.trim()
+    ? formatReplyToSender(from)
+    : "inbound already has Reply: peer <sender>";
+  return (
+    `${formatCompactSeat(ctx)} | ${MESH_INBOX_TAG} Check: ${expect} — ${reply}\n` +
+    `(optional) stop further polls: ${formatCheckbackCancelHint(opts.id)}`
+  );
 }
 
 export interface RoomPeerNotifyOpts {
@@ -198,9 +198,6 @@ export function formatRoomPeerNotify(
   const seat = formatCompactSeat(ctx);
   const tag = `${slug} | ${from} | ${kind}${unseenPart}`;
   const roomFlag = slug === "global" ? "" : ` -r ${slug}`;
-  // A thin ping with only a "reply to sender" hint invites a blind reply without ever
-  // reading what's actually unseen (operator-reported: recipient had no way to see the
-  // content, just a reply command). Ledger is truth, so tell them how to read it first.
   return (
     `${seat} | ${MESH_INBOX_ROOM_TAG} ${tag}\n` +
     `Verify: ${seatmeshCmd(`room tail${roomFlag} -n 15`)}\n${formatReplyToSender(from)}`
@@ -256,7 +253,7 @@ export function formatRoomCallCheckback(
     return formatCheckNudge(
       ctx,
       expect,
-      `room accept ${callId} | room decline ${callId}`,
+      `then room accept ${callId} | room decline ${callId}`,
       opts,
     );
   }
@@ -313,5 +310,5 @@ export function formatGenericCheckback(
   if (/proxy ipify|OC-LIMIT|Cannot connect/i.test(expect)) {
     return formatCheckNudge(ctx, expect, "proxy status", opts);
   }
-  return formatCheckNudge(ctx, expect, "verify once then cancel", opts);
+  return formatCheckNudge(ctx, expect, "", opts);
 }

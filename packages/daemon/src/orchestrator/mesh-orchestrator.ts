@@ -7,6 +7,7 @@ import {
   formatPeerBulkDigest,
   formatRoomCallCheckback,
   formatRoomCommsCheckback,
+  meshInboxCheckbackVerify,
   isRoomCallExpect,
   lastInboundRoomFrom,
   listRoomMessages,
@@ -524,10 +525,12 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         ctx.log(`coord-expect met target=${parsed?.target ?? "?"} hub=${parsed?.hub ?? "?"}`);
         continue;
       }
-      const msg =
-        `manager | Check: ${row.expect.slice(0, 100)} — ` +
-        `${outcome.retried ? "re-assigned" : "stale"} (${outcome.reason}); nudge ${parsed?.target ?? "lead"}\n` +
-        formatCheckbackCancelHint(row.id);
+      const msg = meshInboxCheckbackVerify({
+        seat: "manager",
+        expect: row.expect.slice(0, 100),
+        hint: `${outcome.retried ? "re-assigned" : "stale"} (${outcome.reason}); nudge ${parsed?.target ?? "lead"}`,
+        cancelCmd: formatCheckbackCancelHint(row.id),
+      });
       const r = deliverToPane(pane, msg, ctx.registry, {
         skipVerify: true,
         intent: "checkback-verify",

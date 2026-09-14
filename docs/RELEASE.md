@@ -2,7 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
-| **2026-09-14** | `seatmesh@1.0.6` | Blazing `session attach`: bash short-circuit → `tmux attach` (tmux-zsign style); sync detached |
+| **2026-09-14** | `seatmesh@1.0.7` | checkback-verify CONTINUE consts + kiro single-Enter; blazing attach: bash short-circuit → `tmux attach` (tmux-zsign style); sync detached |
 | **2026-09-14** | `seatmesh@1.0.5` | Fast attach prep + auto-scrape 60s + detach/shutdown save hooks |
 | **2026-09-14** | `seatmesh@1.0.4` | whoami lists open ACKs; checkback cancel ids work; peer/room CB auto-stop after 3 fires |
 | **2026-09-14** | `seatmesh@1.0.3` | Info · Yes · No on local `/act/card`; notify details/images |

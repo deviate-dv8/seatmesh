@@ -229,6 +229,7 @@ export function deliverToPane(
     opts.skipVerify ||
     prov.id === "opencode" ||
     prov.id === "claude" ||
+    prov.id === "kiro" ||
     mode === "steer" ||
     verifyInjectVisible(paneId, message);
   // Paste already ran — claiming failure re-drains and duplicates in the pane.

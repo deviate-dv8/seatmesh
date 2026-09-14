@@ -38,8 +38,9 @@ export const kiroProvider: AgentProvider = {
     return {
       prefix: "",
       useBracketedPaste: true,
-      enterDelayMs: 250,
-      flushEscFirst: true,
+      enterDelayMs: 280,
+      // Escape on kiro-cli can submit empty turns — clear with C-u only in inject.ts.
+      flushEscFirst: false,
     };
   },
 

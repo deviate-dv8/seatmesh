@@ -113,7 +113,20 @@ function clearComposerDraft(paneId: string, providerId: string, generating: bool
     }
     return;
   }
-  // Claude / kiro / default — Esc + C-u with verify (agent-parity; plain C-u misses multi-line ❯).
+  // Claude — Esc + C-u with verify (agent-parity; plain C-u misses multi-line ❯).
+  // kiro — C-u only (Escape on kiro-cli can create empty submitted turns → 3 prompts).
+  if (providerId === "kiro") {
+    for (let pass = 0; pass < 6; pass++) {
+      tmux(["send-keys", "-t", paneId, "C-u"]);
+      sleepMs(70);
+      tmux(["send-keys", "-t", paneId, "C-u"]);
+      sleepMs(70);
+      const { tail, ansi } = freshCapture(paneId, 14);
+      const left = coordComposerDraft(tail, "kiro", ansi).trim();
+      if (!left) break;
+    }
+    return;
+  }
   for (let pass = 0; pass < 8; pass++) {
     tmux(["send-keys", "-t", paneId, "Escape"]);
     sleepMs(80);
@@ -130,12 +143,12 @@ function clearComposerDraft(paneId: string, providerId: string, generating: bool
 function submitInject(paneId: string, plan: InjectPlan, message: string, providerId: string): void {
   if (plan.skipSubmit) return;
   if (providerId === "cursor-agent" || providerId === "agent") {
+    // Cursor often needs a double Enter (paste settle + submit). Third was
+    // legacy belt-and-suspenders — keep two max so we never fire 3 prompts.
     const delayMs = message.length > 400 ? 650 : 450;
     sleepMs(delayMs);
     tmux(["send-keys", "-t", paneId, "Enter"]);
     sleepMs(350);
-    tmux(["send-keys", "-t", paneId, "Enter"]);
-    sleepMs(200);
     tmux(["send-keys", "-t", paneId, "Enter"]);
     return;
   }
@@ -148,6 +161,13 @@ function submitInject(paneId: string, plan: InjectPlan, message: string, provide
       tmux(["send-keys", "-t", paneId, "Enter"]);
       sleepMs(300);
     }
+    return;
+  }
+  if (providerId === "kiro") {
+    // kiro-cli: one Enter only. Esc loops during clear were creating empty
+    // turns; never re-use cursor's multi-Enter path for kiro.
+    sleepMs(plan.enterDelayMs ?? 250);
+    tmux(["send-keys", "-t", paneId, "Enter"]);
     return;
   }
   sleepMs(plan.enterDelayMs ?? 150);
@@ -291,6 +311,13 @@ export function injectToPane(
     }
     if (prov === "opencode") {
       injectOpenCode(paneId, message, plan);
+      return;
+    }
+    if (prov === "kiro") {
+      runInjectSequence(paneId, message, plan, "kiro", {
+        captureLines: 14,
+        shouldClear: ({ saved, meshInject, stale }) => Boolean(saved || meshInject || stale),
+      });
       return;
     }
     runInjectSequence(paneId, message, plan, prov);

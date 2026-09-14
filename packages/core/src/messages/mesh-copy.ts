@@ -8,7 +8,7 @@ import { seatmeshCmd } from "./cli-hints.js";
 
 /** Always-on dots point here. .sm/roles is whoami-only — not loaded every turn. */
 export const AGENT_PROMPT = {
-  constsFile: "services/seat-mesh/packages/core/src/messages/mesh-copy.ts",
+  constsFile: "packages/core/src/messages/mesh-copy.ts",
   nowFile: "~/.config/zsign/MESH-NOW.md",
   durableFile: "~/.config/zsign/MESH-DURABLE.md",
   noPatternsInInject: "never paste patterns.md into an inject",
@@ -188,6 +188,42 @@ export function secretarySuperviseBrief(opts: {
 /** Room verify tail suffix (FOCUS/TASKS hub). */
 export const ROOM_VERIFY_CONTINUE_HUB =
   "(no chat reply — continue FOCUS/TASKS hub)";
+
+/**
+ * intent=checkback-verify inject copy (sole source).
+ * Purpose: brief poll → agent CONTINUES hub work.
+ * Failure mode this kills: agent chats "ok ignore / tell me to continue" and stalls.
+ */
+export const CHECKBACK_VERIFY = {
+  /** Lead verb — must read as work order, not a question. */
+  continueVerb: "CONTINUE",
+  /** Ban meta-chat about the poll itself. */
+  noBanter:
+    "Do NOT chat about this Check. Do NOT say ignore/ok/wait. Do NOT ask to continue. Resume FOCUS/TASKS now.",
+  /** Optional cancel — quiet, never the headline (daemon also auto-stops). */
+  optionalCancelPrefix: "(optional) stop further polls:",
+} as const;
+
+/** Full checkback-verify body for a seat (cancel id optional). */
+export function meshInboxCheckbackVerify(opts: {
+  seat: string;
+  expect: string;
+  hint?: string;
+  cancelCmd?: string | null;
+}): string {
+  const glance = opts.expect.replace(/\s+/g, " ").trim().slice(0, 100);
+  const hint = (opts.hint ?? "").trim();
+  const hintBit = hint ? ` ${hint}.` : "";
+  const lines = [
+    `${opts.seat} | ${MESH_INBOX_TAG} ${CHECKBACK_VERIFY.continueVerb}: glance (${glance}).${hintBit} Keep working your open hub.`,
+    CHECKBACK_VERIFY.noBanter,
+  ];
+  const cancel = opts.cancelCmd?.trim();
+  if (cancel) {
+    lines.push(`${CHECKBACK_VERIFY.optionalCancelPrefix} ${cancel}`);
+  }
+  return lines.join("\n");
+}
 
 /**
  * Drop mesh-owned inject/banner lines before composer/limit scoring.
