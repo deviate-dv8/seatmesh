@@ -5,6 +5,12 @@
 **Rule:** producers enqueue; the inbox daemon injects. Same as
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+**Bypass (inbox down):** when `/health` is unavailable, `peer`, `to-slot`,
+`to-mini`, `prompt`, and room fan-out fall back to direct pane inject. Every
+bypass send logs `WARN: bypass comms -> … NOT saved to peer history` on stderr
+(no `PEER.jsonl` row). Remote peer (`@alias:seat`) still requires the foreign
+inbox.
+
 ## Flow: room say → checkback → inject
 
 ### Hop 1: `room say` (implemented)
@@ -40,6 +46,27 @@ Renewal uses profile `chatRooms.checkback.duration` / `renew`.
 `registry.detect` → `provider.injectPlan()` → `injectToPane()`.
 
 Holds when composer is `typing` / `busy` / `limit`; delivers on `empty` / `afk`.
+
+### Cross-tier worker ↔ mini (2026-09-14)
+
+Direct peer only — no room call / contract / supervise / balance.
+
+| Direction | Command |
+|-----------|---------|
+| Worker → mini | `peer mini-N` or `to-mini N <msg>` |
+| Mini → worker | `peer slot-N <msg>` |
+
+### Cross-session peer (same host)
+
+Configure foreign meshes in profile yaml:
+
+```yaml
+remotes:
+  zsign:
+    profile: /path/to/zsign/.sm
+```
+
+Then from any pane: `peer @zsign:manager <msg>` — enqueues on the foreign inbox (`portScope: workspace`).
 
 ## Inbox and peer
 

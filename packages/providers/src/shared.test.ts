@@ -111,6 +111,18 @@ describe("agentInputDraft (cursor ghost-text / placeholders)", () => {
     expect(composerFromCapture(pane, "cursor-agent")).toEqual({ phase: "empty" });
   });
 
+  it("cursor usage-limit block is limit (not stuck busy)", () => {
+    const tail =
+      "Error: Increase limits for faster responses — You're out of usage. Switch to Auto\n";
+    const pane = { captureTail: tail, currentCommand: "agent" } as Parameters<
+      typeof composerFromCapture
+    >[0];
+    expect(composerFromCapture(pane, "cursor-agent")).toEqual({
+      phase: "limit",
+      limitKind: "cursor-usage-limit",
+    });
+  });
+
   it("active generate + follow-up is busy", () => {
     const tail =
       " \u2192 Add a follow-up  ctrl+c to stop\n Working...\n";

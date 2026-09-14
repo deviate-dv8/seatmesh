@@ -13,6 +13,7 @@ export * from "./providers/registry.js";
 export * from "./queue/types.js";
 export * from "./pane-ops/types.js";
 export * from "./comms/envelope.js";
+export * from "./comms/call-target.js";
 export * from "./slot/types.js";
 export * from "./slot/guards.js";
 export * from "./paths/paths.js";

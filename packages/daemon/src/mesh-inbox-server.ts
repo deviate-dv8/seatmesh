@@ -20,6 +20,7 @@ import {
   meshSecretaryPane,
   resolveLiveTmuxSession,
   saveMeshSession,
+  cursorUsageAutoFallback,
 } from "@seat-mesh/tmux";
 import { configureInboxTypingGate } from "./inject/compose-gate.js";
 import { createQueueStore } from "./store/create-queue-store.js";
@@ -306,6 +307,13 @@ async function main(): Promise<void> {
         const at =
           parseCcLimitRetryAtMs(snap.captureTail) ?? Date.now() + 30 * 60_000;
         armCcLimitRetryCheckback(store, paneId, fp, at, log);
+      },
+      onCursorUsageLimitRise: (paneId) => {
+        if (cursorUsageAutoFallback(paneId)) {
+          log(`CURSOR-LIMIT auto-fallback /model Auto pane=${paneId}`);
+        } else {
+          log(`WARN: CURSOR-LIMIT auto-fallback failed pane=${paneId}`);
+        }
       },
     });
   }

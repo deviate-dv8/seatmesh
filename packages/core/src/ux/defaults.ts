@@ -57,6 +57,17 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     onRise: "limits.cc-limit",
   },
   {
+    id: "cursor-usage-limit",
+    for: ["cursor-agent"],
+    priority: 86,
+    when: {
+      scan: { bottomLines: 14 },
+      match: "out of usage|Increase limits for faster responses",
+    },
+    set: { phase: "limit", kind: "cursor-usage-limit", border: "CURSOR-LIMIT" },
+    onRise: "none",
+  },
+  {
     id: "cursor-generating",
     for: ["cursor-agent"],
     priority: 70,

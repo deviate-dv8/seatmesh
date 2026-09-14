@@ -207,6 +207,16 @@ export const MeshProfileSchema = z.object({
    * Omit to use built-in provider heuristics (legacy). Set `useDefaults: true` for harness parity.
    */
   ux: UxSchema.optional(),
+  /** Foreign mesh sessions on this host (cross-session peer via `@alias:seat`). */
+  remotes: z
+    .record(
+      z.string(),
+      z.object({
+        /** Path to foreign `.sm/` dir or mesh.config.yaml. */
+        profile: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 
 export type MeshProfile = z.infer<typeof MeshProfileSchema>;

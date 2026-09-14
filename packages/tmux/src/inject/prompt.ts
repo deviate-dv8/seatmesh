@@ -5,13 +5,14 @@ import {
   peerTargetForComms,
   portsForSlot,
   resolveAgentId,
-  seatmeshInboxRestart,
 } from "@seat-mesh/core";
+import { createRegistryForProfile } from "@seat-mesh/providers";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { paneMetaForPane } from "../lib/pane-meta.js";
 import { injectToPane } from "./inject.js";
 import { enqueuePeer } from "../comms/inbox-bridge.js";
+import { isInboxUp, warnBypassComms } from "../comms/bypass-comms.js";
 import { armAfterPeer } from "../comms/chat-checkback.js";
 import { runWhoami } from "../agents/whoami.js";
 import { stampSentToken, waitPromptSent } from "./prompt-sent.js";
@@ -27,6 +28,8 @@ export interface PromptOptions {
   confirmSent?: boolean;
   /** Default true on enqueue / manager inject. */
   armCheckback?: boolean;
+  /** Pre-built body (skips buildPromptBody); bypass enqueue uses from/to header. */
+  bodyOverride?: string;
 }
 
 function commsIdentity(
@@ -129,8 +132,6 @@ export function enqueuePrompt(
     throw new Error(resolved.error);
   }
 
-  let body = buildPromptBody(loaded, text, opts);
-  body = fromToHeader(loaded, resolved.paneId, resolved.row) + body;
   const targetLabel =
     resolved.row.role === "worker" && resolved.row.slot != null
       ? `slot-${resolved.row.slot}`
@@ -138,7 +139,30 @@ export function enqueuePrompt(
         ? `mini-${resolved.row.mini}`
         : target;
 
-  const stamped = stampSentToken(body);
+  const fullBody =
+    fromToHeader(loaded, resolved.paneId, resolved.row) + buildPromptBody(loaded, text, opts);
+  const stamped = stampSentToken(fullBody);
+
+  if (!isInboxUp(loaded)) {
+    warnBypassComms(targetLabel, "prompt");
+    const registry = createRegistryForProfile(loaded.profile);
+    const direct = injectPromptDirect(loaded, registry, target, text, {
+      ...opts,
+      force: true,
+      confirmSent: false,
+      bodyOverride: fullBody,
+    });
+    if (opts.armCheckback !== false) {
+      armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
+    }
+    return {
+      paneId: direct.paneId,
+      targetLabel,
+      token: direct.token,
+      via: "bypass",
+    };
+  }
+
   const resp = enqueuePeer(loaded, {
     kind: "prompt",
     msg: stamped.body,
@@ -147,7 +171,23 @@ export function enqueuePrompt(
     fromSlot: "manager",
   });
   if (!resp?.ok) {
-    throw new Error(`FAIL: prompt enqueue (inbox down?) — run: ${seatmeshInboxRestart()}`);
+    warnBypassComms(targetLabel, "prompt enqueue failed");
+    const registry = createRegistryForProfile(loaded.profile);
+    const direct = injectPromptDirect(loaded, registry, target, text, {
+      ...opts,
+      force: true,
+      confirmSent: false,
+      bodyOverride: fullBody,
+    });
+    if (opts.armCheckback !== false) {
+      armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
+    }
+    return {
+      paneId: direct.paneId,
+      targetLabel,
+      token: direct.token,
+      via: "bypass",
+    };
   }
   const entry = resp.entry as { id?: string } | undefined;
   const proof = waitPromptSent(loaded, {
@@ -219,7 +259,7 @@ export function injectPromptDirect(
     }
   }
 
-  const stamped = stampSentToken(buildPromptBody(loaded, text, opts));
+  const stamped = stampSentToken(opts.bodyOverride ?? buildPromptBody(loaded, text, opts));
   const plan = provider.injectPlan(snap);
   injectToPane(
     resolved.paneId,

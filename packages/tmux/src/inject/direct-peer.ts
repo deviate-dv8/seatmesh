@@ -19,7 +19,7 @@ function canDeliverPeer(state: ComposerState, providerId: string, captureTail: s
 }
 
 export type DirectPeerResult =
-  | { ok: true; paneId: string; providerId: string; mode: "idle" | "steer" }
+  | { ok: true; paneId: string; providerId: string; mode: "idle" | "steer" | "bypass" }
   | { ok: false; reason: string; paneId?: string };
 
 /** Immediate paste when pane idle. Falls back to enqueue when busy. */
@@ -66,6 +66,46 @@ export function tryDirectPeerInject(
     paneId: resolved.paneId,
     providerId: prov.id,
     mode: steer ? "steer" : "idle",
+  };
+}
+
+/** Inbox-down bypass: paste even when composer is busy (never plain_shell). */
+export function forceDirectPeerInject(
+  registry: ProviderRegistry,
+  ctx: ResolvePaneContext,
+  target: string,
+  message: string,
+): DirectPeerResult {
+  const resolved = resolvePaneTarget(target, ctx);
+  if ("error" in resolved) {
+    return { ok: false, reason: resolved.error };
+  }
+
+  const snap = capturePaneSnapshot(resolved.paneId);
+  if (!snap) return { ok: false, reason: "no_snapshot" };
+
+  const prov = registry.detect(snap);
+  if (!prov) return { ok: false, reason: "no_provider", paneId: resolved.paneId };
+
+  const state = prov.composerState(snap);
+  if (state.phase === "plain_shell") {
+    return { ok: false, reason: "plain_shell", paneId: resolved.paneId };
+  }
+
+  const plan = prov.injectPlan(snap);
+  injectToPane(
+    resolved.paneId,
+    message,
+    plan,
+    prov.id,
+    snap.captureTail,
+    snap.captureTailAnsi,
+  );
+  return {
+    ok: true,
+    paneId: resolved.paneId,
+    providerId: prov.id,
+    mode: "bypass",
   };
 }
 

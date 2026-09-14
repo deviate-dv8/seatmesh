@@ -15,7 +15,7 @@ import {
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { runWhoami } from "../agents/whoami.js";
 import { paneMetaForPane } from "../lib/pane-meta.js";
-import { enqueuePeer } from "./inbox-bridge.js";
+import { deliverPeerMessage } from "./peer-send.js";
 import { fanOutRoomMessage } from "./room-fanout.js";
 import {
   armAfterRoomCall,
@@ -65,20 +65,22 @@ function enqueueThinPeer(
     msg: string;
     targetPane: string;
     targetLabel: string;
+    resolveTarget: string;
     fromSlot: string;
     fromPorts: string | null;
   },
 ): void {
-  const resp = enqueuePeer(loaded, {
-    kind: "to-slot",
-    fromSlot: opts.fromSlot,
-    fromPorts: opts.fromPorts,
-    targetPane: opts.targetPane,
-    targetLabel: opts.targetLabel,
-    msg: opts.msg,
-  });
-  if (!resp?.ok) {
-    throw new Error("FAIL: peer enqueue (inbox down?) — ask manager|secretary: seatmesh inbox restart");
+  const result = deliverPeerMessage(
+    loaded,
+    opts.resolveTarget,
+    opts.targetPane,
+    opts.targetLabel,
+    opts.msg,
+    opts.fromSlot,
+    opts.fromPorts,
+  );
+  if (result === "failed") {
+    throw new Error(`FAIL: peer -> ${opts.targetLabel} (inbox down and bypass failed)`);
   }
 }
 
@@ -96,7 +98,6 @@ export function runRoomCall(loaded: LoadedProfile, destSlot: string, topic: stri
     throw new Error("usage: room call <slot-N|N> <topic...>");
   }
 
-  const session = loaded.sessionName;
   const resolved = resolvePaneTarget(dest, loaded);
   if ("error" in resolved) throw new Error(resolved.error);
 
@@ -120,6 +121,7 @@ export function runRoomCall(loaded: LoadedProfile, destSlot: string, topic: stri
     msg: invite,
     targetPane: resolved.paneId,
     targetLabel: `slot-${dest}`,
+    resolveTarget: dest,
     fromSlot: caller.slot,
     fromPorts: caller.ports,
   });
@@ -180,7 +182,6 @@ export async function runRoomAccept(loaded: LoadedProfile, callId: string): Prom
   call.resolvedAt = new Date().toISOString();
   updateCall(loaded, call);
 
-  const session = loaded.sessionName;
   const callerResolved = resolvePaneTarget(call.fromSlot, loaded);
   if (!("error" in callerResolved)) {
     const notify = formatRoomCallResolved(
@@ -195,6 +196,7 @@ export async function runRoomAccept(loaded: LoadedProfile, callId: string): Prom
       msg: notify,
       targetPane: callerResolved.paneId,
       targetLabel: `slot-${call.fromSlot}`,
+      resolveTarget: call.fromSlot,
       fromSlot: callee.slot,
       fromPorts: callee.ports,
     });
@@ -236,7 +238,6 @@ export function runRoomDecline(
   call.declineReason = reason?.trim() || undefined;
   updateCall(loaded, call);
 
-  const session = loaded.sessionName;
   const callerResolved = resolvePaneTarget(call.fromSlot, loaded);
   if (!("error" in callerResolved)) {
     const notify = formatRoomCallResolved(
@@ -251,6 +252,7 @@ export function runRoomDecline(
       msg: notify,
       targetPane: callerResolved.paneId,
       targetLabel: `slot-${call.fromSlot}`,
+      resolveTarget: call.fromSlot,
       fromSlot: callee.slot,
       fromPorts: callee.ports,
     });

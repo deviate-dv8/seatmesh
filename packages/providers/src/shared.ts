@@ -346,6 +346,9 @@ export function composerFromCapture(
 
   if (providerId === "cursor-agent") {
     const bottom = tail.split("\n").slice(-14).join("\n");
+    if (/out of usage|Increase limits for faster responses/i.test(bottom)) {
+      return { phase: "limit", limitKind: "cursor-usage-limit" };
+    }
     const generating =
       /Working|Running|Thinking|enter steer|ctrl\+c to stop/i.test(bottom);
     if (generating) {

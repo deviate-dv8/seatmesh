@@ -12,9 +12,9 @@ import {
   callsPath,
   createPendingCall,
   findCallByShortId,
-  peerRoomSlug,
   updateCall,
 } from "./calls.js";
+import { peerRoomSlugAgents } from "../comms/call-target.js";
 
 function testLoaded(workspace: string): LoadedProfile {
   const profile = MeshProfileSchema.parse({
@@ -56,7 +56,7 @@ describe("room calls", () => {
       topic: "debug consoles",
     });
     expect(row.shortId).toHaveLength(8);
-    expect(row.roomSlug).toBe(peerRoomSlug("3", "6", row.shortId));
+    expect(row.roomSlug).toBe(peerRoomSlugAgents("worker-3", "worker-6", row.shortId));
     expect(fs.existsSync(callsPath(loaded))).toBe(true);
 
     const found = findCallByShortId(loaded, row.shortId);

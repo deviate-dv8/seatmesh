@@ -327,6 +327,7 @@ export interface ConnectivityPollInput {
   resumeOpenCodePanes: (reason: string, meta?: ResumeWaveMeta) => void;
   /** Claude cc-limit rising edge — schedule session-scoped retry checkback. */
   onCcLimitRise?: (paneId: string, snap: import("@seat-mesh/core").PaneSnapshot) => void;
+  onCursorUsageLimitRise?: (paneId: string, snap: import("@seat-mesh/core").PaneSnapshot) => void;
 }
 
 /** Scan all monitor panes; update limit sets; trigger async recovery on rising edges only. */
@@ -343,6 +344,7 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
     log,
     resumeOpenCodePanes,
     onCcLimitRise,
+    onCursorUsageLimitRise,
   } = input;
 
   const conn = loaded.profile.connectivity;
@@ -404,6 +406,18 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
         paneCcLimitSeen.add(paneId);
         onCcLimitRise?.(paneId, snap);
         log(`CC-LIMIT rising ${label} ${paneId}`);
+      }
+      continue;
+    }
+    if (
+      st.phase === "limit" &&
+      st.limitKind === "cursor-usage-limit" &&
+      prov.id === "cursor-agent"
+    ) {
+      if (!paneCcLimitSeen.has(`${paneId}:cursor-usage`)) {
+        paneCcLimitSeen.add(`${paneId}:cursor-usage`);
+        onCursorUsageLimitRise?.(paneId, snap);
+        log(`CURSOR-LIMIT rising ${label} ${paneId}`);
       }
       continue;
     }

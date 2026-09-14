@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { peerRoomSlugAgents } from "../comms/call-target.js";
 import type { LoadedProfile } from "../profile/profile.js";
 import { meshRuntimePaths } from "../paths/runtime-paths.js";
 
@@ -75,7 +76,7 @@ export function createPendingCall(
     id,
     shortId,
     status: "pending",
-    roomSlug: peerRoomSlug(input.fromSlot, input.toSlot, shortId),
+    roomSlug: peerRoomSlugAgents(input.fromAgent, input.toAgent, shortId),
     fromAgent: input.fromAgent,
     toAgent: input.toAgent,
     fromSlot: input.fromSlot,

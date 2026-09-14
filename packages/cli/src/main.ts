@@ -99,6 +99,8 @@ import {
   runToSlot,
   runToMini,
   runPeer,
+  parseRemotePeerTarget,
+  runRemotePeer,
   applyMeshState,
   saveMeshSession,
   saveMeshSessionDetailed,
@@ -644,11 +646,16 @@ async function main(): Promise<void> {
     const rawMsg = textParts.join(" ").trim();
     if (!target || !rawMsg) {
       console.error(
-        "usage: peer verify [target] | peer [--direct] <manager|secretary|slot-N|mini-N|pane> <msg...>",
+        "usage: peer verify [target] | peer [--direct] <manager|secretary|slot-N|mini-N|@alias:seat|pane> <msg...>",
       );
       process.exit(2);
     }
     try {
+      const remote = parseRemotePeerTarget(target);
+      if (remote) {
+        runRemotePeer(loaded, remote.alias, remote.seat, rawMsg);
+        return;
+      }
       // Workers + minis: universal peer (to-slot/to-mini/enqueue). Coords keep manager stamp.
       try {
         runPeer(loaded, target, rawMsg);

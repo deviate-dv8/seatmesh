@@ -45,6 +45,8 @@ export * from "./comms/peer-verify.js";
 export * from "./comms/chat-checkback.js";
 export * from "./comms/room-fanout.js";
 export * from "./comms/room-call.js";
+export * from "./comms/remote-peer.js";
+export * from "./inject/cursor-usage-fallback.js";
 export * from "./comms/notify-operator.js";
 export * from "./comms/preview-mdview.js";
 export * from "./session/save-session.js";
