@@ -43,6 +43,8 @@ import {
   startMeshInbox,
   stopMeshInbox,
   restartMeshInbox,
+  meshInboxEverConfigured,
+  meshInboxPort,
   printMeshInboxStatus,
   waitForMeshInbox,
   printInboxMeta,
@@ -162,7 +164,8 @@ Setup (run once per project, by a human)
   start               init (if no .sm/ here) + session up, in one step
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
   sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
-  update [--dry-run] [--migrate]        refresh _vendor templates + paths.json (not npm upgrade)
+  update [--dry-run] [--migrate] [--no-restart-inbox]
+                                        refresh _vendor (file-by-file) + paths.json; restart inbox
 
 Status / diagnostics
   report [--json] [--verbose]   stack status (one line default; --verbose = full section dump)
@@ -242,16 +245,35 @@ async function main(): Promise<void> {
 
   if (cmd === "update") {
     const { runUpdate } = await import("./setup/update.js");
+    const { isNpxEphemeralInstall } = await import("./ui/version-nudge.js");
     const dryRun = rest.includes("--dry-run");
     const migrate = rest.includes("--migrate");
+    const noRestartInbox = rest.includes("--no-restart-inbox");
     const r = runUpdate({ profileArg, dryRun, migrate });
     console.log(`OK: update dryRun=${dryRun} migrate=${migrate}`);
+    console.log(`  package: ${r.packageVersion}${r.previousVersion ? ` (was ${r.previousVersion})` : ""}`);
     console.log(`  paths: ${r.pathsManifest}`);
     for (const line of r.refreshed) console.log(`  refreshed: ${line}`);
-    for (const line of r.skipped) console.log(`  skipped (exists): ${line}`);
+    for (const line of r.skipped) console.log(`  skipped (unchanged): ${line}`);
     if (r.migrate) {
       for (const line of r.migrate.copied) console.log(`  migrate copied: ${line}`);
       for (const line of r.migrate.skipped) console.log(`  migrate skipped: ${line}`);
+    }
+    if (isNpxEphemeralInstall()) {
+      console.log(
+        "  note: npx cache CLI — profile vendor updated only; npm package is re-fetched each npx run",
+      );
+    }
+    if (!dryRun && !noRestartInbox) {
+      const loaded = meshLoaded(profileArg);
+      if (meshInboxEverConfigured(loaded)) {
+        restartMeshInbox(loaded);
+        console.log(`OK: inbox restarted on :${meshInboxPort(loaded)} session=${loaded.sessionName}`);
+      } else {
+        console.log("  inbox: skip restart (no inbox for this profile yet)");
+      }
+    } else if (noRestartInbox) {
+      console.log("  inbox: skip restart (--no-restart-inbox)");
     }
     return;
   }

@@ -8,7 +8,7 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const NPM_REGISTRY = "https://registry.npmjs.org";
 
 /** Public npm release track (shown in upgrade hint). */
-export const SEATMESH_RELEASE_NOTE = "Next npm release: 2026-09-14 (Asia/Manila).";
+export const SEATMESH_RELEASE_NOTE = "Latest: seatmesh@1.0.2 (2026-09-14).";
 
 export function readInstalledCliVersion(): string {
   // version-nudge.ts lives in src/ui/ (dist/ui/); package.json is at the package root.

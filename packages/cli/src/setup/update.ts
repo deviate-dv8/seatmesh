@@ -8,6 +8,7 @@ import {
   writePathsManifest,
   type LoadedProfile,
 } from "@seat-mesh/core";
+import { readInstalledCliVersion } from "../ui/version-nudge.js";
 import { runMigrateRuntime, type MigrateRuntimeResult } from "./migrate-runtime.js";
 
 export interface UpdateOptions {
@@ -21,13 +22,57 @@ export interface UpdateResult {
   skipped: string[];
   pathsManifest: string;
   migrate?: MigrateRuntimeResult;
+  packageVersion: string;
+  previousVersion: string | null;
+  /** Any _vendor file or paths.json actually changed (or would change in dry-run). */
+  changed: boolean;
 }
+
+const SEATMESH_VERSION_FILE = ".seatmesh-version";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // update.ts lives in src/setup/ (dist/setup/), templates sit at packages/cli/templates/
 const VENDOR_ROOT = path.join(__dirname, "..", "..", "templates", "init");
 
-function copyVendorTree(
+function readProfileVersion(profileDir: string): string | null {
+  const p = path.join(profileDir, SEATMESH_VERSION_FILE);
+  if (!fs.existsSync(p)) return null;
+  const v = fs.readFileSync(p, "utf8").trim();
+  return v || null;
+}
+
+function writeProfileVersion(profileDir: string, version: string, dryRun: boolean): void {
+  if (dryRun) return;
+  fs.writeFileSync(path.join(profileDir, SEATMESH_VERSION_FILE), `${version}\n`, "utf8");
+}
+
+/**
+ * Sync one locked _vendor file — never rm the tree; copy only when missing or content differs.
+ */
+function syncVendorFile(
+  src: string,
+  dest: string,
+  refreshed: string[],
+  skipped: string[],
+  dryRun: boolean,
+): void {
+  if (!fs.existsSync(src)) return;
+  if (fs.existsSync(dest)) {
+    const same = fs.readFileSync(src).equals(fs.readFileSync(dest));
+    if (same) {
+      skipped.push(dest);
+      return;
+    }
+  }
+  if (!dryRun) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+  }
+  refreshed.push(dest);
+}
+
+/** Walk template tree; file-by-file into _vendor (no folder wipe). */
+function syncVendorTree(
   srcDir: string,
   destDir: string,
   refreshed: string[],
@@ -40,18 +85,10 @@ function copyVendorTree(
     const src = path.join(srcDir, ent.name);
     const dest = path.join(destDir, ent.name);
     if (ent.isDirectory()) {
-      copyVendorTree(src, dest, refreshed, skipped, dryRun);
+      syncVendorTree(src, dest, refreshed, skipped, dryRun);
       continue;
     }
-    if (fs.existsSync(dest)) {
-      skipped.push(dest);
-      continue;
-    }
-    if (!dryRun) {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.copyFileSync(src, dest);
-    }
-    refreshed.push(dest);
+    syncVendorFile(src, dest, refreshed, skipped, dryRun);
   }
 }
 
@@ -61,30 +98,31 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
   const refreshed: string[] = [];
   const skipped: string[] = [];
   const dryRun = Boolean(opts.dryRun);
+  const packageVersion = readInstalledCliVersion();
+  const previousVersion = readProfileVersion(loaded.profileDir);
 
   const rolesVendorSrc = path.join(VENDOR_ROOT, "roles");
   const rolesVendorDest = path.join(loaded.profileDir, "roles", "_vendor");
-  copyVendorTree(rolesVendorSrc, rolesVendorDest, refreshed, skipped, dryRun);
+  syncVendorTree(rolesVendorSrc, rolesVendorDest, refreshed, skipped, dryRun);
 
   const contractsVendorSrc = path.join(VENDOR_ROOT, "contracts", "_vendor");
   const contractsVendorDest = path.join(contractsDirFor(loaded), "_vendor");
   if (fs.existsSync(contractsVendorSrc)) {
-    copyVendorTree(contractsVendorSrc, contractsVendorDest, refreshed, skipped, dryRun);
+    syncVendorTree(contractsVendorSrc, contractsVendorDest, refreshed, skipped, dryRun);
   } else {
     const superviseTpl = path.join(VENDOR_ROOT, "contracts", "supervise.yaml");
     if (fs.existsSync(superviseTpl)) {
-      const dest = path.join(contractsVendorDest, "supervise.yaml");
-      if (fs.existsSync(dest)) skipped.push(dest);
-      else if (!dryRun) {
-        fs.mkdirSync(contractsVendorDest, { recursive: true });
-        fs.copyFileSync(superviseTpl, dest);
-        refreshed.push(dest);
-      } else refreshed.push(dest);
+      syncVendorFile(
+        superviseTpl,
+        path.join(contractsVendorDest, "supervise.yaml"),
+        refreshed,
+        skipped,
+        dryRun,
+      );
     }
   }
 
-  let pathsManifest = buildResolvedPaths(loaded).meshAgentsJson.replace(/mesh-agents\.json$/, "paths.json");
-  pathsManifest = path.join(loaded.profileDir, "paths.json");
+  const pathsManifest = path.join(loaded.profileDir, "paths.json");
   if (!dryRun) {
     writePathsManifest(loaded);
   }
@@ -96,7 +134,21 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
 
   ensureRuntimeDirs(loaded, refreshed, skipped, dryRun);
 
-  return { refreshed, skipped, pathsManifest, migrate };
+  const vendorTouched = refreshed.some((p) => p.includes(`${path.sep}_vendor${path.sep}`));
+  const changed = refreshed.length > 0 || previousVersion !== packageVersion;
+  if (!dryRun && (vendorTouched || previousVersion !== packageVersion)) {
+    writeProfileVersion(loaded.profileDir, packageVersion, false);
+  }
+
+  return {
+    refreshed,
+    skipped,
+    pathsManifest,
+    migrate,
+    packageVersion,
+    previousVersion,
+    changed,
+  };
 }
 
 function ensureRuntimeDirs(

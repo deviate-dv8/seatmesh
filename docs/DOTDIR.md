@@ -211,12 +211,20 @@ User **never edits `_vendor/`**. Project POV goes in `*.extend.yaml` only.
 3. **Do not** modify `*.extend.yaml`, `contracts/locks/**`, `runtime/**`, `chat-rooms/**`, `seats/**`.
 4. Merge new `mesh.config.yaml` keys from template (comment `# added by seatmesh update`).
 5. Regenerate `paths.json`.
-6. Print summary + `run: npx seatmesh agent context init`.
+6. Stamp `.sm/.seatmesh-version` with the running CLI package version.
+7. If this profile's inbox has run before, restart it on **this profile's daemon port only**
+   (`portScope: workspace` — other meshes e.g. zsign are untouched). Skip with
+   `--no-restart-inbox`.
+8. Print summary + `run: npx seatmesh agent context init`.
+
+Vendor sync is **file-by-file** under `_vendor/` only (content diff) — never wipe
+`runtime/`, `seats/`, `chat-rooms/`, or the npx/npm install tree.
 
 ```bash
 npx seatmesh update
 npx seatmesh update --dry-run
 npx seatmesh update --migrate   # also move legacy tasks/seatmesh → .sm/runtime
+npx seatmesh update --no-restart-inbox
 ```
 
 ---

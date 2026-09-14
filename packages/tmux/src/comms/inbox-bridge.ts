@@ -49,7 +49,7 @@ function meshDaemonPaths(loaded: LoadedProfile) {
   };
 }
 
-function readMeshInboxMeta(loaded: LoadedProfile): MeshInboxMeta | null {
+export function readMeshInboxMeta(loaded: LoadedProfile): MeshInboxMeta | null {
   const { metaPath } = meshDaemonPaths(loaded);
   if (!fs.existsSync(metaPath)) return null;
   try {
@@ -528,6 +528,14 @@ export function stopMeshInbox(loaded: LoadedProfile): void {
     /* ignore */
   }
   console.log("OK: mesh-inbox stopped");
+}
+
+/** True when this profile's inbox has run or is listening (safe to restart after update). */
+export function meshInboxEverConfigured(loaded: LoadedProfile): boolean {
+  const port = meshInboxPort(loaded);
+  if (probeInbox(port) !== "down") return true;
+  const meta = readMeshInboxMeta(loaded);
+  return Boolean(meta?.supervisorPid || meta?.pid || meta?.startedAt);
 }
 
 export function restartMeshInbox(loaded: LoadedProfile): void {
