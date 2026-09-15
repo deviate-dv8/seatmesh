@@ -2,7 +2,8 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
-| **2026-09-15** | `seatmesh@1.1.0` | Official 1.1: role-pack locked `_vendor` + `*.extend.yaml` + base role MDs; `roles status\|migrate` up/down; CC-limit auto-CB + `limit idle`; draft/ChatFile/ACK fixes from 1.0.x line |
+| **2026-09-15** | `seatmesh@1.1.2` | ACK redirect temp-block: after manager→secretary redirect, mini ACK to manager rewritten to secretary |
+| **2026-09-15** | `seatmesh@1.1.0` | Official 1.1: role-pack locked `_vendor` + `*.extend.yaml` + base role MDs; `roles status\|migrate`; CC-limit CB + `limit idle` |
 | **2026-09-15** | `seatmesh@1.0.14` | Auto CC-limit checkback: reset+1m fanout to all Claude panes; skip if seat no longer Claude; `limit idle` for operator/manager/secretary |
 | **2026-09-15** | `seatmesh@1.0.13` | Operator ACK: no reminder inject (fixes n+1 prompt); auto-close on pane busy→idle reply |
 | **2026-09-15** | `seatmesh@1.0.12` | ChatFile speaker ids: [human]/[system]/[slot-3-kiro]/[mini-1-oc]; agent switch safe dedupe |

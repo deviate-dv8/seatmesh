@@ -93,6 +93,7 @@ const ROLE_EXTRA_CAN: Record<string, string[]> = {
     m("secretary start|status|digest"),
     m("inbox restart"),
     m("limit idle [--all|--pane %N]  ← CC-LIMIT banner → idle (CBs stay)"),
+    m("ack redirect <mini-N>  ← temp block wrong ACK target → secretary"),
     m("launch [targets]"),
     m("verify | reload | labels"),
   ],

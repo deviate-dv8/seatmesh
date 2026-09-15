@@ -131,5 +131,83 @@ export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
       },
     );
 
+  ack
+    .command("redirect")
+    .description(
+      "Arm temp block: ACK-class from <seat> to manager is rewritten to secretary (stops n+1 wrong target)",
+    )
+    .argument("<from>", "sender seat (mini-1, worker-2, …)")
+    .option("--block <target>", "wrong recipient to block", "*managers")
+    .option("--to <seat>", "rewrite destination", "secretary")
+    .option("--ttl-min <n>", "block lifetime minutes", "45")
+    .option("--reason <text>", "why armed")
+    .action(
+      async (
+        from: string,
+        opts: { block: string; to: string; ttlMin: string; reason?: string },
+      ) => {
+        const loaded = getLoaded();
+        requireMeshInbox(loaded);
+        const data = await fetchJson<{ ok: boolean; block: { id: string; untilMs: number } }>(
+          `${inboxBase(loaded)}/ack/redirect-block`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              fromSeat: from,
+              blockTarget: opts.block,
+              rewriteTo: opts.to,
+              ttlMin: Number(opts.ttlMin) || 45,
+              armedBy: "ack-redirect",
+              reason: opts.reason,
+            }),
+          },
+        );
+        const until = new Date(data.block.untilMs).toISOString();
+        console.log(
+          `OK: ack-redirect ${from} block=${opts.block}→${opts.to} until=${until} id=${data.block.id}`,
+        );
+      },
+    );
+
+  ack
+    .command("redirect-list")
+    .description("List active ACK redirect blocks")
+    .action(async () => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      const data = await fetchJson<{ blocks: { id: string; fromSeat: string; blockTarget: string; rewriteTo: string; untilMs: number }[] }>(
+        `${inboxBase(loaded)}/ack/redirect-block`,
+      );
+      if (!data.blocks?.length) {
+        console.log("no ack-redirect blocks");
+        return;
+      }
+      for (const b of data.blocks) {
+        console.log(
+          `${b.id}  ${b.fromSeat}  ${b.blockTarget}→${b.rewriteTo}  until=${new Date(b.untilMs).toISOString()}`,
+        );
+      }
+    });
+
+  ack
+    .command("redirect-clear")
+    .description("Clear ACK redirect block(s)")
+    .argument("[from]", "optional from seat (default: all)")
+    .option("--id <id>", "clear one block id")
+    .action(async (from: string | undefined, opts: { id?: string }) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      const data = await fetchJson<{ cleared: number }>(
+        `${inboxBase(loaded)}/ack/redirect-block/clear`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: opts.id, fromSeat: from }),
+        },
+      );
+      console.log(`ok cleared=${data.cleared}`);
+    });
+
   return ack;
 }

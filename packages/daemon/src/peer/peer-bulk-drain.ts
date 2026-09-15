@@ -31,6 +31,7 @@ import {
   shouldSkipManagerStatusRoomPing,
 } from "./peer-skip.js";
 import { refreshPeerTargetPane } from "./peer-target-resolve.js";
+import { applyAckRedirectBlock, senderSeatFromPeer } from "./ack-redirect-block.js";
 import type { PeerRow } from "../store/create-queue-store.js";
 
 const PEER_SKIP_REASONS = new Set(["no_snapshot"]);
@@ -212,6 +213,21 @@ export function refreshAndGroupPeers(
     if (row.sent && !row.sentAt) {
       ctx.log(`PEER forge-reset id=${row.id} (sent:true without proof)`);
       row.sent = false;
+    }
+    // Temp block: mini ACK to manager after redirect → secretary.
+    const redir = applyAckRedirectBlock(ctx.store.stateDir, ctx.loaded, row);
+    if (redir.redirected) {
+      ctx.log(
+        `PEER ack-redirect id=${row.id.slice(0, 8)} from=${senderSeatFromPeer(row)} ${redir.fromLabel}→${redir.toLabel}`,
+      );
+      const all = ctx.store.readPeer();
+      const ri = all.findIndex((r) => r.id === row.id);
+      if (ri >= 0) {
+        all[ri]!.targetPane = row.targetPane;
+        all[ri]!.targetLabel = row.targetLabel;
+        all[ri]!.msg = row.msg;
+        ctx.store.writePeer(all);
+      }
     }
     const { paneId: livePane, rerouted, unresolved } = refreshPeerTargetPane(ctx.loaded, row);
     if (unresolved) {

@@ -771,6 +771,10 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     let direct = false;
     let endedId: string | undefined;
+    let redirectFrom: string | undefined;
+    let redirectBlock = "*managers";
+    let redirectTo = "secretary";
+    let redirectTtlMin = 45;
     const args: string[] = [];
     const rawArgs = [sub, ...tail].filter((x): x is string => x != null && x !== "");
     for (let i = 0; i < rawArgs.length; i++) {
@@ -797,6 +801,40 @@ async function main(): Promise<void> {
         }
         continue;
       }
+      if (a === "--redirect-from") {
+        const v = rawArgs[i + 1];
+        if (!v || v.startsWith("-")) {
+          console.error("usage: peer … --redirect-from <mini-N|worker-N>");
+          process.exit(2);
+        }
+        redirectFrom = v;
+        i++;
+        continue;
+      }
+      if (a.startsWith("--redirect-from=")) {
+        redirectFrom = a.slice("--redirect-from=".length).trim();
+        continue;
+      }
+      if (a === "--redirect-block") {
+        const v = rawArgs[i + 1];
+        if (!v || v.startsWith("-")) {
+          console.error("usage: peer … --redirect-block <manager|*managers>");
+          process.exit(2);
+        }
+        redirectBlock = v;
+        i++;
+        continue;
+      }
+      if (a === "--redirect-ttl") {
+        const v = rawArgs[i + 1];
+        if (!v || v.startsWith("-")) {
+          console.error("usage: peer … --redirect-ttl <minutes>");
+          process.exit(2);
+        }
+        redirectTtlMin = Number(v) || 45;
+        i++;
+        continue;
+      }
       args.push(a);
     }
     if (args[0] === "verify") {
@@ -812,31 +850,80 @@ async function main(): Promise<void> {
     const rawMsg = textParts.join(" ").trim();
     if (!target || !rawMsg) {
       console.error(
-        "usage: peer verify [target] | peer [--direct] [--ended <ack-id>] <manager|secretary|slot-N|mini-N|@alias:seat|pane> <msg...>",
+        "usage: peer verify [target] | peer [--direct] [--ended <ack-id>] [--redirect-from <seat>] <manager|secretary|slot-N|mini-N|@alias:seat|pane> <msg...>",
       );
       process.exit(2);
     }
-    const finishEnded = () => {
+    const armRedirect = async (fromSeat: string, reason: string) => {
+      const cfg = chatRoomConfigForLoaded(loaded);
+      try {
+        const res = await fetch(`${cfg.inboxBase.replace(/\/$/, "")}/ack/redirect-block`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            fromSeat,
+            blockTarget: redirectBlock,
+            rewriteTo: redirectTo,
+            ttlMin: redirectTtlMin,
+            armedBy: "peer-redirect",
+            reason,
+          }),
+        });
+        const body = (await res.json()) as { ok?: boolean; block?: { id: string; untilMs: number }; error?: string };
+        if (!res.ok || !body.ok) {
+          console.error(`WARN: ack-redirect arm failed: ${body.error ?? res.status}`);
+          return;
+        }
+        console.log(
+          `ok ack-redirect ${fromSeat} ${redirectBlock}→${redirectTo} until=${new Date(body.block!.untilMs).toISOString()}`,
+        );
+      } catch (e) {
+        console.error(`WARN: ack-redirect arm failed: ${(e as Error).message}`);
+      }
+    };
+    const finishEnded = async () => {
       if (!endedId) return;
       const cfg = chatRoomConfigForLoaded(loaded);
+      // Before clear: capture `from` so we can auto-arm redirect when peening secretary.
+      let endedFrom: string | undefined;
+      try {
+        const list = await fetch(`${cfg.inboxBase.replace(/\/$/, "")}/ack?all=1`);
+        const data = (await list.json()) as { entries?: { id: string; from?: string }[] };
+        const hit = (data.entries ?? []).find(
+          (r) => r.id === endedId || r.id.startsWith(endedId!) || endedId!.startsWith(r.id.slice(0, 8)),
+        );
+        endedFrom = hit?.from?.trim();
+      } catch {
+        /* non-fatal */
+      }
       const res = clearAckEndedSync(cfg.inboxBase, endedId, `peer -> ${target}: ${rawMsg}`);
       if (!res.ok) {
         console.error(`WARN: peer sent but --ended failed: ${res.error ?? "?"}`);
         return;
       }
       console.log(`ok ended ack=${res.id ?? endedId}`);
+      const tgt = target.replace(/^slot-/, "").toLowerCase();
+      if (
+        !redirectFrom &&
+        endedFrom &&
+        (tgt === "secretary" || tgt.startsWith("secretary"))
+      ) {
+        await armRedirect(endedFrom, `auto --ended ${endedId} peer→secretary`);
+      }
     };
     try {
       const remote = parseRemotePeerTarget(target);
       if (remote) {
         runRemotePeer(loaded, remote.alias, remote.seat, rawMsg);
-        finishEnded();
+        await finishEnded();
+        if (redirectFrom) await armRedirect(redirectFrom, `peer → ${target}`);
         return;
       }
       // Workers + minis: universal peer (to-slot/to-mini/enqueue). Coords keep manager stamp.
       try {
         runPeer(loaded, target, rawMsg);
-        finishEnded();
+        await finishEnded();
+        if (redirectFrom) await armRedirect(redirectFrom, `peer → ${target}`);
         return;
       } catch (e) {
         if ((e as Error).message !== "__peer_coord__") throw e;
@@ -869,7 +956,8 @@ async function main(): Promise<void> {
             : `SENT: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`;
         console.log(line);
       }
-      finishEnded();
+      await finishEnded();
+      if (redirectFrom) await armRedirect(redirectFrom, `peer → ${target}`);
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);

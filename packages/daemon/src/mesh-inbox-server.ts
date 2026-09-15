@@ -52,6 +52,12 @@ import {
   paneSessionFingerprint,
 } from "./connectivity/cc-limit-retry.js";
 import {
+  armAckRedirectBlock,
+  applyAckRedirectBlock,
+  clearAckRedirectBlocks,
+  listAckRedirectBlocks,
+} from "./peer/ack-redirect-block.js";
+import {
   clearLimitIdleOverride,
   setLimitIdleOverride,
 } from "./border/limit-idle-override.js";
@@ -606,6 +612,49 @@ async function main(): Promise<void> {
         return json(res, 200, { ok: true, cleared: n });
       }
 
+      // Temp block: after redirect, ACK-class from seat→manager is rewritten to secretary.
+      if (req.method === "GET" && url.pathname === "/ack/redirect-block") {
+        return json(res, 200, { blocks: listAckRedirectBlocks(store.stateDir) });
+      }
+      if (req.method === "POST" && url.pathname === "/ack/redirect-block") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          from?: string;
+          fromSeat?: string;
+          blockTarget?: string;
+          rewriteTo?: string;
+          ttlMin?: number;
+          armedBy?: string;
+          reason?: string;
+        };
+        const fromSeat = String(body.fromSeat ?? body.from ?? "").trim();
+        if (!fromSeat) {
+          return json(res, 400, { ok: false, error: "fromSeat required (e.g. mini-1)" });
+        }
+        const block = armAckRedirectBlock(store.stateDir, {
+          fromSeat,
+          blockTarget: body.blockTarget,
+          rewriteTo: body.rewriteTo,
+          ttlMs: body.ttlMin != null ? Number(body.ttlMin) * 60_000 : undefined,
+          armedBy: body.armedBy ?? "api",
+          reason: body.reason,
+        });
+        log(
+          `ack-redirect armed id=${block.id} from=${block.fromSeat} block=${block.blockTarget}→${block.rewriteTo}`,
+        );
+        return json(res, 200, { ok: true, block });
+      }
+      if (req.method === "POST" && url.pathname === "/ack/redirect-block/clear") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { id?: string; fromSeat?: string; from?: string };
+        const n = clearAckRedirectBlocks(store.stateDir, {
+          id: body.id,
+          fromSeat: body.fromSeat ?? body.from,
+        });
+        log(`ack-redirect cleared n=${n}`);
+        return json(res, 200, { ok: true, cleared: n });
+      }
+
       // Force limit borders back to idle (visual). Does not cancel cc-limit-retry CBs.
       if (req.method === "POST" && url.pathname === "/limit/idle") {
         const raw = await readBody(req);
@@ -754,11 +803,6 @@ async function main(): Promise<void> {
           return json(res, 400, { ok: false, error: "msg and targetPane required" });
         }
         const now = new Date().toISOString();
-        const dup = findDupPeer(store.readPeer(), { targetPane, msg, kind });
-        if (dup) {
-          log(`TO-PEER dedupe ${kind} -> ${dup.targetLabel} id=${dup.id.slice(0, 8)}`);
-          return json(res, 200, { ok: true, entry: dup, deduped: true });
-        }
         const row: import("./store/jsonl-store.js").PeerRow = {
           id: crypto.randomUUID(),
           at: now,
@@ -772,11 +816,35 @@ async function main(): Promise<void> {
           msg,
           sent: false,
         };
+        const redir = applyAckRedirectBlock(store.stateDir, loaded, row);
+        if (redir.redirected) {
+          log(
+            `TO-PEER ack-redirect ${redir.fromLabel}→${redir.toLabel} from=${row.fromAgent ?? row.fromSlot}`,
+          );
+        }
+        const dup = findDupPeer(store.readPeer(), {
+          targetPane: row.targetPane,
+          msg: row.msg,
+          kind,
+        });
+        if (dup) {
+          log(`TO-PEER dedupe ${kind} -> ${dup.targetLabel} id=${dup.id.slice(0, 8)}`);
+          return json(res, 200, {
+            ok: true,
+            entry: dup,
+            deduped: true,
+            ackRedirected: redir.redirected || undefined,
+          });
+        }
         store.appendPeer(row);
         log(`TO-PEER ${kind} from=slot-${row.fromSlot} -> ${row.targetLabel}`);
         openAckForPeerRow(store, row, log);
         await enqueueAfterAppend("peer", row.id);
-        return json(res, 200, { ok: true, entry: row });
+        return json(res, 200, {
+          ok: true,
+          entry: row,
+          ackRedirected: redir.redirected || undefined,
+        });
       }
 
       if (req.method === "POST" && url.pathname === "/room-fanout") {
