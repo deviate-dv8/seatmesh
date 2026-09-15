@@ -12,14 +12,14 @@ import type { AckRow } from "./types.js";
 
 export const ACK_TAG = "ACK";
 
-/** Explicit clear when there is no peer reply to send. */
+/** Explicit clear — note optional (chat/peer reply is NOT required). */
 export function formatAckClearCmd(id: string): string {
-  return seatmeshCmd(`ack ${shortAckId(id)} "<one line>"`);
+  return seatmeshCmd(`ack ${shortAckId(id)}`);
 }
 
 /**
- * One shell line that both replies and closes the ACK (stops the waste loop:
- * peer → separate ack → maybe cb cancel across turns).
+ * Optional: reply + close in one shell when a peer answer is needed.
+ * Prefer formatAckClearCmd when no reply is required (cheap close).
  */
 export function formatPeerEndedCmd(to: string, id: string): string {
   const target = peerTargetFromAgentId(to);
@@ -41,33 +41,37 @@ export function formatAckOpenLine(row: AckRow): string {
   return `· ${shortAckId(row.id)} ${who}: ${askSnippet(row.ask)}`;
 }
 
-/** Preferred clear shell for one open row. */
+/** Preferred clear shell — `ack <id>`; reply+close via `ack reply`. */
 export function formatAckCloseShell(row: AckRow): string {
-  if (row.source === "operator" || !row.from?.trim()) {
-    return formatAckClearCmd(row.id);
+  if (row.from?.trim() && row.source !== "operator") {
+    return seatmeshCmd(`ack reply ${shortAckId(row.id)} "ACK"`);
   }
-  return formatPeerEndedCmd(row.from, row.id);
+  return formatAckClearCmd(row.id);
 }
 
 /**
  * Reminder inject for a seat with open rows.
  *
- * Lists the asks (an agent cannot answer a bare count) and ends on the shell
- * line, because a chat-only "acknowledged" is exactly the failure being caught.
+ * Lists the asks and ends on `ack <id>` — chat/peer reply alone does not clear.
  */
 export function formatAckReminder(seat: string, rows: AckRow[]): string {
   const open = openAcks(rows);
   if (!open.length) return "";
   const shown = open.slice(0, ACK_REMIND_LIST_MAX);
   const more = open.length - shown.length;
-  const head = `${seat} | ${MESH_INBOX_TAG} ${ACK_TAG} ${open.length} unanswered — answer + --ended closes it`;
+  const head = `${seat} | ${MESH_INBOX_TAG} ${ACK_TAG} ${open.length} unanswered — close with ack (no reply required)`;
   const body = shown.map(formatAckOpenLine).join("\n");
   const first = shown[0]!;
   const tail = more > 0 ? `\n· +${more} more — ${formatAckListCmd()}` : "";
+  const optionalPeer =
+    first.from?.trim() && first.source !== "operator"
+      ? `\noptional reply+close: ${formatPeerEndedCmd(first.from, first.id)}`
+      : "";
   return (
     `${head}\n${body}${tail}\n` +
-    `SHELL (required — chat reply does NOT clear): ${formatAckCloseShell(first)}\n` +
-    `FYI: open ACKs also list in whoami context; follow-ups while busy are queued.`
+    `SHELL (required — chat reply does NOT clear): ${formatAckCloseShell(first)}` +
+    `${optionalPeer}\n` +
+    `FYI: open ACKs also list in whoami; follow-ups while busy are queued.`
   );
 }
 

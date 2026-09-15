@@ -140,12 +140,14 @@ CREATE INDEX checkback_active ON checkback(status, expires_at) WHERE status = 'a
 
 **Migration:**
 
-```bash
-npx seatmesh migrate-storage   # or update --migrate-storage
-```
+On inbox start, `createQueueStore` imports pending `daemon/*.jsonl` into `mesh.sqlite`
+when the DB is new (keeps `.jsonl.migrated` stubs). No separate `migrate-storage` CLI.
 
-- If `mesh.sqlite` missing and `daemon/*.jsonl` exist → import once, write `meta.schema_version=1`, keep `.jsonl.migrated` stubs.
-- New installs: SQLite only; no JSONL files created.
+```bash
+npx seatmesh update            # vendor + config merge + seats/_shared seed
+npx seatmesh update --migrate  # also legacy tasks/seatmesh → .sm/runtime
+seatmesh inbox restart         # daemon applies JSONL→SQLite if needed
+```
 
 **Interface:** `QueueStore` trait — `JsonlStore` impl today, `SqliteStore` impl phase 2; orchestrator depends on interface only.
 

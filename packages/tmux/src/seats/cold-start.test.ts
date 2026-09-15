@@ -73,6 +73,8 @@ describe("cold-start", () => {
     expect(brief).toContain("Fix overview-metrics");
     expect(brief).toContain("worker-6");
     expect(brief).toContain("NO chat reply");
+    expect(brief).toContain("shared=");
+    expect(brief).toMatch(/_shared/);
   });
 
   it("openTaskLines ignores done section", () => {
@@ -149,6 +151,7 @@ describe("cold-start", () => {
     expect(fresh).toMatch(/manager-2/);
     expect(fresh.length).toBeLessThan(400);
     expect(secretaryColdStartBrief()).toMatch(/FRESH SUMMON/);
-    expect(secretaryColdStartBrief()).toMatch(/seatmesh --profile \.sm whoami/);
+    expect(secretaryColdStartBrief()).toMatch(/seatmesh agent whoami/);
+    expect(secretaryColdStartBrief()).toMatch(/_shared/);
   });
 });

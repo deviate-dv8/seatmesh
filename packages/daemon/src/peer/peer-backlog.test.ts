@@ -25,6 +25,15 @@ describe("peer backlog harden helpers", () => {
     expect(isAckClassPeer("MINI-DONE mini-1 PASS: ok")).toBe(true);
   });
 
+  it("PASS / ACK received closings are ACK-class (no n+1 ask)", () => {
+    expect(
+      isAckClassPeer(
+        "[from:secretary to:manager] [agent-manager] FYI chrome+logs: PASS — status ok",
+      ),
+    ).toBe(true);
+    expect(isAckClassPeer("[from:secretary to:manager] ACK received — closing.")).toBe(true);
+  });
+
   it("injectedPane marks delivered even when parked backlog", () => {
     const row: PeerRow = {
       id: "1",

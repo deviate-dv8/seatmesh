@@ -163,6 +163,7 @@ export function secretaryColdStartBrief(): string {
   return (
     `${freshSummonWhoamiPrompt("SECRETARY")} ` +
     "Seats=.sm/seats/<column-id> (every profile base column). " +
+    "Shared=.sm/seats/_shared/ (NOTES.md — HQ+workers+minis; use during supervise/redirect). " +
     `Tick: ${seatmeshCmd("contexts")}; if a lead is idle with open TASKS, ${seatmeshCmd("peer <lead> CONTINUE one checkbox")}. ` +
     "Never write or run a long shell script. Never peer --direct. mesh-watch OFF."
   );

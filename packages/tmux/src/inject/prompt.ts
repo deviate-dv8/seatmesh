@@ -1,7 +1,7 @@
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import {
-  formatPeerReplyCmd,
   formatWorkerInjectStamp,
+  isAckClassPeer,
   peerTargetForComms,
   portsForSlot,
   resolveAgentId,
@@ -65,18 +65,29 @@ export function buildPromptBody(
     prefix = `${loaded.profile.daemon.managerPromptPrefix} `;
   }
   let body = prefix + text;
-  if (!/\bReply: (?:\.\/sm\.sh )?peer /.test(body) && !/\breply (?:\.\/sm\.sh )?peer /.test(body)) {
+  // FYI/PASS/progress must not demand a peer reply — that footer is the n+1 loop.
+  if (isAckClassPeer(body)) {
+    if (!/\bno reply required\b/i.test(body)) {
+      body += `\nFYI — no reply required (operator owns next instruction)`;
+    }
+    return body;
+  }
+  if (
+    !/\bReply: (?:\.\/sm\.sh )?peer /.test(body) &&
+    !/\breply (?:\.\/sm\.sh )?peer /.test(body) &&
+    !/\bReply: seatmesh agent (?:ack|peer) /.test(body)
+  ) {
     try {
       const w = runWhoami(loaded, "here");
       if (w.paneId) {
         const resolved = resolvePaneTarget("here", loaded);
         if (!("error" in resolved)) {
           const id = commsIdentity(loaded, resolved.paneId, resolved.row);
-          body += `\nReply: ${formatPeerReplyCmd(id.peerTarget)}`;
+          body += `\nClose: seatmesh agent ack <id> | ack reply <id> "ACK" | peer ${id.peerTarget} --ack`;
         }
       }
     } catch {
-      body += `\nReply: ${formatPeerReplyCmd("manager")}`;
+      body += `\nClose: seatmesh agent ack <id>`;
     }
   }
   return body;
@@ -143,6 +154,9 @@ export function enqueuePrompt(
     fromToHeader(loaded, resolved.paneId, resolved.row) + buildPromptBody(loaded, text, opts);
   const stamped = stampSentToken(fullBody);
 
+  // Progress/FYI must not arm a checkback that nags the sender for a coord reply.
+  const armCb = opts.armCheckback !== false && !isAckClassPeer(text);
+
   if (!isInboxUp(loaded)) {
     warnBypassComms(targetLabel, "prompt");
     const registry = createRegistryForProfile(loaded.profile);
@@ -152,7 +166,7 @@ export function enqueuePrompt(
       confirmSent: false,
       bodyOverride: fullBody,
     });
-    if (opts.armCheckback !== false) {
+    if (armCb) {
       armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
     }
     return {
@@ -179,7 +193,7 @@ export function enqueuePrompt(
       confirmSent: false,
       bodyOverride: fullBody,
     });
-    if (opts.armCheckback !== false) {
+    if (armCb) {
       armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
     }
     return {
@@ -201,7 +215,7 @@ export function enqueuePrompt(
     );
   }
 
-  if (opts.armCheckback !== false && proof.via !== "queued") {
+  if (armCb && proof.via !== "queued") {
     armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
   }
 
@@ -287,7 +301,8 @@ export function injectPromptDirect(
     );
   }
 
-  if (opts.armCheckback !== false) {
+  const armCbDirect = opts.armCheckback !== false && !isAckClassPeer(text);
+  if (armCbDirect) {
     armAfterPeer(loaded, target, { pane: process.env.TMUX_PANE });
   }
 

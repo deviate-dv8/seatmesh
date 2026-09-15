@@ -86,7 +86,8 @@ async function runSay(
       senderPane: ownerPane,
     });
     console.log(
-      `fan-out: sent=${fan.sent} enqueued=${fan.enqueued} skipped=${fan.skipped}${fan.failed ? ` failed=${fan.failed}` : ""}`,
+      `fan-out: sent=${fan.sent} enqueued=${fan.enqueued} skipped=${fan.skipped}${fan.failed ? ` failed=${fan.failed}` : ""}` +
+        (fan.enqueued > 0 ? " (daemon queue — not direct inject)" : ""),
     );
   }
   if (result.checkback?.skipped) {

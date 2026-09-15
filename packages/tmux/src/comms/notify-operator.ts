@@ -88,8 +88,44 @@ export function sendDesktopToastSync(
   }
 }
 
+/** Cached org.freedesktop.Notifications GetCapabilities (lowercase). */
+let cachedNotifyCaps: string[] | null = null;
+
+/** Probe desktop notification caps (Plasma advertises body-hyperlinks + actions). */
+export function linuxNotifyCapabilities(): string[] {
+  if (cachedNotifyCaps) return cachedNotifyCaps;
+  const r = spawnSync(
+    "gdbus",
+    [
+      "call",
+      "--session",
+      "--dest",
+      "org.freedesktop.Notifications",
+      "--object-path",
+      "/org/freedesktop/Notifications",
+      "--method",
+      "org.freedesktop.Notifications.GetCapabilities",
+    ],
+    { encoding: "utf8", timeout: 3000 },
+  );
+  if (r.status !== 0 || !r.stdout) {
+    cachedNotifyCaps = [];
+    return cachedNotifyCaps;
+  }
+  cachedNotifyCaps = [...r.stdout.matchAll(/'([^']+)'/g)].map((m) => m[1]!.toLowerCase());
+  return cachedNotifyCaps;
+}
+
+/** Reset caps cache (tests). */
+export function resetLinuxNotifyCapabilitiesCache(): void {
+  cachedNotifyCaps = null;
+}
+
 /**
- * Linux: Open / Info action only when the user clicks — never on dismiss/timeout.
+ * Linux: toast with native action buttons (Info / Yes / No / Open).
+ *
+ * Plasma 6 + libnotify 0.8.x: `notify-send -A` is broken — use D-Bus Notify
+ * + ActionInvoked instead. Body stays plain text (no redundant URL/HTML links).
  */
 export function spawnLinuxOpenUrlToast(input: {
   title: string;
@@ -98,14 +134,34 @@ export function spawnLinuxOpenUrlToast(input: {
   actionLabel?: string;
 }): boolean {
   if (!notifySendAvailable()) return false;
-  const label = (input.actionLabel ?? "Info").replace(/[=\n]/g, "");
+  const label = (input.actionLabel ?? "Info").replace(/[=\n]/g, "") || "Info";
+  const url = input.openUrl.trim();
+  if (!url) return false;
+  const body = input.body.trim() || "(seatmesh)";
+
+  if (
+    spawnLinuxActionToastViaDbus({
+      title: input.title,
+      body,
+      actions: [{ id: "info", label, kind: "open", url }],
+    })
+  ) {
+    return true;
+  }
+
   const script = `
 action=$(notify-send -a seatmesh -u critical -t 0 \\
-  -A info=${label} -- "$SM_TITLE" "$SM_BODY" 2>/dev/null || true)
-# Only user-clicked Info — empty action means dismissed / timed out (do NOT open).
-if [ "$action" = "info" ]; then
-  command -v xdg-open >/dev/null && xdg-open "$SM_URL" >/dev/null 2>&1 || true
-fi
+  -A "info=${label}" -- "$SM_TITLE" "$SM_BODY" 2>/dev/null || true)
+action=$(printf '%s' "$action" | tr '[:upper:]' '[:lower:]' | tr -d '\\r')
+case "$action" in
+  info|open)
+    if command -v xdg-open >/dev/null; then
+      xdg-open "$SM_URL" >/dev/null 2>&1 || true
+    elif command -v gio >/dev/null; then
+      gio open "$SM_URL" >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
 `.trim();
   try {
     spawn("bash", ["-c", script], {
@@ -114,8 +170,8 @@ fi
       env: {
         ...process.env,
         SM_TITLE: input.title.slice(0, 120),
-        SM_BODY: input.body.slice(0, 800),
-        SM_URL: input.openUrl.trim(),
+        SM_BODY: body.slice(0, 800),
+        SM_URL: url,
       },
     }).unref();
     return true;
@@ -125,7 +181,7 @@ fi
 }
 
 /**
- * Linux: Info / Yes / No — open/curl only on explicit click (never auto).
+ * Linux: Info / Yes / No as action buttons — open/curl only on click (never auto).
  */
 export function spawnLinuxYesNoActionToast(input: {
   title: string;
@@ -135,11 +191,34 @@ export function spawnLinuxYesNoActionToast(input: {
   noUrl: string;
 }): boolean {
   if (!notifySendAvailable()) return false;
+  const body = input.body.trim() || "Choose Yes or No.";
+
+  if (
+    spawnLinuxActionToastViaDbus({
+      title: input.title,
+      body,
+      actions: [
+        { id: "info", label: "Info", kind: "open", url: input.infoUrl.trim() },
+        { id: "yes", label: "Yes", kind: "curl", url: input.yesUrl.trim() },
+        { id: "no", label: "No", kind: "curl", url: input.noUrl.trim() },
+      ],
+    })
+  ) {
+    return true;
+  }
+
   const script = `
 action=$(notify-send -a seatmesh -u critical -t 0 \\
-  -A info=Info -A yes=Yes -A no=No -- "$SM_TITLE" "$SM_BODY" 2>/dev/null || true)
+  -A "info=Info" -A "yes=Yes" -A "no=No" -- "$SM_TITLE" "$SM_BODY" 2>/dev/null || true)
+action=$(printf '%s' "$action" | tr '[:upper:]' '[:lower:]' | tr -d '\\r')
 case "$action" in
-  info) command -v xdg-open >/dev/null && xdg-open "$SM_INFO" >/dev/null 2>&1 || true ;;
+  info)
+    if command -v xdg-open >/dev/null; then
+      xdg-open "$SM_INFO" >/dev/null 2>&1 || true
+    elif command -v gio >/dev/null; then
+      gio open "$SM_INFO" >/dev/null 2>&1 || true
+    fi
+    ;;
   yes) curl -fsS -o /dev/null "$SM_YES" 2>/dev/null || wget -q -O /dev/null "$SM_YES" 2>/dev/null || true ;;
   no) curl -fsS -o /dev/null "$SM_NO" 2>/dev/null || wget -q -O /dev/null "$SM_NO" 2>/dev/null || true ;;
 esac
@@ -151,10 +230,127 @@ esac
       env: {
         ...process.env,
         SM_TITLE: input.title.slice(0, 120),
-        SM_BODY: input.body.slice(0, 800),
+        SM_BODY: body.slice(0, 800),
         SM_INFO: input.infoUrl.trim(),
         SM_YES: input.yesUrl.trim(),
         SM_NO: input.noUrl.trim(),
+      },
+    }).unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+type LinuxToastAction = {
+  id: string;
+  label: string;
+  kind: "open" | "curl";
+  url: string;
+};
+
+/**
+ * D-Bus Notify with real action buttons (works on Plasma where notify-send -A fails).
+ * Body is plain text only — no URL chips / HTML link rows.
+ */
+function spawnLinuxActionToastViaDbus(input: {
+  title: string;
+  body: string;
+  actions: LinuxToastAction[];
+}): boolean {
+  if (!commandExists("python3") || !commandExists("dbus-monitor")) return false;
+  if (!input.actions.length) return false;
+  const dbusOk = spawnSync("python3", ["-c", "import dbus"], {
+    encoding: "utf8",
+    timeout: 3000,
+  });
+  if (dbusOk.status !== 0) return false;
+
+  const actionsJson = JSON.stringify(
+    input.actions.map((a) => ({
+      id: a.id.replace(/[^a-z0-9_-]/gi, "") || "act",
+      label: a.label.replace(/[\n=]/g, " ").slice(0, 40) || "Go",
+      kind: a.kind,
+      url: a.url.trim(),
+    })),
+  );
+
+  const py = `
+import json, os, re, subprocess, sys, time, shutil
+try:
+    import dbus
+except ImportError:
+    sys.exit(2)
+title, body = os.environ["SM_TITLE"], os.environ["SM_BODY"]
+acts = json.loads(os.environ["SM_ACTIONS"])
+bus = dbus.SessionBus()
+iface = dbus.Interface(
+    bus.get_object("org.freedesktop.Notifications", "/org/freedesktop/Notifications"),
+    "org.freedesktop.Notifications",
+)
+caps = {str(c) for c in iface.GetCapabilities()}
+if "actions" not in caps:
+    sys.exit(3)
+hints = {"urgency": dbus.Byte(2)}
+flat = []
+for a in acts:
+    flat.extend([a["id"], a["label"]])
+mon = subprocess.Popen(
+    ["dbus-monitor", "--session", "type='signal',interface='org.freedesktop.Notifications'"],
+    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+)
+nid = int(iface.Notify("seatmesh", 0, "", title, body, flat, hints, 0))
+deadline = time.time() + 3600
+action = None
+while time.time() < deadline and mon.stdout:
+    line = mon.stdout.readline()
+    if not line:
+        break
+    if "ActionInvoked" in line:
+        l2, l3 = mon.stdout.readline(), mon.stdout.readline()
+        mid = re.search(r"uint32\\s+(\\d+)", l2 or "")
+        mact = re.search(r'string\\s+"([^"]+)"', l3 or "")
+        if mid and int(mid.group(1)) == nid and mact:
+            action = mact.group(1)
+            break
+    if "NotificationClosed" in line:
+        l2 = mon.stdout.readline()
+        mid = re.search(r"uint32\\s+(\\d+)", l2 or "")
+        if mid and int(mid.group(1)) == nid:
+            break
+try:
+    mon.terminate()
+except Exception:
+    pass
+
+def quiet(cmd):
+    subprocess.call(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+chosen = next((a for a in acts if a["id"] == action), None)
+if not chosen:
+    sys.exit(0)
+url = chosen["url"]
+if chosen["kind"] == "open":
+    if shutil.which("xdg-open"):
+        quiet(["xdg-open", url])
+    elif shutil.which("gio"):
+        quiet(["gio", "open", url])
+elif chosen["kind"] == "curl":
+    if shutil.which("curl"):
+        quiet(["curl", "-fsS", "-o", "/dev/null", url])
+    elif shutil.which("wget"):
+        quiet(["wget", "-q", "-O", "/dev/null", url])
+`.trim();
+
+  try {
+    spawn("python3", ["-c", py], {
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        SM_TITLE: input.title.slice(0, 120),
+        SM_BODY: input.body.slice(0, 800),
+        SM_ACTIONS: actionsJson,
       },
     }).unref();
     return true;
@@ -170,8 +366,8 @@ export async function sendDesktopToastWithActLinks(
   body: string,
   actions: NotifyActRegisterAction[],
   ttlSec = 3600,
-  card?: { title: string; body: string },
-  /** Agent-crafted Info URL (mdview); overrides /act/card for the Info button. */
+  card?: { title: string; body: string; openUrl?: string },
+  /** Override toast Info button URL (else /act/card). */
   craftedInfoUrl?: string,
 ): Promise<{ ok: boolean; infoUrl?: string; target?: string }> {
   const base = inboxBaseFromPort(meshInboxPort(loaded));
@@ -211,7 +407,7 @@ export async function sendDesktopToastWithActLinks(
   ) {
     toasted = spawnLinuxOpenUrlToast({
       title,
-      body: toastBody.includes("Tap Open") ? toastBody : `${toastBody}\n\nTap Open`,
+      body: toastBody,
       openUrl: infoUrl,
     });
   }
@@ -310,6 +506,8 @@ export interface CraftInfoLinkInput {
   mdFile?: string;
   images?: string[];
   expiresInDays?: number;
+  /** External URL → Open button on the local Info card. */
+  openUrl?: string;
 }
 
 /**
@@ -347,7 +545,11 @@ export async function craftInfoLink(
     base,
     input.actions ?? [],
     Math.min(86_400, Math.max(60, (input.expiresInDays ?? 7) * 86_400)),
-    { title, body: content },
+    {
+      title,
+      body: content,
+      ...(input.openUrl?.trim() ? { openUrl: input.openUrl.trim() } : {}),
+    },
   );
   const infoUrl = registered.infoUrl?.trim();
   if (!infoUrl) {
@@ -369,8 +571,10 @@ export async function sendYesNoToast(
     yesMsg?: string;
     noMsg?: string;
     target?: string;
-    /** Pre-built Info URL (local /act/card or https). */
+    /** Pre-built Info URL (local /act/card or https) for toast Info button. */
     infoUrl?: string;
+    /** External URL → Open button on crafted Info card. */
+    openUrl?: string;
     /** Craft Info markdown on the local UI card. */
     infoMdFile?: string;
     infoBody?: string;
@@ -388,6 +592,7 @@ export async function sendYesNoToast(
 
   let cardBody = body.trim();
   let craftedInfoUrl = opts.infoUrl?.trim() || undefined;
+  const openUrl = opts.openUrl?.trim();
 
   if (!craftedInfoUrl && (opts.infoMdFile || opts.infoBody)) {
     let markdown = "";
@@ -405,6 +610,7 @@ export async function sendYesNoToast(
     });
     cardBody = content;
   }
+  // --url → Open button on card only (do not also paste a link into the card body).
 
   const ttlSec = Math.min(86_400, Math.max(60, (opts.infoDays ?? 7) * 86_400));
   // One register: Yes/No acts + Info card (markdown body) on local UI.
@@ -414,7 +620,7 @@ export async function sendYesNoToast(
     body,
     actions,
     ttlSec,
-    { title, body: cardBody },
+    { title, body: cardBody, ...(openUrl ? { openUrl } : {}) },
     craftedInfoUrl,
   );
   return {
@@ -542,13 +748,18 @@ export interface NotifyDetailsInput {
   body?: string;
   /** Path to .md file (workspace-relative or absolute). */
   mdFile?: string;
-  /** Local image paths to embed in the mdview doc. */
+  /** Local image paths to embed in the card. */
   images?: string[];
   /** What the operator should verify (toast Check: line). */
   check?: string;
   expiresInDays?: number;
   /** Skip desktop toast (still publish + print URL). */
   quiet?: boolean;
+  /**
+   * External URL (e.g. mdview.io) → clickable **Open** button on the Info card.
+   * Prefer this over pasting a bare URL into --body.
+   */
+  openUrl?: string;
 }
 
 export interface NotifyDetailsResult {
@@ -593,32 +804,45 @@ export async function runNotifyDetails(
     workspace: loaded.workspace,
   });
 
+  let bodyContent = content;
+  const openUrl = input.openUrl?.trim();
+  // --url → Open button on card only (agents may still put links in --body/--md themselves).
+
   const crafted = await craftInfoLink(loaded, {
     title,
-    body: content,
+    body: bodyContent,
     expiresInDays: input.expiresInDays ?? 7,
+    openUrl,
   });
   if (!crafted.ok) {
     return { ok: false, error: crafted.error, exitCode: 1, embedded, skipped };
   }
 
   if (!input.quiet) {
-    const check = input.check?.trim() || "Tap Info on the toast";
-    const notify = await runMeshNotify(loaded, {
-      session: title,
-      check,
-      url: crafted.viewerUrl,
+    const check = input.check?.trim() || "Open Info card";
+    const toasted = spawnLinuxOpenUrlToast({
+      title,
+      body: check,
+      openUrl: crafted.viewerUrl,
+      actionLabel: "Info",
     });
-    if (!notify.ok) {
-      return {
-        ok: true,
-        viewerUrl: crafted.viewerUrl,
-        shortId: crafted.shortId,
-        embedded,
-        skipped,
-        error: `Info card ready but notify failed: ${notify.error}`,
-        exitCode: 0,
-      };
+    if (!toasted) {
+      const notify = await runMeshNotify(loaded, {
+        session: title,
+        check,
+        url: crafted.viewerUrl,
+      });
+      if (!notify.ok) {
+        return {
+          ok: true,
+          viewerUrl: crafted.viewerUrl,
+          shortId: crafted.shortId,
+          embedded,
+          skipped,
+          error: `Info card ready but notify failed: ${notify.error}`,
+          exitCode: 0,
+        };
+      }
     }
   }
   // quiet: still no auto-open — print URL only

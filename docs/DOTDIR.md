@@ -110,6 +110,8 @@ Workspace `./sm.sh` (when present) wraps `npx seatmesh --profile .sm`.
     secretary/
     slot-{n}/
     mini-{n}/
+    _shared/                 # HQ + workers + minis shared MDs (NOTES.md)
+    _snapshots/              # cold archive
 
   chat-rooms/                # chatRooms.root (default: chat-rooms)
     global/
@@ -223,14 +225,17 @@ locked:
 
 1. Compare package template manifest vs `.sm/.seatmesh-version`.
 2. Copy refreshed `roles/_vendor/*`, `contracts/_vendor/*`.
-3. **Do not** modify `*.extend.yaml`, `contracts/locks/**`, `runtime/**`, `chat-rooms/**`, `seats/**`.
-4. Merge new `mesh.config.yaml` keys from template (comment `# added by seatmesh update`).
+3. **Do not** modify `*.extend.yaml`, `contracts/locks/**`, `runtime/**`, `chat-rooms/**`,
+   or overwrite live seat `FOCUS`/`TASKS`. **Do** seed missing `seats/_shared/` + seat trios
+   (idempotent, create-only).
+4. Merge new `mesh.config.yaml` keys from template when missing (`# added by seatmesh update`):
+   `layout.base.humanCoTyped`, `layout.logs`.
 5. Regenerate `paths.json`.
 6. Stamp `.sm/.seatmesh-version` with the running CLI package version.
 7. If this profile's inbox has run before, restart it on **this profile's daemon port only**
    (`portScope: workspace` — other meshes e.g. zsign are untouched). Skip with
    `--no-restart-inbox`.
-8. Print summary + `run: npx seatmesh agent context init`.
+8. Print summary (refreshed / skipped / role-pack / config-merge).
 
 Vendor sync is **file-by-file** under `_vendor/` only (content diff) — never wipe
 `runtime/`, `seats/`, `chat-rooms/`, or the npx/npm install tree.

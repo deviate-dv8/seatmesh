@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import {
   entryFromLoaded,
@@ -26,10 +27,24 @@ import { printSeatmeshBanner } from "../ui/banner.js";
 export interface SessionRow extends GlobalSessionEntry {
   tmuxLive: boolean;
   source: "registry" | "discovered";
+  /** Configured remotes.* alias on the *current* profile that points at this mesh (if any). */
+  peerAlias?: string | null;
+  /** Inbox HTTP /health when probed. */
+  daemonUp?: boolean | null;
 }
 
 function basenameWorkspace(workspace: string): string {
   return path.basename(workspace) || workspace;
+}
+
+/** Compact path for picker (home → ~). */
+export function displayDir(p: string): string {
+  const abs = path.resolve(p || "");
+  if (!abs || abs === ".") return p || "?";
+  const home = os.homedir();
+  if (abs === home) return "~";
+  if (abs.startsWith(`${home}${path.sep}`)) return `~${abs.slice(home.length)}`;
+  return abs;
 }
 
 function discoverFromTmux(known: Set<string>): SessionRow[] {
@@ -91,8 +106,7 @@ export function listSessionRows(): SessionRow[] {
 
 function formatRow(row: SessionRow): string {
   const state = row.tmuxLive ? "live" : "stopped";
-  const ws = basenameWorkspace(row.workspace);
-  return `${row.label} · ${ws} · ${row.sessionName} · ${state}`;
+  return `${row.label} · ${row.sessionName} · ${state}`;
 }
 
 export function printSessionList(rows: SessionRow[]): void {
@@ -105,8 +119,96 @@ export function printSessionList(rows: SessionRow[]): void {
   for (const row of rows) {
     const tag = row.source === "discovered" ? "discovered" : row.id;
     console.log(`${row.tmuxLive ? "●" : "○"}  ${formatRow(row)}  [${tag}]`);
-    console.log(`    ${row.profilePath}`);
+    console.log(`    dir  ${displayDir(row.workspace)}`);
+    console.log(`    sm   ${displayDir(row.profilePath)}`);
+    if (row.daemonPort) console.log(`    port ${row.daemonPort}`);
+    if (row.peerAlias) console.log(`    peer @${row.peerAlias}:<seat>`);
+    if (row.daemonUp != null) console.log(`    daemon ${row.daemonUp ? "up" : "down"}`);
   }
+}
+
+/** Join remotes + optional /health for agent discovery (`agent sessions`). */
+export async function enrichSessionRowsForAgent(
+  rows: SessionRow[],
+  loaded: ReturnType<typeof loadProfile>,
+  opts: { probeDaemon?: boolean } = {},
+): Promise<SessionRow[]> {
+  const remotes = loaded.profile.remotes ?? {};
+  const byProfile = new Map<string, string>();
+  for (const [alias, cfg] of Object.entries(remotes)) {
+    const p = path.resolve(cfg.profile);
+    byProfile.set(p, alias);
+    try {
+      byProfile.set(path.resolve(loadProfile(cfg.profile).profilePath), alias);
+    } catch {
+      /* ignore bad remote */
+    }
+  }
+
+  const out: SessionRow[] = [];
+  for (const row of rows) {
+    const peerAlias =
+      byProfile.get(path.resolve(row.profilePath)) ??
+      byProfile.get(path.resolve(row.workspace, ".sm")) ??
+      null;
+    let daemonUp: boolean | null = null;
+    if (opts.probeDaemon !== false && row.daemonPort > 0) {
+      daemonUp = await probeDaemonHealth(row.daemonPort);
+    }
+    out.push({ ...row, peerAlias, daemonUp });
+  }
+  return out;
+}
+
+async function probeDaemonHealth(port: number): Promise<boolean> {
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 800);
+    const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: ac.signal });
+    clearTimeout(t);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Agent-safe list only — never attach/forget/register/pick. */
+export async function printAgentSessionsList(
+  loaded: ReturnType<typeof loadProfile>,
+  opts: { json?: boolean } = {},
+): Promise<void> {
+  const rows = await enrichSessionRowsForAgent(listSessionRows(), loaded);
+  if (opts.json) {
+    console.log(
+      JSON.stringify(
+        {
+          here: {
+            name: loaded.profile.name,
+            workspace: loaded.workspace,
+            session: loaded.sessionName,
+            remotes: Object.keys(loaded.profile.remotes ?? {}),
+          },
+          registry: globalRegistryPath(),
+          sessions: rows,
+          peer_hint: 'seatmesh agent peer @<alias>:<seat> "<msg>"',
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  console.log("--- sessions (cross-mesh) ---");
+  console.log(`here=${loaded.profile.name} session=${loaded.sessionName}`);
+  const remoteKeys = Object.keys(loaded.profile.remotes ?? {});
+  console.log(
+    remoteKeys.length
+      ? `remotes_configured=${remoteKeys.map((a) => `@${a}`).join(",")}`
+      : "remotes_configured=(none — add mesh.config.yaml remotes.<alias>.profile)",
+  );
+  printSessionList(rows);
+  console.log('peer=@<alias>:<seat>  e.g. peer @pia:secretary "FYI …"');
+  console.log("operator_only=sessions attach|forget|register|pick (not via agent)");
 }
 
 export async function pickSessionRow(rows: SessionRow[]): Promise<SessionRow | null> {
@@ -119,8 +221,8 @@ export async function pickSessionRow(rows: SessionRow[]): Promise<SessionRow | n
     message: "Select a seatmesh session",
     options: rows.map((row) => ({
       value: row.profilePath,
-      label: row.label,
-      hint: `${row.tmuxLive ? "live" : "stopped"} · ${basenameWorkspace(row.workspace)} · ${row.sessionName}`,
+      label: `${row.label} · ${row.sessionName} · ${row.tmuxLive ? "live" : "stopped"}`,
+      hint: displayDir(row.workspace),
     })),
   });
 

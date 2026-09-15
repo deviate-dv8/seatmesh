@@ -4,7 +4,6 @@
  */
 import { seatmeshCmd } from "../messages/cli-hints.js";
 import { MESH_INBOX_TAG } from "../messages/mesh-copy.js";
-import { peerTargetFromAgentId } from "../chatroom/checkback-hint.js";
 import { shortAckId } from "../ack/ack-algo.js";
 
 /** Hard cap per pane per drain tick (operator: patterns.md expensive inject). */
@@ -24,8 +23,10 @@ export interface PeerBulkItem {
 
 function trimBulkBody(body: string): string {
   let t = body
+    .replace(/\[sent:[a-z0-9]+\]/gi, "")
     .replace(/\nSHELL \(required[^\n]*/g, "")
-    .replace(/\nReply: peer[^\n]*/g, "")
+    // Old inject footers that caused peer n+1 — strip before whitespace collapse.
+    .replace(/\n?(?:Reply|Close):\s*(?:seatmesh|\.\/sm\.sh|peer)[^\n]*/gi, "")
     .replace(/\nFYI: follow-ups[^\n]*/gi, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -41,8 +42,8 @@ function trimBulkBody(body: string): string {
 
 function endedHint(from: string, ackId?: string): string {
   if (!ackId) return "";
-  const target = peerTargetFromAgentId(from);
-  return ` → ${seatmeshCmd(`peer ${target} "<msg>" --ended ${shortAckId(ackId)}`)}`;
+  // Prefer cheap close — peer reply is optional.
+  return ` → ${seatmeshCmd(`ack ${shortAckId(ackId)}`)} (or ack reply ${shortAckId(ackId)})`;
 }
 
 /**
@@ -64,11 +65,11 @@ export function formatPeerBulkDigest(opts: {
   });
   const more =
     opts.more && opts.more > 0 ? `\n(+${opts.more} more queued — next idle tick)` : "";
-  return (
-    `${opts.seat} | ${MESH_INBOX_TAG} DIGEST ${n} mail — answer in ONE turn; --ended closes each ACK\n` +
-    lines.join("\n") +
-    more
-  );
+  const anyAck = items.some((it) => Boolean(it.ackId));
+  const head = anyAck
+    ? `${opts.seat} | ${MESH_INBOX_TAG} DIGEST ${n} mail — close with ack <id> (reply optional)`
+    : `${opts.seat} | ${MESH_INBOX_TAG} DIGEST ${n} mail — FYI only (no open ask)`;
+  return `${head}\n` + lines.join("\n") + more;
 }
 
 /** Pick up to PEER_BULK_MAX rows for one pane (caller already filtered skips). */

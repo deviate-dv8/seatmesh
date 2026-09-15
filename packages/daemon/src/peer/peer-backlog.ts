@@ -1,12 +1,14 @@
 import fs from "node:fs";
 import type { ProviderRegistry } from "@seat-mesh/core";
-import { PEER_BULK_MAX } from "@seat-mesh/core";
+import { PEER_BULK_MAX, isAckClassPeer } from "@seat-mesh/core";
 import { capturePaneSnapshot, tmux } from "@seat-mesh/tmux";
 import type { QueueStore, PeerRow } from "../store/create-queue-store.js";
 import { isPeerDelivered, peerSentToken } from "../store/create-queue-store.js";
 import { isThinRoomUnseenPing } from "./peer-skip.js";
 import { paneInDeliveryHold } from "../inject/pane-hold.js";
 import { inboxSkipTypingGate } from "../inject/compose-gate.js";
+
+export { isAckClassPeer } from "@seat-mesh/core";
 
 export interface PeerBacklogRow extends PeerRow {
   status: "backlog";
@@ -15,21 +17,6 @@ export interface PeerBacklogRow extends PeerRow {
 }
 
 const BUSY_HOLD = /^held:(busy|typing)/;
-
-/** Lightweight mail class (FYI/ACK). May follow-up-steer on cursor while generating. */
-export function isAckClassPeer(msg: string): boolean {
-  // Strip every leading [mesh-inbox] / [from:x to:y] / [agent-…] stamp.
-  let body = msg.trim();
-  for (let i = 0; i < 8; i++) {
-    const next = body.replace(/^\[[^\]]+\]\s*/, "").trim();
-    if (next === body) break;
-    body = next;
-  }
-  // Lead/supervise nudges + ACK-class: safe to follow-up-steer mid-turn.
-  return /^(ACK|FYI|STAND-?BY|MCP-?SYNCED|CHECKBACK\?|OPEN\b|INBOX\b|VERIFY\b|CONTINUE\b|REPORT\b|MINI-?(DONE|TASK)\b)/i.test(
-    body,
-  );
-}
 
 /** Park inbound while the pane is busy/typing/empty-seat. Only PRIORITY / STOP other work pastes. */
 export function shouldBacklogPeerHold(reason: string, msg: string): boolean {

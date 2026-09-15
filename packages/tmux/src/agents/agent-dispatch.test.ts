@@ -32,6 +32,16 @@ describe("decideAgentDispatch", () => {
     }
   });
 
+  it("allows remote/sessions for every role", () => {
+    for (const role of ["manager", "secretary", "worker", "mini"]) {
+      expect(kind(decideAgentDispatch(w(role), "sessions", []))).toBe("allow");
+      expect(kind(decideAgentDispatch(w(role), "remote", []))).toBe("allow");
+      expect(kind(decideAgentDispatch(w(role), "meshes", ["pia", "secretary", "hi"]))).toBe(
+        "allow",
+      );
+    }
+  });
+
   it("allows kind/what/typeof for every role", () => {
     for (const role of ["manager", "secretary", "worker", "mini"]) {
       for (const verb of ["kind", "what", "typeof"]) {
@@ -70,6 +80,14 @@ describe("decideAgentDispatch", () => {
 
   it("worker peer allowed", () => {
     expect(kind(decideAgentDispatch(w("worker"), "peer", ["manager", "hi"]))).toBe("allow");
+  });
+
+  it("every seat may ask/msg/ackmsg/todo/peer (shared shorthands)", () => {
+    for (const role of ["manager", "secretary", "worker", "mini"] as const) {
+      for (const verb of ["ask", "msg", "ackmsg", "reply", "todo", "peer"] as const) {
+        expect(kind(decideAgentDispatch(w(role), verb, ["slot-1", "hi"]))).toBe("allow");
+      }
+    }
   });
 });
 

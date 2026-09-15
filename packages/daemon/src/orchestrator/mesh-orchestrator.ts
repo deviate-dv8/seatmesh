@@ -7,6 +7,7 @@ import {
   formatPeerBulkDigest,
   formatRoomCallCheckback,
   formatRoomCommsCheckback,
+  isAckClassPeer,
   meshInboxCheckbackVerify,
   isRoomCallExpect,
   lastInboundRoomFrom,
@@ -22,6 +23,7 @@ import {
   meshInboxBalanceStatus,
   parseRoomCommsExpect,
   resolveAgentId,
+  resolveCheckbackMaxFires,
   takePeerBulkBatch,
   type PeerBulkItem,
 } from "@seat-mesh/core";
@@ -64,6 +66,7 @@ import {
   shouldRenewCheckback,
   sortDueCheckbackIndices,
 } from "../checkback/checkback-fire.js";
+import { bindCheckbackOwnerPane } from "../checkback/checkback-scope.js";
 import { pendingPeerRows, promotePeerBacklog } from "../peer/peer-backlog.js";
 import { drainPeerPaneBulk, refreshAndGroupPeers } from "../peer/peer-bulk-drain.js";
 import { deliveryHoldForPane } from "../inbox/delivery-hold.js";
@@ -150,8 +153,7 @@ export interface DrainTickResult {
 
 /** ACK-class worker mail -> secretary first (harness parity); substance -> manager. */
 export function isAckClassInbox(row: ToMasterRow): boolean {
-  const msg = String(row.msg ?? "").trim();
-  return /^(ACK|FYI|STAND-?BY|BUSY|MCP-?SYNCED)\b/i.test(msg);
+  return isAckClassPeer(String(row.msg ?? ""));
 }
 
 function inboxLaneFrom(row: ToMasterRow): string {
@@ -386,7 +388,28 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
     if (processed >= CHECKBACK_FIRE_BUDGET) break;
     processed++;
     const row = rows[idx];
-    const pane = row.ownerPane;
+    const bound = bindCheckbackOwnerPane(ctx.loaded, row);
+    if (bound.cancelReason === "pane-gone") {
+      ctx.log(`checkback hold-defer id=${row.id} kind=${row.kind ?? "?"} reason=pane-gone`);
+      deferFailedFire(ctx, row, now, "pane-gone");
+      continue;
+    }
+    if (bound.cancelReason) {
+      row.status = "cancelled";
+      row.updatedAt = new Date().toISOString();
+      ctx.log(
+        `checkback cancel id=${row.id} kind=${row.kind ?? "?"} reason=${bound.cancelReason} wasPane=${row.ownerPane ?? "-"}`,
+      );
+      continue;
+    }
+    if (bound.rerouted && bound.paneId) {
+      ctx.log(
+        `checkback retarget id=${row.id} ${row.ownerPane} -> ${bound.paneId} (session-scope)`,
+      );
+      row.ownerPane = bound.paneId;
+      ctx.store.writeCheckbacks(rows);
+    }
+    const pane = bound.paneId ?? row.ownerPane;
     if (!pane) continue;
 
     if (row.kind !== "manager-nudge") {
@@ -670,6 +693,7 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
     if (shouldRenewCheckback(
       { ...row, fireCount: (row.fireCount ?? 0) + 1 },
       now,
+      resolveCheckbackMaxFires(ctx.loaded),
     )) {
       row.fireCount = (row.fireCount ?? 0) + 1;
       row.expiresAt = new Date(now + (row.renewSec as number) * 1000).toISOString();

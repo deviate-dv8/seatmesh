@@ -5,11 +5,14 @@
 **Rule:** producers enqueue; the inbox daemon injects. Same as
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
-**Bypass (inbox down):** when `/health` is unavailable, `peer`, `to-slot`,
-`to-mini`, `prompt`, and room fan-out fall back to direct pane inject. Every
-bypass send logs `WARN: bypass comms -> … NOT saved to peer history` on stderr
-(no `PEER.jsonl` row). Remote peer (`@alias:seat`) still requires the foreign
-inbox.
+**Bypass (inbox down):** when `/health` is unavailable, one-off `peer` /
+`to-slot` / `prompt` may fall back to direct pane inject and log
+`WARN: bypass comms -> … direct inject only`. **Room fan-out / global broadcast
+does not** — it batch-enqueues via `POST /room-fanout`, or skips inject with one
+WARN (`ledger was written; seatmesh inbox restart`) so you never get an N-pane
+direct-inject storm.
+
+Remote peer (`@alias:seat`) still requires the foreign inbox.
 
 ## Flow: room say → checkback → inject
 
@@ -34,8 +37,12 @@ seatmesh room say "DONE: slice complete" [-r global] [--kind claim] [--no-checkb
 
 ### Hop 2: checkback
 
-Daemon stores rows in `{data.root}/daemon/CHECKBACK.jsonl`. On expiry, injects
-`Check: <expect>` to the owner pane when composer allows.
+Daemon stores rows in `{data.root}/daemon/CHECKBACK.jsonl` (per profile). Rows
+stamp `workspaceId` / `sessionName` / `ownerLabel`. On fire, the daemon refuses
+(or retargets by seat label) when a tmux pane id was reused by another mesh —
+CBs must not cross sessions.
+
+On expiry, injects `Check: <expect>` to the owner pane when composer allows.
 
 Renewal uses profile `chatRooms.checkback.duration` / `renew`.
 
@@ -64,9 +71,15 @@ Configure foreign meshes in profile yaml:
 remotes:
   zsign:
     profile: /path/to/zsign/.sm
+  pia:
+    profile: /path/to/pia/.sm
 ```
 
-Then from any pane: `peer @zsign:manager <msg>` — enqueues on the foreign inbox (`portScope: workspace`).
+**Discover** (agents): `seatmesh agent remote` (or `sessions`) — live meshes, daemon
+up/down, and which `@alias` is configured on *this* profile.
+
+**Message:** `seatmesh agent remote pia secretary "<msg>"`  
+(or `peer @pia:secretary "<msg>"`) — enqueues on the foreign inbox.
 
 ## Inbox and peer
 
@@ -113,7 +126,7 @@ toasts (no workspace `notify.sh`). Inbox/CPE recovery toasts stay plain text via
 **CLI (from repo with profile):**
 
 ```bash
-seatmesh notify yesno "<title>" "<body>"
+seatmesh notify yesno "<title>" "<blurb>" --body "## …" [--target seat]
 seatmesh notify yesno "Approve the mesh change?" "Details…" --target manager
 # agent pane: reply seat defaults to whoami (slot-N / manager / …)
 seatmesh agent notify yesno "Ship CTA?" "Preview http://localhost:5080/"

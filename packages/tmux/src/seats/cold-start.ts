@@ -9,7 +9,7 @@ import {
   type LoadedProfile,
 } from "@seat-mesh/core";
 import type { WhoamiResult } from "../agents/whoami.js";
-import { gateQueuePath, seatDirFor, seatFile, type SeatTarget } from "./seat-paths.js";
+import { gateQueuePath, seatDirFor, seatFile, sharedSeatsDir, type SeatTarget } from "./seat-paths.js";
 
 const MAX_FOCUS = 2400;
 const MAX_QUEUE = 3200;
@@ -85,11 +85,13 @@ export function buildColdStartBrief(
   const focusPath = seatFile(loaded, target, "FOCUS.md");
   const tasksPath = seatFile(loaded, target, "TASKS.md");
   const queuePath = gateQueuePath(loaded);
+  const sharedDir = sharedSeatsDir(loaded);
 
   const lines: string[] = [];
   lines.push(
     "COLD-START — work from files below; inbox ping = tail once, NO chat reply",
     `queue=${queuePath}`,
+    `shared=${sharedDir}  # HQ+workers+minis shared MDs (NOTES.md)`,
   );
   if (seatDir) lines.push(`seat=${seatDir}`);
   if (focusPath) lines.push(`focus=${focusPath}`);
@@ -121,7 +123,7 @@ export function buildColdStartBrief(
 
   lines.push(
     "",
-    "RULES: seatmesh --profile .sm agent whoami every turn | update TASKS checkbox | row minis -> lead not manager",
+    "RULES: seatmesh agent whoami every turn | seat task list|add|check (alias: todo) — do NOT hand-edit/grep TASKS.md | row minis -> lead not manager",
   );
 
   return lines.join("\n");

@@ -109,13 +109,13 @@ describe("seat-update", () => {
     expect(snap!.tasks.open).toBe(1);
   });
 
-  it("checkTask moves a matching open line to Done (recent) and returns true", () => {
+  it("checkTask moves a matching open line to Done (recent) and returns the text", () => {
     const loaded = tmpLoaded();
     runSeatInit(loaded);
     appendTask(loaded, { role: "worker", slot: "1" }, "ship the thing");
 
     const ok = checkTask(loaded, { role: "worker", slot: "1" }, "ship the thing");
-    expect(ok).toBe(true);
+    expect(ok).toBe("ship the thing");
 
     const snap = readSeatSnapshot(loaded, { role: "worker", slot: "1" });
     expect(snap!.tasks.open).toBe(0);
@@ -123,10 +123,10 @@ describe("seat-update", () => {
     expect(snap!.tasks.text).toMatch(/- \[x\] \d{4}-\d{2}-\d{2} ship the thing/);
   });
 
-  it("checkTask returns false when no line matches", () => {
+  it("checkTask returns null when no line matches", () => {
     const loaded = tmpLoaded();
     runSeatInit(loaded);
-    expect(checkTask(loaded, { role: "worker", slot: "1" }, "nonexistent")).toBe(false);
+    expect(checkTask(loaded, { role: "worker", slot: "1" }, "nonexistent")).toBeNull();
   });
 
   it("appendReminder appends a timestamped bullet", () => {

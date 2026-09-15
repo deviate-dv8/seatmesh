@@ -2,11 +2,11 @@
  * Open ACK rows without pulling in the orchestrator (safe from inbox HTTP).
  */
 import {
+  isAckClassPeer,
   resolveAgentId,
   trimAsk,
 } from "@seat-mesh/core";
 import { paneMetaForPane } from "@seat-mesh/tmux";
-import { isAckClassPeer } from "../peer/peer-backlog.js";
 import type { PeerRow, QueueStore, ToMasterRow } from "../store/create-queue-store.js";
 import { noteDaemonInject } from "./ack-watch.js";
 
@@ -30,6 +30,7 @@ function askSnippetFromMsg(msg: string): string {
       .replace(/\[sent:[a-z0-9]+\]/gi, "")
       .replace(/\nSHELL \(required[^\n]*/g, "")
       .replace(/\nReply: peer[^\n]*/g, "")
+      .replace(/\nReply: seatmesh[^\n]*/gi, "")
       .replace(/\s+/g, " "),
   );
 }
@@ -37,8 +38,8 @@ function askSnippetFromMsg(msg: string): string {
 function isSubstanceAsk(msg: string): boolean {
   const t = msg.trim();
   if (!t) return false;
+  // FYI / PASS / Noted / ACK received — not a new ask (n+1 if we open a row).
   if (isAckClassPeer(t)) return false;
-  if (/^(ACK|FYI|STAND-?BY|BUSY|MCP-?SYNCED)\b/i.test(t)) return false;
   if (/\bintent=(supervise-tick|status|continue|checkback-verify|ack-remind|limit-retry)\b/i.test(t)) {
     return false;
   }
@@ -47,7 +48,7 @@ function isSubstanceAsk(msg: string): boolean {
 }
 
 function isAckClassInboxMsg(msg: string): boolean {
-  return /^(ACK|FYI|STAND-?BY|BUSY|MCP-?SYNCED)\b/i.test(String(msg ?? "").trim());
+  return isAckClassPeer(String(msg ?? ""));
 }
 
 /** Open ack when peer is queued or delivered (dedupe by ask text per seat). */

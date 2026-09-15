@@ -40,7 +40,7 @@ export function buildTargetCommands(getLoaded: () => LoadedProfile): Command {
     .command("add <goal...>")
     .description("Add a scope (default) or slice under a scope")
     .option("--deadline <when>", "eod | ISO | duration (6h)", "eod")
-    .option("--triage <seats>", "comma seats when due (default manager,secretary)")
+    .option("--triage <seats>", "comma seats when due (default: targets.triageTo)")
     .option("--scope", "explicit whole-goal scope (default when no --under)")
     .option("--under <scopeId>", "add a workable slice under this scope")
     .action(

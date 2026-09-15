@@ -182,6 +182,8 @@ export const MeshProfileSchema = z.object({
         .object({
           duration: z.string().default("5m"),
           renew: z.string().default("3m"),
+          /** Ordinary peer/room CBs stop renewing after this many fires (supervise unbounded). */
+          maxFires: z.number().int().min(1).max(50).default(3),
           /** Room call accept/decline wait — short so callers are not stuck on 5m. */
           callPending: z
             .object({
@@ -191,8 +193,56 @@ export const MeshProfileSchema = z.object({
             .default({}),
         })
         .default({}),
+      /** Cooldown between thin room pings per agent (global broadcast flood control). */
+      thinNotify: z
+        .object({
+          minInterval: z.string().default("5m"),
+        })
+        .default({}),
     })
     .optional(),
+  /**
+   * Per-seat TASKS.md lifecycle (agent CRUD — not hand-edit / grep).
+   * reportTo = who gets DONE: when `seat task check` (base column: manager, secretary, manager-2…).
+   * checkback floor: duration below `min` is raised to `min` (default 20m).
+   */
+  todos: z
+    .object({
+      reportTo: z.string().min(1).default("manager"),
+      checkback: z
+        .object({
+          duration: z.string().default("20m"),
+          renew: z.string().default("10m"),
+          /** Hard floor for todo CBs (engine default 20m). */
+          min: z.string().default("20m"),
+        })
+        .default({}),
+    })
+    .default({}),
+  /** PPA slack verdict — idle this long + open work ⇒ slack. */
+  ppa: z
+    .object({
+      idleSlackSec: z.number().int().min(30).max(86_400).default(120),
+    })
+    .default({}),
+  /** ACK redirect defaults (`ack redirect` / peer --redirect-*). */
+  acks: z
+    .object({
+      redirect: z
+        .object({
+          ttlMin: z.number().int().min(1).max(24 * 60).default(45),
+          rewriteTo: z.string().min(1).default("secretary"),
+          block: z.string().min(1).default("*managers"),
+        })
+        .default({}),
+    })
+    .default({}),
+  /** Operator EOD targets — who gets triage peer when a target fires. */
+  targets: z
+    .object({
+      triageTo: z.array(z.string().min(1)).min(1).default(["manager", "secretary"]),
+    })
+    .default({}),
   chatFiles: z
     .object({
       root: z.string().default("chat-files"),

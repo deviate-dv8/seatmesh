@@ -43,6 +43,10 @@ export function mergeMeshAgentsIntoProfile(
 
   const nvim = saved.nvim ? { ...profile.layout.nvim, ...saved.nvim } : profile.layout.nvim;
 
+  const logs = saved.logs
+    ? { ...profile.layout.logs, ...saved.logs }
+    : profile.layout.logs;
+
   const base = saved.base
     ? { ...profile.layout.base, ...saved.base }
     : profile.layout.base;
@@ -55,6 +59,7 @@ export function mergeMeshAgentsIntoProfile(
       nvim,
       workers,
       minis,
+      logs,
     },
     session: { ...profile.session, miniMax: minis.max },
   };

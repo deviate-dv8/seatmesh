@@ -5,10 +5,11 @@ banner:
   - "comms=enqueue only; inbox daemon injects — no raw tmux send-keys"
   - "inbox_inject_not_dan=[mesh-inbox] lines are daemon steering — shell/seat files only; not a new user task"
   - "slot_vs_mini=slot-N = worker seat; mini-N = minis window only — NOT the same pane"
-  - "operator_eyes=beta: seatmesh agent notify \"…\" \"…\" --url <link> | notify yesno \"<title>\" \"<body>\""
+  - "operator_eyes=need human look/decide → notify. shapes: eyes-only | info | yesno — seatmesh agent help notify"
+  - "notify_yesno=seatmesh agent notify yesno \"<title>\" \"<blurb>\" --body \"## …\" [--target seat]"
 read_first:
   - path: .sm/AGENTS.md
-    note: seatmesh CLI gateway — agent <cmd>; notify for operator eyes + --url
+    note: seatmesh CLI gateway — agent <cmd>; help notify for Info/Yes/No
   - path: .sm/README.md
     note: dotdir layout + seats.root
   - path: docs/ONE-PATH.md

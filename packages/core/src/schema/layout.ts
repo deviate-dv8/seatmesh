@@ -119,6 +119,15 @@ export const LayoutSchema = z.object({
         }
       }
     }),
+  /** Daemon / inbox tails — default window index 9 (`prefix 9`). */
+  logs: z
+    .object({
+      window: z.string().default("logs"),
+      /** Prefer tmux window index 9 so it stays on the right of 0:nvim / 1:base. */
+      index: z.number().int().min(0).max(20).default(9),
+      enabled: z.boolean().default(true),
+    })
+    .default({ window: "logs", index: 9, enabled: true }),
 });
 
 export type MeshLayout = z.infer<typeof LayoutSchema>;

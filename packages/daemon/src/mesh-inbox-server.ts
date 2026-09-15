@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   loadProfile,
   meshRuntimePaths,
+  resolveAckRedirectDefaults,
   resolveDaemonPort,
   resolveUxConfig,
 } from "@seat-mesh/core";
@@ -27,6 +28,10 @@ import { createQueueStore } from "./store/create-queue-store.js";
 import { openAckForPeerRow } from "./ack/ack-open.js";
 import { countPeerPendingGlobal } from "./peer/peer-pending.js";
 import { findDupInbox, findDupPeer, type CheckbackRow } from "./store/jsonl-store.js";
+import {
+  paneBelongsToLoadedMesh,
+  stampCheckbackScope,
+} from "./checkback/checkback-scope.js";
 import {
   orchestratorDrainTickAsync,
   type MeshOrchestratorCtx,
@@ -631,11 +636,15 @@ async function main(): Promise<void> {
         if (!fromSeat) {
           return json(res, 400, { ok: false, error: "fromSeat required (e.g. mini-1)" });
         }
+        const redir = resolveAckRedirectDefaults(loaded);
         const block = armAckRedirectBlock(store.stateDir, {
           fromSeat,
-          blockTarget: body.blockTarget,
-          rewriteTo: body.rewriteTo,
-          ttlMs: body.ttlMin != null ? Number(body.ttlMin) * 60_000 : undefined,
+          blockTarget: (body.blockTarget && String(body.blockTarget).trim()) || redir.block,
+          rewriteTo: (body.rewriteTo && String(body.rewriteTo).trim()) || redir.rewriteTo,
+          ttlMs:
+            body.ttlMin != null && Number.isFinite(Number(body.ttlMin))
+              ? Number(body.ttlMin) * 60_000
+              : redir.ttlMs,
           armedBy: body.armedBy ?? "api",
           reason: body.reason,
         });
@@ -719,6 +728,12 @@ async function main(): Promise<void> {
         if (body.ownerPane && body.expect) {
           store.cancelCheckbacksForPaneExpect(body.ownerPane, body.expect);
         }
+        const scope = stampCheckbackScope(loaded, {
+          ownerPane: body.ownerPane,
+          recipientLabel: body.recipientLabel,
+          senderLabel: body.senderLabel,
+          ownerLabel: body.ownerLabel,
+        });
         const row: CheckbackRow = {
           id: String(body.id ?? `cb-${Date.now()}`),
           kind: String(body.kind ?? "checkback"),
@@ -729,9 +744,23 @@ async function main(): Promise<void> {
           expiresAt: body.expiresAt,
           senderLabel: body.senderLabel,
           recipientLabel: body.recipientLabel,
+          ownerLabel: scope.ownerLabel,
+          workspaceId: scope.workspaceId,
+          sessionName: scope.sessionName,
+          sessionFingerprint: body.sessionFingerprint,
           createdAt: now,
           updatedAt: now,
         };
+        // Refuse arming onto a foreign pane when we can tell.
+        if (body.ownerPane) {
+          const belong = paneBelongsToLoadedMesh(loaded, body.ownerPane);
+          if (!belong.ok && belong.reason !== "pane-gone") {
+            return json(res, 400, {
+              ok: false,
+              error: `ownerPane ${body.ownerPane} not in this mesh (${belong.reason})`,
+            });
+          }
+        }
         store.upsertCheckback(row);
         return json(res, 200, { ok: true, entry: row });
       }
@@ -927,7 +956,7 @@ async function main(): Promise<void> {
         const body = JSON.parse(raw || "{}") as {
           actions?: NotifyActRegisterAction[];
           ttlSec?: number;
-          card?: { title?: string; body?: string };
+          card?: { title?: string; body?: string; openUrl?: string };
         };
         const actions = Array.isArray(body.actions) ? body.actions : [];
         const hasCard = Boolean(body.card && (body.card.title || body.card.body));
@@ -937,6 +966,10 @@ async function main(): Promise<void> {
         const ttlSec = Number(body.ttlSec ?? 3600);
         const baseUrl = `http://127.0.0.1:${port}`;
         const links = actions.length ? actRegistry.register(actions, ttlSec, baseUrl) : [];
+        const openUrl = String(body.card?.openUrl ?? "").trim();
+        if (openUrl && /^https?:\/\//i.test(openUrl)) {
+          links.unshift({ label: "Open", url: openUrl, token: "" });
+        }
         let card = undefined as ReturnType<typeof actRegistry.registerCard> | undefined;
         let infoUrl: string | undefined;
         if (hasCard) {

@@ -18,6 +18,7 @@ import {
 import { isGlobalSlug } from "./global.js";
 import YAML from "yaml";
 import { armCheckback, inboxHealthy } from "./inbox-client.js";
+import { parseDurationToSeconds } from "./duration.js";
 
 export interface ChatRoomConfig {
   root: string;
@@ -28,11 +29,15 @@ export interface ChatRoomConfig {
   checkbackRenew: string;
   checkbackCallPendingDuration: string;
   checkbackCallPendingRenew: string;
+  checkbackMaxFires: number;
+  thinNotifyMinMs: number;
   inboxBase: string;
 }
 
 export function chatRoomConfig(profile: MeshProfile): ChatRoomConfig {
   const cr = profile.chatRooms;
+  const thinRaw = cr?.thinNotify?.minInterval ?? "5m";
+  const thinSec = parseDurationToSeconds(thinRaw);
   return {
     root: cr?.root ?? "chat-rooms",
     globalSlug: cr?.globalSlug ?? "global",
@@ -40,6 +45,12 @@ export function chatRoomConfig(profile: MeshProfile): ChatRoomConfig {
     checkbackRenew: cr?.checkback?.renew ?? "3m",
     checkbackCallPendingDuration: cr?.checkback?.callPending?.duration ?? "1m",
     checkbackCallPendingRenew: cr?.checkback?.callPending?.renew ?? "1m",
+    checkbackMaxFires:
+      typeof cr?.checkback?.maxFires === "number" && cr.checkback.maxFires >= 1
+        ? Math.floor(cr.checkback.maxFires)
+        : 3,
+    thinNotifyMinMs:
+      thinSec != null && thinSec >= 30 ? thinSec * 1000 : 5 * 60 * 1000,
     inboxBase: `http://127.0.0.1:${profile.daemon?.port ?? 31670}`,
   };
 }

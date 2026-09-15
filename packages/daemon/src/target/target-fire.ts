@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { LoadedProfile } from "@seat-mesh/core";
+import { resolveTargetTriageTo, type LoadedProfile } from "@seat-mesh/core";
 import { resolvePaneTarget, sendDesktopToastSync } from "@seat-mesh/tmux";
 import type { TargetRow } from "../store/target-jsonl.js";
 import type { PeerRow } from "../store/jsonl-store.js";
 
 const TARGET_FIRE_BUDGET = 4;
-const DEFAULT_TRIAGE = ["manager", "secretary"];
 
 export interface TargetFireStore {
   readTargets(): TargetRow[];
@@ -21,8 +20,8 @@ export interface TargetFireCtx {
   nowMs?: number;
 }
 
-function triageSeats(row: TargetRow): string[] {
-  const raw = row.triageTo?.length ? row.triageTo : DEFAULT_TRIAGE;
+function triageSeats(ctx: TargetFireCtx, row: TargetRow): string[] {
+  const raw = row.triageTo?.length ? row.triageTo : resolveTargetTriageTo(ctx.loaded);
   return [...new Set(raw.map((s) => s.trim().toLowerCase()).filter(Boolean))];
 }
 
@@ -42,7 +41,7 @@ function enqueueTriagePeers(ctx: TargetFireCtx, row: TargetRow): string[] {
     breakdown +
     `\nOperator: seatmesh target done ${short} · UI: http://127.0.0.1:<daemon>/ui/`;
   const now = new Date().toISOString();
-  for (const seat of triageSeats(row)) {
+  for (const seat of triageSeats(ctx, row)) {
     const hit = resolvePaneTarget(seat, ctx.loaded);
     if ("error" in hit) {
       ctx.log(`target triage skip ${seat}: ${hit.error}`);

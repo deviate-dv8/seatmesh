@@ -16,6 +16,9 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
   const notify = new Command("notify").description(
     "Operator toast: plain / Info (mdview) / Yes-No decide",
   );
+  // Parent also has --url (eyes-only). Without this, `notify yesno … --url`
+  // is stolen by the parent and yesno never sees openUrl / Open button.
+  notify.enablePositionalOptions();
 
   notify
     .command("desktop")
@@ -45,11 +48,13 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
       "--target <seat>",
       "who receives Yes/No peer (manager|secretary|slot-N|mini-N). Default: asking seat, else manager",
     )
-    .option("--md <file>", "craft Info link from markdown file (mdview)")
-    .option("--body-md <markdown>", "craft Info link from inline markdown")
+    .option("--md <file>", "craft Info link from markdown file")
+    .option("--body <markdown>", "craft Info from inline markdown (alias: --body-md)")
+    .option("--body-md <markdown>", "craft Info from inline markdown")
     .option("--image <path>", "embed image in crafted Info (repeatable)", collectImage, [] as string[])
-    .option("--info-url <url>", "use existing Info URL (skip publish)")
-    .option("--days <n>", "mdview expiry when crafting Info (1-30)", "7")
+    .option("--info-url <url>", "use existing Info URL for toast Info button (skip craft)")
+    .option("--url <url>", "external link → Open button on crafted Info card (alias for card openUrl)")
+    .option("--days <n>", "card TTL days 1-30 (default 7)", "7")
     .action(
       async (
         title: string,
@@ -59,21 +64,25 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
           noMsg?: string;
           target?: string;
           md?: string;
+          body?: string;
           bodyMd?: string;
           image: string[];
           infoUrl?: string;
+          url?: string;
           days: string;
         },
       ) => {
         const loaded = getLoaded();
         const days = Number.parseInt(opts.days, 10);
+        const infoBody = (opts.body ?? opts.bodyMd)?.trim() || undefined;
         const result = await sendYesNoToast(loaded, title.trim(), body.trim(), {
           yesMsg: opts.yesMsg?.trim(),
           noMsg: opts.noMsg?.trim(),
           target: opts.target?.trim(),
           infoUrl: opts.infoUrl?.trim(),
+          openUrl: opts.url?.trim(),
           infoMdFile: opts.md,
-          infoBody: opts.bodyMd,
+          infoBody,
           infoImages: opts.image,
           infoDays: Number.isFinite(days) ? days : 7,
         });
@@ -97,8 +106,9 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
     .option("--md <file>", "markdown file (workspace-relative or absolute)")
     .option("--body <markdown>", "inline markdown (simple or richer)")
     .option("--image <path>", "embed local image (repeatable)", collectImage, [] as string[])
+    .option("--url <url>", "external link → Open button on Info card (e.g. mdview share)")
     .option("--check <text>", "toast Check: line")
-    .option("--days <n>", "mdview expiry 1-30 (default 7)", "7")
+    .option("--days <n>", "card TTL days 1-30 (default 7)", "7")
     .option("--quiet", "publish only (still opens browser); skip desktop toast")
     .action(
       async (
@@ -107,6 +117,7 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
           md?: string;
           body?: string;
           image: string[];
+          url?: string;
           check?: string;
           days: string;
           quiet?: boolean;
@@ -123,7 +134,8 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
           mdFile: opts.md,
           body: opts.body,
           images: opts.image,
-          check: opts.check ?? "Open Info (mdview)",
+          openUrl: opts.url?.trim(),
+          check: opts.check ?? "Open Info card",
           expiresInDays: days,
           quiet: opts.quiet === true,
         });

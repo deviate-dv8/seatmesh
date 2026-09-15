@@ -161,9 +161,15 @@ export function deliverToPane(
   // Hard floor: busy/typing never gets a substance paste. ACK/FYI may land in
   // Cursor follow-up (same rule as peer --direct) so secretary sees ACKs while
   // generating — backlog alone looked like "never sent".
+  // Co-typed panes (operator typing on manager/secretary): NEVER inject — that
+  // mid-keystroke paste is exactly the manager↔worker reply storm.
   const typingHold =
     state.phase === "typing" && !inboxSkipTypingGate();
   const busyHold = state.phase === "busy";
+  if (coTyped && (busyHold || typingHold)) {
+    const phase = busyHold ? "busy" : "typing";
+    return { ok: false, reason: `held:cotyped:${phase}` };
+  }
   const followUpOpen =
     state.busyLabel === "follow-up" ||
     /Add a follow-up|ctrl\+c to stop/.test(snap.captureTail);
@@ -172,11 +178,11 @@ export function deliverToPane(
     followUpOpen &&
     (prov.id === "cursor-agent" || prov.id === "agent");
   if ((busyHold || typingHold) && !ackFollowUp) {
-    if (coTyped || !isExplicitHubOverride(message)) {
+    if (!isExplicitHubOverride(message)) {
       const phase = busyHold ? "busy" : "typing";
       return {
         ok: false,
-        reason: coTyped ? `held:cotyped:${phase}` : `held:${phase}`,
+        reason: `held:${phase}`,
       };
     }
   }

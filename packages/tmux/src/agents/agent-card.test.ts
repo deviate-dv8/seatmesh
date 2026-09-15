@@ -37,12 +37,19 @@ describe("buildAgentCard", () => {
     const { can, cannot } = buildAgentCard(w("manager", { slotLabel: "manager" }));
     expect(can.some((c) => c.includes("mini spawn"))).toBe(true);
     expect(cannot.some((c) => c.includes("mini spawn"))).toBe(false);
+    expect(can.some((c) => c.includes("hub "))).toBe(true);
+    expect(can.some((c) => c.includes("chat tail"))).toBe(true);
+    expect(can.some((c) => c.includes("seat task"))).toBe(true);
+    expect(can.some((c) => c.includes("help [cmd]"))).toBe(true);
+    expect(can.some((c) => c.includes("sessions"))).toBe(true);
   });
 
-  it("every seat sees ack + peer + cb cancel (no guessing commands)", () => {
+  it("every seat sees ack + peer + ask + todo + cb cancel (no guessing commands)", () => {
     const { can, lines } = buildAgentCard(w("secretary", { slotLabel: "secretary" }));
     expect(can.some((c) => /\back\b/.test(c))).toBe(true);
     expect(can.some((c) => c.includes("peer <target>"))).toBe(true);
+    expect(can.some((c) => c.includes("ask <target>"))).toBe(true);
+    expect(can.some((c) => c.includes("todo"))).toBe(true);
     expect(can.some((c) => c.includes("cb cancel") || c.includes("cancel <id>"))).toBe(true);
     expect(can.every((c) => c.startsWith("seatmesh agent") || !c.includes("seatmesh"))).toBe(
       true,

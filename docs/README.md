@@ -14,6 +14,7 @@ like `{data.root}` and `{seats.root}` unless noted.
 
 | Doc | Topic |
 |-----|--------|
+| [COMMANDS.md](COMMANDS.md) · [cli/](cli/) | **All CLI verbs** — greppable (`rg "^## " docs/COMMANDS.md`) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Tmux layout, daemon, providers, queues |
 | [CONFIG.md](CONFIG.md) | Profile schema and keys |
 | [SLOTS.md](SLOTS.md) | Manager, secretary, workers, minis |

@@ -21,7 +21,9 @@ files:
   - .sm/README.md
 policies:
   - id: comms
-    cmd: 'seatmesh --profile .sm agent peer manager "<ACK|DONE|BLOCKED|PROVED: …>"'
+    cmd: 'seatmesh --profile .sm agent peer manager "FYI:|PROG:|DONE:|PROVED:|BLOCKED: …"'
+  - id: progress_fyi
+    text: "progress = FYI/PROG/DONE/PROVED fire-and-forget (no ? / what-next); real ask only when BLOCKED needs a decision"
   - id: peer
     cmd: 'seatmesh --profile .sm agent to-slot <N> "<msg>"'
   - id: checkback

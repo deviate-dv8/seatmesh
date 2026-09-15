@@ -132,7 +132,7 @@ export function resolvePaneTarget(
     }
     const row =
       listPanesForMesh(ctx).find((p) => p.paneId === paneId) ??
-      listPanes().find((p) => p.paneId === paneId);
+      (!workspaceId ? listPanes().find((p) => p.paneId === paneId) : undefined);
     if (!row) return { error: `pane ${paneId} not found` };
     if (workspaceId && !paneMatchesWorkspace(row, workspaceId)) {
       return { error: `pane ${paneId} is not in workspace_id=${workspaceId}` };
@@ -143,8 +143,14 @@ export function resolvePaneTarget(
   if (raw.startsWith("%")) {
     const row =
       listPanesForMesh(ctx).find((p) => p.paneId === raw) ??
-      listPanes().find((p) => p.paneId === raw);
-    if (!row) return { error: `pane ${raw} not found` };
+      (!workspaceId ? listPanes().find((p) => p.paneId === raw) : undefined);
+    if (!row) {
+      return {
+        error: workspaceId
+          ? `pane ${raw} not in workspace_id=${workspaceId} (no host-wide fallback)`
+          : `pane ${raw} not found`,
+      };
+    }
     if (workspaceId && !paneMatchesWorkspace(row, workspaceId)) {
       return { error: `pane ${raw} is not in workspace_id=${workspaceId}` };
     }

@@ -10,13 +10,17 @@ banner:
   - "prompts=mesh-copy.ts consts only — never paste patterns.md into a pane"
   - "fresh_summon=seatmesh agent whoami first; later peer is a task"
   - "no_reconfirm=finish open TODOs; do not ask operator to continue"
-  - "operator_eyes=beta: seatmesh agent notify \"…\" \"…\" --url <link> | notify yesno \"<title>\" \"<body>\""
+  - "operator_eyes=need human look/decide → notify (not chat). shapes: eyes-only | info | yesno — run: seatmesh agent help notify"
+  - "notify_yesno=seatmesh agent notify yesno \"<title>\" \"<blurb>\" --body \"## …\" [--md file] [--target seat]"
 read_first:
   - path: .sm/AGENTS.md
-    note: seatmesh CLI gateway — agent <cmd>; notify for operator eyes + --url
+    note: seatmesh CLI gateway — agent <cmd>; help notify for Info/Yes/No recipe
   - path: docs/ONE-PATH.md
     note: one command per job
   - path: .sm/roles/_vendor/docs/common.md
     note: locked base POV (engine)
+  - path: .sm/seats/_shared/NOTES.md
+    note: shared MDs — HQ + workers + minis (progress / supervise scratch)
 files:
   - .sm/roles/_vendor/docs/EXTEND.md
+  - .sm/seats/_shared/README.md

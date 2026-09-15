@@ -484,6 +484,16 @@ export function paintMeshBorders(
     const kinds = loaded.profile.layout?.base.kinds;
     paintOne(pane, isSecretaryKind(col, kinds), col, isManagerKind(col, kinds));
   }
+
+  if (ppa) {
+    const live = [
+      ...collectWorkerMiniTargets(session, workersWindow, minisWindow).map((t) => t.paneId),
+      ...baseColumnIds(loaded.profile.layout)
+        .map((col) => coordPaneForRole(session, baseWindow, col))
+        .filter((p): p is string => Boolean(p)),
+    ];
+    ppa.prune(live);
+  }
 }
 
 /** Yield between panes so GET /health can answer mid-paint. */
@@ -542,5 +552,15 @@ export async function paintMeshBordersAsync(
     if (!pane) continue;
     const kinds = loaded.profile.layout?.base.kinds;
     paintOne(pane, isSecretaryKind(col, kinds), col, isManagerKind(col, kinds));
+  }
+
+  if (ppa) {
+    const live = [
+      ...collectWorkerMiniTargets(session, workersWindow, minisWindow).map((t) => t.paneId),
+      ...baseColumnIds(loaded.profile.layout)
+        .map((col) => coordPaneForRole(session, baseWindow, col))
+        .filter((p): p is string => Boolean(p)),
+    ];
+    ppa.prune(live);
   }
 }

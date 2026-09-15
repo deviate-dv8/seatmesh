@@ -197,6 +197,7 @@ export class SqliteStore {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = openSqliteDb(dbPath);
     this.db.exec(SCHEMA);
+    ensureCheckbackExtraColumns(this.db);
   }
 
   close(): void {
@@ -347,26 +348,29 @@ export class SqliteStore {
   writeCheckbacks(rows: CheckbackRow[]): void {
     const del = this.db.prepare("DELETE FROM checkback");
     const ins = this.db.prepare(`
-      INSERT INTO checkback(id, kind, status, renew_sec, expect, owner_pane, expires_at, sender_label, recipient_label, created_at, updated_at)
-      VALUES (@id, @kind, @status, @renewSec, @expect, @ownerPane, @expiresAt, @senderLabel, @recipientLabel, @createdAt, @updatedAt)
+      INSERT INTO checkback(id, kind, status, renew_sec, expect, owner_pane, expires_at, sender_label, recipient_label, owner_label, workspace_id, session_name, fire_count, session_fingerprint, created_at, updated_at)
+      VALUES (@id, @kind, @status, @renewSec, @expect, @ownerPane, @expiresAt, @senderLabel, @recipientLabel, @ownerLabel, @workspaceId, @sessionName, @fireCount, @sessionFingerprint, @createdAt, @updatedAt)
     `);
     this.db.transaction(() => {
       del.run();
-      for (const r of rows) ins.run(r);
+      for (const r of rows) ins.run(checkbackBind(r));
     })();
   }
 
   upsertCheckback(row: CheckbackRow): CheckbackRow {
     this.db
       .prepare(`
-      INSERT INTO checkback(id, kind, status, renew_sec, expect, owner_pane, expires_at, sender_label, recipient_label, created_at, updated_at)
-      VALUES (@id, @kind, @status, @renewSec, @expect, @ownerPane, @expiresAt, @senderLabel, @recipientLabel, @createdAt, @updatedAt)
+      INSERT INTO checkback(id, kind, status, renew_sec, expect, owner_pane, expires_at, sender_label, recipient_label, owner_label, workspace_id, session_name, fire_count, session_fingerprint, created_at, updated_at)
+      VALUES (@id, @kind, @status, @renewSec, @expect, @ownerPane, @expiresAt, @senderLabel, @recipientLabel, @ownerLabel, @workspaceId, @sessionName, @fireCount, @sessionFingerprint, @createdAt, @updatedAt)
       ON CONFLICT(id) DO UPDATE SET
         kind=excluded.kind, status=excluded.status, renew_sec=excluded.renew_sec, expect=excluded.expect,
         owner_pane=excluded.owner_pane, expires_at=excluded.expires_at, sender_label=excluded.sender_label,
-        recipient_label=excluded.recipient_label, updated_at=excluded.updated_at
+        recipient_label=excluded.recipient_label, owner_label=excluded.owner_label,
+        workspace_id=excluded.workspace_id, session_name=excluded.session_name,
+        fire_count=excluded.fire_count, session_fingerprint=excluded.session_fingerprint,
+        updated_at=excluded.updated_at
     `)
-      .run(row);
+      .run(checkbackBind(row));
     return row;
   }
 
@@ -658,6 +662,44 @@ function rowToPeer(row: Record<string, unknown>): PeerRow {
   };
 }
 
+function ensureCheckbackExtraColumns(db: { exec: (sql: string) => unknown }): void {
+  const cols = [
+    "owner_label TEXT",
+    "workspace_id TEXT",
+    "session_name TEXT",
+    "fire_count INTEGER",
+    "session_fingerprint TEXT",
+  ];
+  for (const col of cols) {
+    try {
+      db.exec(`ALTER TABLE checkback ADD COLUMN ${col}`);
+    } catch {
+      /* already present */
+    }
+  }
+}
+
+function checkbackBind(r: CheckbackRow): Record<string, unknown> {
+  return {
+    id: r.id,
+    kind: r.kind,
+    status: r.status,
+    renewSec: r.renewSec ?? null,
+    expect: r.expect ?? null,
+    ownerPane: r.ownerPane ?? null,
+    expiresAt: r.expiresAt ?? null,
+    senderLabel: r.senderLabel ?? null,
+    recipientLabel: r.recipientLabel ?? null,
+    ownerLabel: r.ownerLabel ?? null,
+    workspaceId: r.workspaceId ?? null,
+    sessionName: r.sessionName ?? null,
+    fireCount: r.fireCount ?? null,
+    sessionFingerprint: r.sessionFingerprint ?? null,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  };
+}
+
 function rowToCheckback(row: Record<string, unknown>): CheckbackRow {
   return {
     id: String(row.id),
@@ -669,6 +711,12 @@ function rowToCheckback(row: Record<string, unknown>): CheckbackRow {
     expiresAt: row.expires_at != null ? String(row.expires_at) : undefined,
     senderLabel: row.sender_label != null ? String(row.sender_label) : undefined,
     recipientLabel: row.recipient_label != null ? String(row.recipient_label) : undefined,
+    ownerLabel: row.owner_label != null ? String(row.owner_label) : undefined,
+    workspaceId: row.workspace_id != null ? String(row.workspace_id) : undefined,
+    sessionName: row.session_name != null ? String(row.session_name) : undefined,
+    fireCount: row.fire_count != null ? Number(row.fire_count) : undefined,
+    sessionFingerprint:
+      row.session_fingerprint != null ? String(row.session_fingerprint) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

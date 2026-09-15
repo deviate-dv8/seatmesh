@@ -37,7 +37,15 @@ export async function registerNotifyActLinks(
       body: JSON.stringify({
         actions,
         ttlSec,
-        ...(card ? { card: { title: card.title, body: card.body } } : {}),
+        ...(card
+          ? {
+              card: {
+                title: card.title,
+                body: card.body,
+                ...(card.openUrl ? { openUrl: card.openUrl } : {}),
+              },
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(5000),
     });
@@ -72,25 +80,16 @@ export function formatNotifyActLinksHtml(links: NotifyActLink[]): string {
 }
 
 /**
- * Toast body: short blurb + Info · Yes · No as HTML anchors (clickable labels).
- * Never dump raw URLs or instructional walls of text.
+ * Toast body: short blurb only. Info / Yes / No are native action buttons —
+ * never dump URLs or HTML anchors into the toast text.
  */
 export function formatYesNoToastBody(
   body: string,
-  infoUrl?: string,
-  yesUrl?: string,
-  noUrl?: string,
+  _infoUrl?: string,
+  _yesUrl?: string,
+  _noUrl?: string,
 ): string {
-  const text = body.trim() || "Choose Yes or No.";
-  const parts: string[] = [];
-  const info = cleanUrl(infoUrl);
-  const yes = cleanUrl(yesUrl);
-  const no = cleanUrl(noUrl);
-  if (info) parts.push(`<a href="${escapeHtmlAttr(info)}">Info</a>`);
-  if (yes) parts.push(`<a href="${escapeHtmlAttr(yes)}">Yes</a>`);
-  if (no) parts.push(`<a href="${escapeHtmlAttr(no)}">No</a>`);
-  if (!parts.length) return text;
-  return `${text}\n\n${parts.join(" · ")}`;
+  return body.trim() || "Choose Yes or No.";
 }
 
 /**

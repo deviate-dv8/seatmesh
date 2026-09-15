@@ -139,7 +139,7 @@ describe("reminder schedule", () => {
     expect(openAcksForSeat([done], "secretary")).toHaveLength(1);
   });
 
-  it("never reminder-injects operator-sourced asks (avoids n+1 human prompt)", () => {
+  it("never reminder-injects (first ask is the only prompt; ack <id> closes)", () => {
     const op = row({ source: "operator", reminders: 0 });
     const peer = row({
       id: "ack-peer01",
@@ -147,7 +147,7 @@ describe("reminder schedule", () => {
       from: "manager",
       reminders: 0,
     });
-    expect(remindableAcks([op, peer])).toEqual([peer]);
+    expect(remindableAcks([op, peer])).toEqual([]);
   });
 
   it("drops closed rows from every open view", () => {
@@ -202,7 +202,7 @@ describe("close on filing evidence", () => {
 });
 
 describe("reminder copy", () => {
-  it("lists the asks and ends on the shell line", () => {
+  it("lists the asks and ends on ack <id> (no forced peer reply)", () => {
     const text = formatAckReminder("secretary", [
       row({ id: "ack-aaa111", ask: "fix the banner overflow" }),
       row({
@@ -215,16 +215,18 @@ describe("reminder copy", () => {
     expect(text).toContain("[mesh-inbox] ACK 2 unanswered");
     expect(text).toContain("· aaa111 operator: fix the banner overflow");
     expect(text).toContain("· bbb222 manager: status on inbox restart");
-    // First open row is operator → ack clear; peer rows prefer --ended.
     expect(text).toMatch(/ack aaa111/);
-    expect(formatAckReminder("secretary", [
-      row({
-        id: "ack-ccc333",
-        source: "peer",
-        from: "manager",
-        ask: "status",
-      }),
-    ])).toContain("--ended ccc333");
+    expect(text).toContain("no reply required");
+    expect(
+      formatAckReminder("secretary", [
+        row({
+          id: "ack-ccc333",
+          source: "peer",
+          from: "manager",
+          ask: "status",
+        }),
+      ]),
+    ).toContain('ack reply ccc333 "ACK"');
     expect(text).toContain("queued");
   });
 

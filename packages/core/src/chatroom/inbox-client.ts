@@ -9,9 +9,14 @@ export interface ArmCheckbackInput {
   duration: string;
   renew?: string;
   kind?: string;
+  /** Stable id so todo check can cancel the matching CB. */
+  id?: string;
   senderPane?: string;
   ownerMini?: string | number | null;
   ownerSlot?: string | number | null;
+  /** Seat label for session-scoped retarget (mini-N / slot-N / role). */
+  recipientLabel?: string;
+  ownerLabel?: string;
 }
 
 export interface ArmCheckbackResult {
@@ -57,6 +62,9 @@ export async function armCheckback(input: ArmCheckbackInput): Promise<ArmCheckba
     ownerMini: input.ownerMini != null && String(input.ownerMini) !== "" ? input.ownerMini : null,
     ownerSlot: input.ownerSlot != null && String(input.ownerSlot) !== "" ? input.ownerSlot : null,
     senderPane: input.senderPane ?? null,
+    recipientLabel: input.recipientLabel ?? null,
+    ownerLabel: input.ownerLabel ?? input.recipientLabel ?? null,
+    ...(input.id ? { id: input.id } : {}),
   };
 
   try {
@@ -89,6 +97,7 @@ export function armCheckbackSync(input: ArmCheckbackInput): ArmCheckbackResult {
     }
   }
   const payload = {
+    id: input.id,
     expect: input.expect,
     ownerPane: input.ownerPane,
     expiresAt,
@@ -97,6 +106,8 @@ export function armCheckbackSync(input: ArmCheckbackInput): ArmCheckbackResult {
     ownerMini: input.ownerMini != null && String(input.ownerMini) !== "" ? input.ownerMini : null,
     ownerSlot: input.ownerSlot != null && String(input.ownerSlot) !== "" ? input.ownerSlot : null,
     senderPane: input.senderPane ?? null,
+    recipientLabel: input.recipientLabel ?? null,
+    ownerLabel: input.ownerLabel ?? input.recipientLabel ?? null,
   };
   const base = input.inboxBase.replace(/\/$/, "");
   const r = spawnSync(
@@ -119,6 +130,29 @@ export function armCheckbackSync(input: ArmCheckbackInput): ArmCheckbackResult {
     return { ok: false, reason: r.stderr?.trim() || r.stdout?.trim() || "curl patience failed" };
   }
   return { ok: true, response: r.stdout };
+}
+
+/** Sync cancel by id — used when a todo is checked done. */
+export function cancelCheckbackSync(
+  inboxBase: string,
+  id: string,
+): { ok: boolean; reason?: string } {
+  const base = inboxBase.replace(/\/$/, "");
+  const encoded = encodeURIComponent(id);
+  const r = spawnSync(
+    "curl",
+    ["-sS", "-m", "5", "-X", "POST", `${base}/patience/${encoded}/cancel`],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) {
+    return { ok: false, reason: r.stderr?.trim() || r.stdout?.trim() || "curl cancel failed" };
+  }
+  try {
+    const j = JSON.parse(r.stdout || "{}") as { ok?: boolean };
+    return { ok: j.ok !== false };
+  } catch {
+    return { ok: true };
+  }
 }
 
 export async function inboxHealthy(inboxBase: string): Promise<boolean> {

@@ -25,15 +25,31 @@ Pick among all meshes on this machine:
 npx seatmesh sessions
 ```
 
+## Put an agent on a pane (human)
+
+`assign` = give **work**. `switch` = put a **CLI** on an empty terminal.
+
+```bash
+npx seatmesh help human          # cheat sheet
+
+npx seatmesh switch slot-1 opencode
+npx seatmesh switch secretary claude
+npx seatmesh switch here agent   # this pane → Cursor agent
+npx seatmesh switch mini-1 empty # back to shell
+
+npx seatmesh kind slot-1         # agent vs terminal?
+npx seatmesh launch slot-1       # resume configured CLI (no type pick)
+```
+
 ## Manager pane (first paint)
 
 ```text
 Run your agents HERE.
   1) seatmesh agent whoami
   2) switch CLI on this pane:
-       seatmesh agent switch here agent      # Cursor
-       seatmesh agent switch here claude
-       seatmesh agent switch here opencode
+       seatmesh switch here agent      # Cursor
+       seatmesh switch here claude
+       seatmesh switch here opencode
 ```
 
 ## Cold start (automatic)

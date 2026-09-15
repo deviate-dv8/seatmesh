@@ -1,3 +1,5 @@
+export * from "./runtime/todos-config.js";
+export * from "./runtime/policy-config.js";
 export * from "./schema/profile.js";
 export * from "./schema/ux.js";
 export * from "./ux/index.js";
@@ -35,6 +37,7 @@ export * from "./messages/mesh-copy.js";
 export * from "./messages/mesh-inject-text.js";
 export * from "./messages/mesh-inbox-intent.js";
 export * from "./messages/peer-bulk.js";
+export * from "./messages/ack-class.js";
 export * from "./ack/index.js";
 export * from "./messages/cli-hints.js";
 export * from "./composer/claude-idle.js";

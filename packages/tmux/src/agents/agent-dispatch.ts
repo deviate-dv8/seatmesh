@@ -8,7 +8,7 @@ import { resolveGuardRole } from "./agent-card.js";
 import { runWhoami, type WhoamiResult } from "./whoami.js";
 
 /** Meta under `agent` itself — not dispatched as another CLI verb. */
-export const AGENT_META = new Set(["apply", "preflight", "context"]);
+export const AGENT_META = new Set(["apply", "preflight", "context", "help"]);
 
 /**
  * Operator / session shared — humans + lead ops run these *without* `agent`.
@@ -17,7 +17,7 @@ export const AGENT_META = new Set(["apply", "preflight", "context"]);
 export const OPERATOR_OUTSIDE_AGENT = new Set([
   "start",
   "init",
-  "sessions",
+  // sessions list is SHARED; attach|forget|register|pick stay operator-only (gated in main)
   "update",
   "version",
   "migrate-runtime",
@@ -35,7 +35,6 @@ export const OPERATOR_OUTSIDE_AGENT = new Set([
   "providers",
   "manager",
   "index",
-  "help",
   "target",
   "targets",
 ]);
@@ -62,8 +61,27 @@ const SHARED_AGENT_VERBS = new Set([
   "cold-start",
   "coldstart",
   "seat",
+  "todo",
+  "todos",
+  "hub",
+  "get",
+  "history",
+  "read-history",
+  "readhistory",
+  "help",
+  "sessions",
+  "remote",
+  "meshes",
   "notify",
   "preview",
+  // Universal shorthands + peer (all agents)
+  "peer",
+  "ask",
+  "msg",
+  "tell",
+  "ackmsg",
+  "answered",
+  "reply",
 ]);
 
 /** Verb → guard action (when not in SHARED). */
@@ -128,6 +146,7 @@ const ROLE_EXTRA_VERBS: Record<SlotRole, Set<string>> = {
     "to-slot",
     "to-mini",
     "limit",
+    "swap",
   ]),
   secretary: new Set([
     "secretary",
@@ -139,6 +158,7 @@ const ROLE_EXTRA_VERBS: Record<SlotRole, Set<string>> = {
     "assign", // digest / limited — deeper gates still apply
     "inbox",
     "limit",
+    "swap",
   ]),
   worker: new Set(["peer", "to-slot", "to-mini", "to-master"]),
   mini: new Set(["peer", "to-slot", "to-mini", "mini"]),

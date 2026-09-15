@@ -175,6 +175,93 @@ export function enqueuePeer(
   }
 }
 
+export interface RoomFanoutTarget {
+  targetPane: string;
+  targetLabel: string;
+  msg: string;
+}
+
+export interface EnqueueRoomFanoutResult {
+  ok: boolean;
+  enqueued: number;
+  skipped?: number;
+  error?: string;
+}
+
+/**
+ * Batch-enqueue room pings via POST /room-fanout (one HTTP call).
+ * Prefer this over N× /to-peer so global broadcast does not storm bypass injects.
+ */
+export function enqueueRoomFanout(
+  loaded: LoadedProfile,
+  opts: {
+    fromSlot: string;
+    fromPorts?: string | null;
+    roomSlug: string;
+    fromAgent?: string | null;
+    excludePane?: string | null;
+    targets: RoomFanoutTarget[];
+    skipEnsure?: boolean;
+  },
+): EnqueueRoomFanoutResult {
+  if (!opts.targets.length) return { ok: true, enqueued: 0 };
+  const port = meshInboxPort(loaded);
+  if (!opts.skipEnsure && !ensureMeshInbox(loaded, { quiet: true })) {
+    return { ok: false, enqueued: 0, error: "inbox ensure failed" };
+  }
+  // Warm /health with retries — burst drain can make a single 2s probe look down.
+  inboxHealthRelaxed(port, { retries: 3, pauseMs: 200, timeoutSec: 3 });
+  const body = JSON.stringify({
+    fromSlot: opts.fromSlot,
+    fromPorts: opts.fromPorts ?? null,
+    roomSlug: opts.roomSlug,
+    fromAgent: opts.fromAgent ?? null,
+    excludePane: opts.excludePane ?? null,
+    targets: opts.targets,
+  });
+  const r = spawnSync(
+    "curl",
+    [
+      "-sS",
+      "-m",
+      "15",
+      "-X",
+      "POST",
+      `${inboxBase(port)}/room-fanout`,
+      "-H",
+      "Content-Type: application/json",
+      "-d",
+      body,
+    ],
+    { encoding: "utf8" },
+  );
+  if (r.status !== 0) {
+    return {
+      ok: false,
+      enqueued: 0,
+      error: r.stderr?.trim() || r.stdout?.trim() || "curl room-fanout failed",
+    };
+  }
+  try {
+    const j = JSON.parse(r.stdout || "{}") as {
+      ok?: boolean;
+      enqueued?: number;
+      skipped?: number;
+      error?: string;
+    };
+    if (j.ok === false) {
+      return { ok: false, enqueued: 0, error: j.error ?? "room-fanout rejected" };
+    }
+    return {
+      ok: true,
+      enqueued: typeof j.enqueued === "number" ? j.enqueued : opts.targets.length,
+      skipped: j.skipped,
+    };
+  } catch {
+    return { ok: false, enqueued: 0, error: "bad room-fanout JSON" };
+  }
+}
+
 function autoStartEnabled(loaded: LoadedProfile): boolean {
   return loaded.profile.daemon?.autoStart !== false;
 }

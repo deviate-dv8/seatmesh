@@ -152,17 +152,18 @@ export function appendTask(loaded: LoadedProfile, target: SeatTarget, text: stri
 
 /**
  * Flip the first open TASKS.md line containing matchText to done and move it under
- * "## Done (recent)" with today's date. Returns false (no write) if no match found.
+ * "## Done (recent)" with today's date. Returns the checked task text, or null if no match.
  */
-export function checkTask(loaded: LoadedProfile, target: SeatTarget, matchText: string): boolean {
+export function checkTask(loaded: LoadedProfile, target: SeatTarget, matchText: string): string | null {
   const p = requireSeatFile(loaded, target, "TASKS.md");
   const body = fs.readFileSync(p, "utf8");
   const lines = body.split(/\r?\n/);
 
   const idx = lines.findIndex((l) => l.trim().startsWith("- [ ]") && l.includes(matchText));
-  if (idx === -1) return false;
+  if (idx === -1) return null;
 
-  const doneLine = `- [x] ${todayStamp()} ${lines[idx].trim().replace(/^- \[ \]\s*/, "")}`;
+  const openText = lines[idx].trim().replace(/^- \[ \]\s*/, "");
+  const doneLine = `- [x] ${todayStamp()} ${openText}`;
   lines.splice(idx, 1);
   let updated = lines.join("\n");
 
@@ -173,7 +174,7 @@ export function checkTask(loaded: LoadedProfile, target: SeatTarget, matchText: 
     updated = `${updated.replace(/\s*$/, "")}\n\n## Done (recent)\n\n${doneLine}\n`;
   }
   atomicWrite(p, updated);
-  return true;
+  return openText;
 }
 
 /** Append a timestamped bullet to REMINDER.md. Throws if REMINDER.md is missing. */

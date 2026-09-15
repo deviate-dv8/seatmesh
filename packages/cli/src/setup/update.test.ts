@@ -52,4 +52,58 @@ describe("runUpdate", () => {
     expect(fs.readFileSync(vendor, "utf8")).toBe("# stale\n");
     expect(fs.existsSync(path.join(sm, ".seatmesh-version"))).toBe(false);
   });
+
+  it("migrates legacy profile: humanCoTyped + logs + seats/_shared", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sm-update-legacy-"));
+    const sm = path.join(tmp, ".sm");
+    fs.mkdirSync(path.join(sm, "roles", "_vendor"), { recursive: true });
+    fs.writeFileSync(
+      path.join(sm, "mesh.config.yaml"),
+      [
+        "name: legacy",
+        "workspace: ..",
+        "session:",
+        "  name: mesh",
+        "  workerCount: 1",
+        "  miniMax: 1",
+        "layout:",
+        "  base:",
+        "    window: base",
+        "    columns: [manager, secretary]",
+        "    cli:",
+        "      manager: agent",
+        "      secretary: opencode",
+        "seats:",
+        "  root: seats",
+        "  templates: [FOCUS, TASKS, REMINDER]",
+        "state:",
+        "  agentsJson: agents.json",
+        "  meshAgentsJson: mesh-agents.json",
+        "daemon:",
+        "  port: 31997",
+        "  managerPromptPrefix: '[mgr]'",
+        "ports:",
+        "  worker: '30{n}0/30{n}1'",
+        "providers: [cursor-agent]",
+        "roles:",
+        "  dir: roles",
+      ].join("\n"),
+    );
+    fs.writeFileSync(path.join(sm, "roles", "_vendor", "common.yaml"), "# stale\n");
+    fs.writeFileSync(path.join(sm, "AGENTS.md"), "# stale agents\n");
+
+    const r = runUpdate({ profileArg: sm });
+    expect(r.configMerge?.added).toEqual(
+      expect.arrayContaining(["layout.base.humanCoTyped", "layout.logs"]),
+    );
+    const cfg = fs.readFileSync(path.join(sm, "mesh.config.yaml"), "utf8");
+    expect(cfg).toMatch(/humanCoTyped:/);
+    expect(cfg).toMatch(/logs:/);
+    expect(fs.existsSync(path.join(sm, "seats", "_shared", "NOTES.md"))).toBe(true);
+    expect(fs.existsSync(path.join(sm, "seats", "_shared", "README.md"))).toBe(true);
+    expect(fs.readFileSync(path.join(sm, "AGENTS.md"), "utf8")).toMatch(/Retrieval hub|agent hub/);
+    expect(fs.readFileSync(path.join(sm, "roles", "_vendor", "common.yaml"), "utf8")).toMatch(
+      /_shared/,
+    );
+  });
 });

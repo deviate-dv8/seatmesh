@@ -1,0 +1,529 @@
+/**
+ * Quick help for agents + operators — one place for `help <cmd>` / `<cmd> --help`.
+ * Prefer short usage blocks; deep docs stay in ONE-PATH / AGENTS.md.
+ */
+
+const ALIASES: Record<string, string> = {
+  get: "hub",
+  history: "read-history",
+  readhistory: "read-history",
+  seats: "contexts",
+  where: "whoami",
+  what: "kind",
+  typeof: "kind",
+  checkback: "cb",
+  patience: "cb",
+  coldstart: "cold-start",
+  handoff: "switch",
+  targets: "target",
+  dc: "stack",
+  cc: "switch",
+  meshes: "remote",
+  ask: "ask",
+  msg: "ask",
+  tell: "ask",
+  ackmsg: "ackmsg",
+  answered: "ackmsg",
+  reply: "reply",
+  todos: "todo",
+  "put-agent": "human",
+  panes: "human",
+  operator: "human",
+};
+
+/** Canonical verb → multi-line usage (first line is summary). */
+const HELP: Record<string, string> = {
+  help: `help [cmd]
+  Show this index, or usage for one command.
+  Humans first: seatmesh help human   ← put an agent on a pane
+  Agents: seatmesh agent help [cmd]
+  Card:   seatmesh agent`,
+
+  human: `human — put an agent CLI on a pane (operator)
+
+  Empty terminal → agent:
+    switch <target> <opencode|claude|agent|kiro>
+    Examples:
+      seatmesh switch slot-1 opencode
+      seatmesh switch secretary claude
+      seatmesh switch here agent          # this pane (Cursor)
+      npx seatmesh switch mini-1 opencode
+
+  Back to plain shell:
+    switch <target> empty
+
+  Start/resume the seat's configured CLI (no type pick):
+    launch <target|all|manager|secretary>
+
+  Check agent vs shell:
+    kind <target>     # aliases: what | typeof
+
+  Give the seat WORK / a todo (does NOT install a CLI — different from switch):
+    todo give <target> "do the thing"     # preferred
+    todo <target> "do the thing"          # shorthand
+    assign <target> "do the thing"        # same engine
+
+  Targets: manager | secretary | slot-N | mini-N | here
+  Aliases for this topic: help put-agent | help panes | help operator`,
+
+  completion: `completion bash|zsh|fish|reply|install
+  Shell tab completion. Enable: eval "$(seatmesh completion zsh)"
+  Then: seatmesh <TAB>. Prefer global bin or alias seatmesh='npx seatmesh'.`,
+
+  agent: `agent
+  Print can/cannot for THIS pane (gateway card).
+  agent help [cmd]     usage for one verb
+  agent <cmd> …        run if allowed; else UNAUTHORIZED
+  agent whoami         full hub dump every turn`,
+
+  whoami: `whoami [target] [--validate] [--json]
+  Identity + retrieval map + open acks/cbs + cold-start FOCUS/TASKS.
+  Alias: where`,
+
+  hub: `hub [contexts|todos|acks|cbs|chat|room|shared|sessions]
+  Retrieval + CRUD map; bare hub = guide + live summary for this seat.
+  Alias: get
+  Examples:
+    hub todos | hub acks | hub sessions | hub chat 40 | hub room supervise`,
+
+  "read-history": `read-history [N]
+  Prompt/response history (same as hub chat). Alias: history | readhistory
+  Room lines: room tail [-r slug] [-n N] · hub room`,
+
+  sessions: `sessions [--json]
+  List other seatmesh meshes (registry + live tmux): dir, port, daemon, peer @alias.
+  Agent: list only. Operator: sessions attach|forget|register|pick (no agent).
+  Prefer: remote (list + send in one verb)`,
+
+  remote: `remote [--json]
+  remote <alias> <seat> "<msg>"
+  remote @alias:seat "<msg>"
+  Cross-mesh: list other sessions OR peer another mesh.
+  Alias: meshes
+  Needs remotes.<alias>.profile in mesh.config.yaml (see agent remote / sessions).
+  Examples:
+    remote
+    remote pia secretary "FYI: …"
+    remote @pia:secretary "FYI: …"`,
+
+  peer: `peer <target> "<msg>" [--ack|--ended [id]] [--direct]
+  Enqueue mesh mail to manager|secretary|slot-N|mini-N.
+  Cross-mesh: peer @alias:seat "…"  (or: remote <alias> <seat> "…")
+  --ack / --ended [id]  close open ask (bare --ack auto-matches)
+  ACK/FYI/PROG bodies auto --ack. peer verify [target]
+  Shorthands (all agents): ask|msg|tell <t> "…" · ackmsg <t> "…" · reply <id> [msg]`,
+
+  ask: `ask <target> "<msg>"
+  Shorthand: peer <target> "<msg>" (send / open ask). All agents.
+  Also: msg|tell <target> "<msg>"`,
+
+  ackmsg: `ackmsg <target> "<msg>"
+  Shorthand: peer --ack <target> "<msg>" (reply + close open ask). All agents.
+  Alias: answered`,
+
+  reply: `reply <ack-id> [msg]
+  Shorthand: ack reply <id> [msg] (peer back to asker + close). All agents.`,
+
+  contexts: `contexts [--json]
+  Seat map (slots/minis/HQ) with open TASK counts + FOCUS preview.
+  Alias: seats`,
+
+  ack: `ack | ack list | ack <id> [note] | ack reply <id> [msg] | ack clear
+  List/close unanswered asks. Chat prose does NOT clear.
+  ack reply = peer back to asker + close (default msg ACK).
+  Lead: ack redirect <mini-N>`,
+
+  cb: `cb list | cb start <dur> --expect "…" [--here]
+  cb cancel <id> | cb cancel-all | cb reset <id> <dur> | cb ack <id> yes|no
+  Poll-later timers (aliases: checkback, patience). Chat does NOT cancel.`,
+
+  room: `room tail [-r slug] [-n N] | room say [-r slug] "<msg>"
+  room broadcast <msg> | room read | room call|accept …
+  A2A ledger. Global default; -r managers|supervise
+  broadcast/say fan-out = daemon queue (POST /room-fanout) — not direct-inject storm`,
+
+  chat: `chat tail [--slot key] [--lines N] [--json]
+  chat query [--slot|--session|--model|--since|--limit] [--json]
+  chat append|record  — per-slot prompt/response CHAT.jsonl`,
+
+  notify: `notify "<session>" "<check>" [--url <link>]
+  notify info|md "<title>" --md <file>|--body "…" [--image path] [--url https://…]
+  notify yesno "<title>" "<blurb>" [--md file|--body "…"] [--image path] [--url https://…]
+           [--target seat] [--yes-msg "…"] [--no-msg "…"]
+  Operator eyes (beta) — prefer over asking chat for a toast.
+
+  Pick one shape:
+    eyes-only   notify "Deploy?" "Check staging" --url http://…
+    Info only   notify info "Brief" --body "## Why\\n\\n…" [--url https://mdview.io/s/…]
+                → local /act/card. [--url] = Open button (clickable).
+                  Bare https:// in body also autolinks. [label](url) works.
+                Mermaid → local Info card renders \`\`\`mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
+    Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\\n…" [--url https://…]
+                → toast buttons Info · Yes · No; card Open if --url.
+                Agents may still put links in --body/--md; toast body stays blurb-only.
+
+  yesno args: <title>=decision name · <blurb>=short toast line
+  Full recipe: seatmesh agent help notify`,
+
+  peek: `peek <target> status|full
+  Live pane snapshot / scrollback (manager|slot-N|mini-N|here)`,
+
+  kind: `kind <target>
+  Agent CLI vs plain terminal. Aliases: what, typeof`,
+
+  inbox: `inbox [--json] [--wait N] [--meta]
+  inbox list|resolve|log|instances|stop|restart
+  Daemon queue status (restart is lead/operator)`,
+
+  seat: `seat init | seat task …
+  Prefer: todo give <target> "…"  (see: help todo)
+  seat task list|add|check still work; assign = todo give`,
+
+  todo: `todo give <target> "<text>"     ← GIVE work (preferred)
+  todo <target> "<text>"            ← same shorthand
+  todo list [target]
+  todo add|check <target> "<text>"  ← file-only add / mark done+report
+  (= seat task …). give = FOCUS+TASK+inject+CB≥20m (same as assign).
+  check → DONE: to todos.reportTo (default manager). No contracts needed.
+  Config: todos.reportTo / todos.checkback in mesh.config.yaml`,
+
+  assign: `assign <target> "<text>"
+  Same as: todo give <target> "…"  (FOCUS NOW + TASK + peer inject + CB≥20m).
+  Prefer the todo verb. Does NOT put a CLI on the pane — use switch (help human)`,
+
+  prompt: `prompt [--manager] <target> <text...>
+  Enqueue manager→pane inject`,
+
+  remind: `remind <slot|all> [note...]
+  Manager-only worker remind`,
+
+  mini: `mini list | mini spawn [--role R] <task...>
+  mini prompt <N> <text> | mini done <N> PASS|FAIL: …
+  mini kill|reassign|dispatch-all`,
+
+  secretary: `secretary start|status|digest|restart
+  secretary supervise on [10m]|run|off
+  secretary switch <cli> [--keep-resume]
+  Lead supervise path (secretary→manager)`,
+
+  switch: `switch <target> <agent|claude|opencode|kiro|empty> [flags] [reason...]
+  HUMAN: empty terminal → agent CLI (or empty = back to shell).
+  Alias: handoff. See: seatmesh help human
+  Examples: switch slot-1 opencode · switch here claude · switch mini-2 empty
+  Flags: --keep-resume --resume ID --queue`,
+
+  swap: `swap <a> <b> [--identity]
+  Visual pane swap (same tier). --identity also swaps numbers+seats`,
+
+  launch: `launch [targets...]
+  Start/resume the seat's already-configured CLI (no type pick).
+  To choose opencode/claude/agent on an empty pane: switch (help human)
+  Examples: launch slot-1 · launch all · launch manager secretary`,
+
+  flush: `flush <slot|all|manager|mini-N>
+  Rescue stuck composer Enter`,
+
+  continue: `continue <slot|all> [note...]
+  Night continue (manager-only; requires night on)`,
+
+  night: `night on|off|status
+  Night mode gate for continue`,
+
+  set: `set <target> <agent|kiro|claude|opencode|empty>
+  Record mesh-agents CLI type`,
+
+  tag: `tag <target|self> <resume_id|--auto>
+  Set resume id on pane`,
+
+  title: `title <target> <text...>
+  Pane title`,
+
+  status: `status <target> <text...>
+  Pane status-left segment`,
+
+  "cold-start": `cold-start [target] [--inject] [--force]
+  Print (or enqueue) cold-start brief. Alias: coldstart`,
+
+  limit: `limit idle [--all|--pane %N]
+  limit idle-clear
+  CC-LIMIT banner → idle (CBs stay armed)`,
+
+  update: `update [--dry-run] [--migrate] [--no-restart-inbox]
+  Refresh _vendor + AGENTS.md; merge humanCoTyped/logs; seed seats/_shared;
+  role-pack migrate; paths.json. --migrate also legacy tasks/ → .sm/`,
+
+  init: `init [--force] [--seats-root PATH] [--name NAME]
+  Create project .sm/ (human). Prefer: start`,
+
+  start: `start
+  Init if needed + create-or-attach session`,
+
+  session: `session attach|up|down|status|sync|check|repair|init <sm-name>
+  Session lifecycle. check = config/version/lost files; repair recreates missing`,
+
+  reload: `reload [--layout]
+  Rebuild engine + labels (no session kill). --layout re-grids`,
+
+  layout: `layout [--no-leads] [--dry-run] [--yes]
+  layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
+  Workers/minis grid + N base columns`,
+
+  realign: `realign
+  Resize-only: base ratio + equal worker/mini grids`,
+
+  save: `save|auto [--json] [--no-labels]
+  Scrape session → mesh-agents.json`,
+
+  auto: `auto [--json] [--no-labels]
+  Alias of save (scrape session)`,
+
+  labels: `labels
+  Re-apply @mesh_* + border strip`,
+
+  verify: `verify
+  Layout + labels health`,
+
+  report: `report [--json] [--verbose]
+  Stack status (one line default)`,
+
+  test: `test
+  Smoke: layout, providers, inbox, proxy`,
+
+  version: `version [--json] [--check-registry]
+  CLI vs npm latest vs profile .seatmesh-version`,
+
+  roles: `roles status|migrate [--to VER]|steps
+  Locked role-pack up/down`,
+
+  target: `target add "<text>" [--deadline eod|6h]
+  target list | target done <id> | target triage <id>
+  Operator EOD work items (outside agent). Alias: targets`,
+
+  ops: `ops list|clear
+  Pane-op serial queue`,
+
+  proxy: `proxy status|check|reset
+  Profile proxy driver`,
+
+  providers: `providers list|scan [session]
+  Detect live CLIs`,
+
+  base: `base ensure|realign
+  Base window helpers`,
+
+  index: `index show|validate
+  Role index paths`,
+
+  profile: `profile show
+  Dump loaded profile paths`,
+
+  stack: `stack …
+  Passthrough to profile stack.command. Alias: dc`,
+
+  preview: `preview <file.md...> [--set 1-30] [--notify]
+  Publish markdown to mdview.io (https://mdview.io) — NOT a local binary.
+  Renders MD + Mermaid in the browser; prints viewerUrl.
+  Examples:
+    preview ./handout.md --set 7
+    preview ./handout.md --set 7 --notify
+  Also: notify info|md "<title>" --md <file>  (same publish, toast+card)
+  Docs: https://mdview.io/agents · API POST https://mdview.io/api/public/publish`,
+
+  contract: `contract …
+  Contract lock apply/on/off`,
+
+  balance: `balance …
+  Dual-lead balance (coord)`,
+
+  "to-slot": `to-slot <N> "<msg>"
+  Worker↔worker peer (prefer: peer slot-N)`,
+
+  "to-mini": `to-mini <N> "<msg>"
+  Peer a mini (prefer: peer mini-N)`,
+
+  "to-master": `to-master <msg>
+  Deprecated — prefer peer manager / room`,
+
+  "slot-advice": `slot-advice <slot|slot-N> [--send] [note...]
+  Manager slot coaching`,
+
+  "pane-meta": `pane-meta <target>
+  Raw @mesh_* pane metadata`,
+
+  ppa: `ppa [--raw] [--idle SEC]
+  Who is slacking? Idle ≥ppa.idleSlackSec (default 120) with open TASKS / BUSY|BLOCKED mark.
+  Default = slack verdict. --raw = telemetry table (old perf-index).
+  Next: peek <seat> | peer <seat> "CONTINUE …" | remind <slot>`,
+
+  "migrate-runtime": `migrate-runtime [--dry-run]
+  Legacy tasks/seatmesh → .sm/runtime (also: update --migrate)`,
+
+  func: `func <id> <args...>
+  Profile funcs: registry (external.default + role allow)`,
+};
+
+export function resolveHelpVerb(raw: string): string {
+  const v = raw.trim().toLowerCase().replace(/^-+/, "");
+  return ALIASES[v] ?? v;
+}
+
+export function wantsCmdHelp(argv: string[]): boolean {
+  const args = argv.slice(1);
+  if (args[0] === "help") return true;
+  return args.some((a) => a === "-h" || a === "--help");
+}
+
+export function printGlobalHelpHint(): void {
+  console.log("hint: seatmesh help human  # put an agent CLI on a pane");
+  console.log("hint: seatmesh help | seatmesh help <cmd> | seatmesh agent help <cmd>");
+  console.log("hint: seatmesh completion install  # tab: seatmesh <TAB>");
+  console.log("docs: docs/COMMANDS.md · docs/cli/<verb>.md · docs/ONE-PATH.md · .sm/AGENTS.md");
+}
+
+/** @returns true if known verb printed. */
+export function printCmdHelp(rawVerb: string): boolean {
+  const verb = resolveHelpVerb(rawVerb);
+  const body = HELP[verb];
+  if (!body) {
+    console.error(`unknown command for help: ${rawVerb}`);
+    printGlobalHelpHint();
+    return false;
+  }
+  console.log(body.trimEnd());
+  if (verb !== "help" && verb !== "agent" && verb !== "human" && verb !== "completion") {
+    console.log("");
+    console.log(`also: seatmesh agent help ${verb}`);
+  }
+  return true;
+}
+
+/** Compact index of verbs agents use most. */
+export function printAgentHelpIndex(): void {
+  console.log(`agent help — quick usage
+
+Every turn:
+  seatmesh agent whoami
+  seatmesh agent              # can / cannot for this pane
+  seatmesh agent help <cmd>   # usage for one verb
+
+Retrieve:
+  hub | hub todos|acks|cbs|chat|room|shared|sessions
+
+Cross-mesh:
+  remote                         # list other meshes
+  remote pia secretary "…"       # send
+  remote @pia:secretary "…"      # same
+  sessions                       # list only
+
+Comms:
+  ask|msg <t> "…" · ackmsg <t> "…" · reply <id> · peer · room · ack · cb · notify · todo
+
+Also: seatmesh help <cmd>  (same map; works outside agent)
+`);
+}
+
+export function listHelpVerbs(): string[] {
+  return Object.keys(HELP).sort();
+}
+
+export function listHelpEntries(): { verb: string; body: string }[] {
+  return Object.entries(HELP)
+    .map(([verb, body]) => ({ verb, body: body.trimEnd() }))
+    .sort((a, b) => a.verb.localeCompare(b.verb));
+}
+
+export function listHelpAliases(): { alias: string; verb: string }[] {
+  return Object.entries(ALIASES)
+    .map(([alias, verb]) => ({ alias, verb }))
+    .sort((a, b) => a.alias.localeCompare(b.alias));
+}
+
+/** Greppable catalog for docs/COMMANDS.md (keep in sync via gen script / test). */
+export function renderCommandsMarkdown(): string {
+  const lines: string[] = [
+    "# seatmesh commands",
+    "",
+    "Greppable usage catalog for every CLI verb. **Source of truth:**",
+    "`packages/cli/src/commands/help-text.ts` (also drives `seatmesh help <cmd>`).",
+    "",
+    "```bash",
+    "# list all verbs",
+    'rg -n "^## " docs/COMMANDS.md',
+    "",
+    "# find one verb",
+    'rg -n "^## peer$|^## whoami$" docs/COMMANDS.md',
+    "",
+    "# one file per verb",
+    "ls docs/cli | rg peer",
+    "rg -n . docs/cli/peer.md",
+    "",
+    "# runtime help (same text)",
+    "seatmesh help peer",
+    "seatmesh agent help peer",
+    "seatmesh peer --help",
+    "```",
+    "",
+    "| Job | Doc |",
+    "|-----|-----|",
+    "| One command per goal | [ONE-PATH.md](ONE-PATH.md) |",
+    "| Agent gateway card | `.sm/AGENTS.md` · `seatmesh agent` |",
+    "| Per-verb markdown | [cli/](cli/) |",
+    "",
+    "## aliases",
+    "",
+  ];
+
+  for (const { alias, verb } of listHelpAliases()) {
+    lines.push(`- \`${alias}\` → [\`${verb}\`](#${verb}) · [cli/${verb}.md](cli/${verb}.md)`);
+  }
+
+  lines.push("");
+
+  for (const { verb, body } of listHelpEntries()) {
+    lines.push(`## ${verb}`);
+    lines.push("");
+    lines.push("```text");
+    lines.push(body);
+    lines.push("```");
+    lines.push("");
+    lines.push(`- Run: \`seatmesh ${verb} --help\``);
+    lines.push(`- Agent: \`seatmesh agent help ${verb}\``);
+    lines.push(`- File: [cli/${verb}.md](cli/${verb}.md)`);
+    lines.push("");
+  }
+
+  lines.push("## missing / card-only");
+  lines.push("");
+  lines.push(
+    "These may appear on older cards but are **not** first-class verbs yet: `snapshot`, `triage`, `nav`.",
+  );
+  lines.push("Prefer `contexts`, `hub`, `target`, and `agent` until implemented.");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+/** One short md per verb under docs/cli/. */
+export function renderCliVerbMarkdown(verb: string): string | null {
+  const body = HELP[verb];
+  if (!body) return null;
+  const aliases = listHelpAliases()
+    .filter((a) => a.verb === verb)
+    .map((a) => a.alias);
+  const lines = [
+    `# seatmesh ${verb}`,
+    "",
+    "```text",
+    body.trimEnd(),
+    "```",
+    "",
+    `- CLI: \`seatmesh ${verb} --help\``,
+    `- Agent: \`seatmesh agent help ${verb}\``,
+    `- Catalog: [../COMMANDS.md#${verb}](../COMMANDS.md#${verb})`,
+  ];
+  if (aliases.length) {
+    lines.push(`- Aliases: ${aliases.map((a) => `\`${a}\``).join(", ")}`);
+  }
+  lines.push("");
+  return lines.join("\n");
+}

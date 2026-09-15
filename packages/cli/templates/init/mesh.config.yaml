@@ -24,6 +24,8 @@ layout:
     window: base
     columns: [manager, secretary]
     managerStack: [manager]
+    # Operator types here — daemon holds injects while busy/typing (no mid-keystroke storms).
+    humanCoTyped: [manager, secretary]
     cli:
       manager: agent
       secretary: opencode
@@ -41,6 +43,10 @@ layout:
     max: 4
     leads: [1]
     enabled: false
+  logs:
+    window: logs
+    index: 9
+    enabled: true
 
 providers:
   - cursor-agent
@@ -92,6 +98,32 @@ chatRooms:
   checkback:
     duration: 5m
     renew: 3m
+    maxFires: 3
+  thinNotify:
+    minInterval: 5m
+
+# Agent TASKS CRUD — seat task / todo (not hand-edit). reportTo = any base column.
+todos:
+  reportTo: manager
+  checkback:
+    duration: 20m
+    renew: 10m
+    min: 20m
+
+# PPA slack: idle this many seconds + open work ⇒ slack.
+ppa:
+  idleSlackSec: 120
+
+# ACK redirect defaults (ack redirect / peer --redirect-*).
+acks:
+  redirect:
+    ttlMin: 45
+    rewriteTo: secretary
+    block: "*managers"
+
+# Who gets peer triage when a target fires (if target has no triageTo).
+targets:
+  triageTo: [manager, secretary]
 
 connectivity:
   enabled: false

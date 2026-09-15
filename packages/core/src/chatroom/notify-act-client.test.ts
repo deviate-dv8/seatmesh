@@ -17,20 +17,17 @@ describe("cleanUrl", () => {
 });
 
 describe("formatYesNoToastBody", () => {
-  it("renders Info · Yes · No HTML anchors (no raw URL lines)", () => {
+  it("returns blurb only — Info/Yes/No are toast buttons, not body links", () => {
     const out = formatYesNoToastBody(
       "Ship it?",
       "http://127.0.0.1:31680/act/card/abc ",
       "http://127.0.0.1:31680/act/v1/yes ",
       "http://127.0.0.1:31680/act/v1/no",
     );
-    expect(out).toContain("Ship it?");
-    expect(out).toContain('<a href="http://127.0.0.1:31680/act/card/abc">Info</a>');
-    expect(out).toContain('<a href="http://127.0.0.1:31680/act/v1/yes">Yes</a>');
-    expect(out).toContain('<a href="http://127.0.0.1:31680/act/v1/no">No</a>');
-    expect(out).toContain(" · ");
-    expect(out).not.toContain("Info: http");
-    expect(out).not.toContain("tap Info");
+    expect(out).toBe("Ship it?");
+    expect(out).not.toContain("<a ");
+    expect(out).not.toContain("http://");
+    expect(out).not.toContain(" · ");
   });
 });
 

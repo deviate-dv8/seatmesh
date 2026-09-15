@@ -63,6 +63,7 @@ not replace it.
   slot-1/ .. slot-N/     # worker dirs from seats.dirs.worker
   mini-1/ ..             # optional per-mini dirs
   minis.json             # campaign state (profile-specific)
+  _shared/               # HQ + workers + minis shared MDs (NOTES.md)
   _snapshots/
 ```
 

@@ -33,6 +33,7 @@ import {
 import { saveMeshAgentsFile } from "../session/save-session.js";
 import { enqueuePeer, ensureMeshInbox, inboxHealth, meshInboxPort } from "../comms/inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
+import { resolveLiveTmuxSession } from "../lib/live-session.js";
 import type { MiniCampaignDigest } from "./minis.js";
 import { submitPaneOp } from "../ops/pane-ops-client.js";
 import { buildMiniCampaignDigest, miniPrompt, miniSpawnAll } from "./minis.js";
@@ -137,7 +138,7 @@ function claudeResumeId(id: string | null | undefined): string | null {
   return null;
 }
 
-/** Launch one-liner for secretary (claude --permission-mode auto, opencode-cpe, resume hygiene). */
+/** Launch one-liner for secretary (claude --permission-mode auto, OC resume hygiene). */
 export function resolveSecretaryLaunchCmd(
   loaded: LoadedProfile,
   typ: string,
@@ -389,6 +390,9 @@ interface CheckbackRowLocal {
   expiresAt?: string;
   senderLabel?: string;
   recipientLabel?: string;
+  ownerLabel?: string;
+  workspaceId?: string;
+  sessionName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -440,6 +444,12 @@ function armPatienceLocal(
   const now = new Date().toISOString();
   upsertCheckbackLocal(loaded, {
     ...body,
+    workspaceId: body.workspaceId ?? loaded.workspaceId,
+    sessionName: body.sessionName ?? resolveLiveTmuxSession(loaded),
+    ownerLabel:
+      body.ownerLabel ??
+      body.recipientLabel ??
+      undefined,
     status: "active",
     createdAt: now,
     updatedAt: now,

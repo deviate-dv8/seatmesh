@@ -82,7 +82,7 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
       'Arm checkback — harness shape: start 5m --expect "topic" [--renew 3m] [--here|--slot N|--mini N]',
     )
     .option("--expect <text>", "what to verify when timer fires")
-    .option("--renew <dur>", "re-arm interval after fire", "3m")
+    .option("--renew <dur>", "re-arm interval after fire (default: chatRooms.checkback.renew)")
     .option("--here", "target current tmux pane")
     .option("--slot <n>", "target worker slot pane")
     .option("--mini <n>", "target mini pane")
@@ -124,14 +124,33 @@ export function buildCheckbackCommands(getLoaded: () => LoadedProfile): Command 
         process.exit(1);
       }
 
+      const renewRaw = (opts.renew as string | undefined)?.trim();
+      const renew =
+        renewRaw && parseDurationToSeconds(renewRaw) != null
+          ? renewRaw
+          : cfg.checkbackRenew;
+
+      const who = runWhoami(loaded);
+      const ownerLabel =
+        who.role === "worker" && who.slot != null
+          ? `slot-${who.slot}`
+          : who.slotLabel?.startsWith("mini-")
+            ? who.slotLabel
+            : who.role === "mini" && who.slotLabel
+              ? `mini-${who.slotLabel}`
+              : who.role || undefined;
+
       const res = await armCheckback({
         inboxBase: cfg.inboxBase,
         ownerPane,
         expect,
         duration,
-        renew: opts.renew as string,
+        renew,
         kind: opts.kind as string,
-        senderPane: runWhoami(loaded).paneId ?? ownerPane,
+        senderPane: who.paneId ?? ownerPane,
+        ownerSlot: who.slot,
+        ownerLabel,
+        recipientLabel: ownerLabel,
       });
       if (!res.ok) {
         console.error(`checkback start: FAIL ${res.reason ?? "?"}`);

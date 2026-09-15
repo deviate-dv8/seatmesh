@@ -9,6 +9,8 @@
   to re-grid (guarded when live panes would be killed).
 - **Layout** — workers 3×2 (default six seats), minis grid with configurable leads
   (`2x2`, `4x2`, etc.) via tmux layout only (no kill/respawn for retile).
+- **Status chrome** — `[folder][session] N:window` (fixes truncation that looked like
+  `[mesh-c87d0:nvim`); window **9:logs** tails inbox + peer queues when enabled.
 - **Labels and borders** — `@mesh_role`, `@mesh_slot`, `@mesh_ports`, title and
   status segments on each pane.
 - **Verify** — smoke layout and label health.
@@ -20,9 +22,12 @@
 - **Launch / switch / handoff** — start or replace a CLI with optional resume id;
   coord panes follow `layout.base.coordSync` (reload never replaces a live CLI when
   `reload: false`).
+- **Swap seats** — `swap <a> <b>` trades screen positions (session data stays with
+  each agent); `--identity` exchanges slot numbers + seat dirs + mesh-agents.
 - **Prompt / remind / flush** — manager paths enqueue inject work; flush rescues
   stuck composer Enter.
-- **Peek / ppa** — pane metadata, scrollback, performance index.
+- **Peek / ppa** — pane metadata / scrollback; `ppa` = who is slacking
+  (idle ≥ `ppa.idleSlackSec` default 120s ∧ open TASKS or BUSY/BLOCKED mark). `--raw` = telemetry table.
 
 ## Coordination seats
 
@@ -31,6 +36,12 @@
 - **Minis** — parallel helper panes with spawn, prompt, done, dispatch.
 - **Seat files** — FOCUS, TASKS, REMINDER under `seats.root`; cold-start and
   `whoami` inline hub; `seat init` ensures templates exist.
+- **Shared notes** — `.sm/seats/_shared/` (NOTES.md) for HQ + workers + minis
+  (progress / supervise scratch); one folder, not per-seat.
+- **Retrieval hub** — `agent hub` / `agent get` maps contexts, todos, acks, cbs,
+  chat history, room tail, shared notes (CRUD pointers); whoami prints the same map.
+- **Command docs** — greppable `docs/COMMANDS.md` + `docs/cli/<verb>.md` (from help-text;
+  `npm run gen:commands`); also `agent help <cmd>` / `<cmd> --help`.
 - **Contexts / snapshot** — seat map, cold archive of finished work.
 
 ## Comms (enqueue only)
@@ -45,6 +56,8 @@ CLI and agents **append queues**; the inbox daemon **drains and injects**.
 | `checkback` | Poll-later timer (`patience` alias) |
 | `room say` / `broadcast` | Durable chat ledger + optional fan-out |
 | `PANE_OPS` | Serial launch, restart, relayout |
+| FYI / PROG / DONE | Fire-and-forget progress — no ACK row, no Reply footer, no sender checkback; manager observe-only unless operator asks |
+| `humanCoTyped` | Profile list (default manager+secretary) — daemon holds **all** injects while those panes are typing/busy |
 
 See [COMMS.md](COMMS.md) and [CHATROOM.md](CHATROOM.md).
 

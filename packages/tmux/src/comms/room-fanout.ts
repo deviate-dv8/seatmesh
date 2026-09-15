@@ -28,7 +28,8 @@ import {
 } from "../lib/pane-meta.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { resolveMiniPaneId } from "../session/window-panes.js";
-import { ensureMeshInbox } from "./inbox-bridge.js";
+import { ensureMeshInbox, enqueueRoomFanout, meshInboxPort } from "./inbox-bridge.js";
+import { isInboxUp } from "./bypass-comms.js";
 import { deliverPeerMessage } from "./peer-send.js";
 
 export interface RoomFanOutInput {
@@ -261,13 +262,23 @@ export function fanOutRoomMessage(
 
   let skipped = all.length - targets.length;
 
-  ensureMeshInbox(loaded, { quiet: true });
+  const ensured = ensureMeshInbox(loaded, { quiet: true });
+  if (!ensured || !isInboxUp(loaded)) {
+    const port = meshInboxPort(loaded);
+    console.error(
+      `WARN: room fan-out skipped — inbox down on :${port}; ledger was written. ` +
+        `Fix: seatmesh inbox restart  (no direct-inject storm)`,
+    );
+    return { sent: 0, enqueued: 0, skipped: skipped + targets.length, failed: 0 };
+  }
 
   let sent = 0;
   let enqueued = 0;
   let failed = 0;
 
   const isStatusBroadcast = isSuperviseStatusBroadcast(input.kind, input.body);
+  const batch: { targetPane: string; targetLabel: string; msg: string }[] = [];
+  const thinRecord: { agentId: string; unseen: number }[] = [];
 
   for (const t of targets) {
     const agentId = agentIdForPane(t.paneId);
@@ -323,12 +334,43 @@ export function fanOutRoomMessage(
         ? formatRoomCoordNotify(input.slug, input.kind, input.from, input.body, ctx, { unseen })
         : formatRoomPeerNotify(input.slug, input.kind, input.from, input.body, ctx, { unseen });
 
+    batch.push({ targetPane: t.paneId, targetLabel: t.label, msg });
+    if (thin) thinRecord.push({ agentId, unseen });
+  }
+
+  if (!batch.length) {
+    return { sent: 0, enqueued: 0, skipped, failed: 0 };
+  }
+
+  const batchRes = enqueueRoomFanout(loaded, {
+    fromSlot,
+    fromPorts,
+    roomSlug: input.slug,
+    fromAgent: input.from,
+    excludePane,
+    targets: batch,
+    skipEnsure: true,
+  });
+
+  if (batchRes.ok) {
+    enqueued = batchRes.enqueued;
+    for (const row of thinRecord) {
+      recordThinRoomNotify(loaded.workspace, cfg, input.slug, row.agentId, row.unseen);
+    }
+    return { sent, enqueued, skipped, failed: 0 };
+  }
+
+  // Batch endpoint failed — fall back to per-target queue (still no bypass).
+  console.error(
+    `WARN: room-fanout batch failed (${batchRes.error ?? "?"}); retrying per-target queue (no direct inject)`,
+  );
+  for (const t of batch) {
     const result = deliverPeerMessage(
       loaded,
-      resolveTargetLabel(t.label),
-      t.paneId,
-      t.label,
-      msg,
+      resolveTargetLabel(t.targetLabel),
+      t.targetPane,
+      t.targetLabel,
+      t.msg,
       fromSlot,
       fromPorts,
       {
@@ -336,14 +378,22 @@ export function fanOutRoomMessage(
         fromAgent: input.from,
         queueOnly: true,
         skipEnsure: true,
+        noBypass: true,
       },
     );
     if (result === "sent") sent++;
     else if (result === "queued") enqueued++;
     else failed++;
-    if (thin && (result === "sent" || result === "queued")) {
-      recordThinRoomNotify(loaded.workspace, cfg, input.slug, agentId, unseen);
+  }
+  if (enqueued + sent > 0) {
+    for (const row of thinRecord) {
+      recordThinRoomNotify(loaded.workspace, cfg, input.slug, row.agentId, row.unseen);
     }
+  }
+  if (failed > 0) {
+    console.error(
+      `WARN: room fan-out queue failed for ${failed}/${batch.length} panes — ledger ok. Fix: seatmesh inbox restart`,
+    );
   }
 
   return { sent, enqueued, skipped, failed };

@@ -36,9 +36,9 @@ describe("buildAgentLaunchCmd agent (cursor)", () => {
 describe("buildAgentLaunchCmd opencode", () => {
   const ws = "/tmp/workspace";
 
-  it("launches fresh when no resume id", () => {
+  it("launches plain opencode --auto (no CPE wrapper)", () => {
     expect(buildAgentLaunchCmd("opencode", ws)).toBe(
-      `cd ${ws} && ${ws}/scripts/opencode-cpe.sh`,
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor opencode --auto",
     );
   });
 
@@ -46,7 +46,13 @@ describe("buildAgentLaunchCmd opencode", () => {
     expect(
       buildAgentLaunchCmd("opencode", ws, "ses_f6b3245b0ffe92gpOAVSl31ObU"),
     ).toBe(
-      `cd ${ws} && ${ws}/scripts/opencode-cpe.sh --session ses_f6b3245b0ffe92gpOAVSl31ObU`,
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor opencode --auto --session ses_f6b3245b0ffe92gpOAVSl31ObU",
+    );
+  });
+
+  it("treats opencode-main as plain opencode too", () => {
+    expect(buildAgentLaunchCmd("opencode-main", ws)).toBe(
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor opencode --auto",
     );
   });
 });

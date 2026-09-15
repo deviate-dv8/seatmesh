@@ -88,7 +88,24 @@ export class PpaStateStore {
     this.save();
   }
 
+  /** Drop panes no longer live in the session (avoids stale idle ghosts). */
+  prune(livePaneIds: Iterable<string>): void {
+    const keep = new Set(livePaneIds);
+    let changed = false;
+    for (const id of Object.keys(this.state.panes)) {
+      if (!keep.has(id)) {
+        delete this.state.panes[id];
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.state.updatedAt = new Date().toISOString();
+      this.save();
+    }
+  }
+
   snapshot(): PpaPaneState[] {
     return Object.values(this.state.panes).sort((a, b) => a.label.localeCompare(b.label));
   }
 }
+

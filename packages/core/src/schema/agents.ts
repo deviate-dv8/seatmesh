@@ -115,6 +115,12 @@ export const SavedNvimLayoutSchema = z.object({
   enabled: z.boolean(),
 });
 
+export const SavedLogsLayoutSchema = z.object({
+  enabled: z.boolean(),
+  window: z.string().optional(),
+  index: z.number().int().min(0).max(20).optional(),
+});
+
 export const SavedWorkersLayoutSchema = z.object({
   enabled: z.boolean(),
   grid: z.literal("3x2").default("3x2"),
@@ -136,6 +142,7 @@ export const SavedLayoutSchema = z
     nvim: SavedNvimLayoutSchema.optional(),
     workers: SavedWorkersLayoutSchema.optional(),
     minis: SavedMinisLayoutSchemaWithEnabled.optional(),
+    logs: SavedLogsLayoutSchema.optional(),
     base: SavedBaseLayoutSchema.optional(),
   })
   .passthrough();

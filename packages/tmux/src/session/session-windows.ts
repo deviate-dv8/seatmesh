@@ -1,4 +1,5 @@
 import {
+  logsLayoutEnabled,
   minisLayoutEnabled,
   nvimLayoutEnabled,
   workersLayoutEnabled,
@@ -32,18 +33,20 @@ export interface LayoutWindowFlags {
   nvim: boolean;
   workers: boolean;
   minis: boolean;
+  logs: boolean;
 }
 
 /** Effective window flags: mesh-agents.json layout overrides yaml. */
 export function layoutWindowFlags(loaded: LoadedProfile): LayoutWindowFlags {
   const layout = loaded.profile.layout;
-  if (!layout) return { nvim: false, workers: false, minis: false };
+  if (!layout) return { nvim: false, workers: false, minis: false, logs: false };
   const mesh = loadMeshAgentsForProfile(loaded);
   const saved = mesh?.layout ?? null;
   return {
     nvim: nvimLayoutEnabled(layout, saved),
     workers: workersLayoutEnabled(layout, saved),
     minis: minisLayoutEnabled(layout, saved),
+    logs: logsLayoutEnabled(layout, saved),
   };
 }
 
@@ -58,8 +61,14 @@ export function activeSessionWindows(loaded: LoadedProfile, session: string): st
   if (names.includes(layout.base.window)) out.push(layout.base.window);
   if (flags.workers && names.includes(layout.workers.window)) out.push(layout.workers.window);
   if (flags.minis && names.includes(layout.minis.window)) out.push(layout.minis.window);
+  if (flags.logs && layout.logs && names.includes(layout.logs.window)) {
+    out.push(layout.logs.window);
+  }
   // Also include live windows when manager ran layout before save caught up
   if (!flags.workers && names.includes(layout.workers.window)) out.push(layout.workers.window);
   if (!flags.minis && names.includes(layout.minis.window)) out.push(layout.minis.window);
+  if (layout.logs && !flags.logs && names.includes(layout.logs.window)) {
+    out.push(layout.logs.window);
+  }
   return out;
 }

@@ -149,11 +149,10 @@ export function runPeer(
       runToMini(loaded, miniDest, text);
       return { via: "to-mini", targetLabel: `mini-${miniDest}` };
     }
-    // worker -> manager/secretary/coord
+    // worker -> manager/secretary/coord (FYI/PROG skips checkback arm inside enqueue)
     const sent = enqueuePrompt(loaded, target, text, {
       manager: false,
       prefix: "",
-      armCheckback: true,
     });
     const line =
       sent.via === "bypass"
@@ -186,7 +185,6 @@ export function runPeer(
     const sent = enqueuePrompt(loaded, target, text, {
       manager: false,
       prefix: "",
-      armCheckback: true,
     });
     const line =
       sent.via === "bypass"
@@ -317,6 +315,12 @@ export interface DeliverPeerOpts {
   queueOnly?: boolean;
   /** Fan-out batch: caller already ran ensureMeshInbox once. */
   skipEnsure?: boolean;
+  /**
+   * When queue/enqueue fails, do NOT fall back to direct inject.
+   * Room broadcast uses this so a busy/down inbox does not spam
+   * "direct inject only" across every pane.
+   */
+  noBypass?: boolean;
 }
 
 export function deliverPeerMessage(
@@ -331,8 +335,10 @@ export function deliverPeerMessage(
 ): "sent" | "queued" | "failed" {
   const registry = createRegistryForProfile(loaded.profile);
   const inboxUp = isInboxUp(loaded);
+  const noBypass = opts.noBypass === true || opts.queueOnly === true;
 
   if (!inboxUp) {
+    if (noBypass) return "failed";
     const bypass = bypassPeerDeliver(
       registry,
       loaded,
@@ -384,6 +390,8 @@ export function deliverPeerMessage(
     skipEnsure: opts.skipEnsure,
   });
   if (resp?.ok) return "queued";
+
+  if (noBypass) return "failed";
 
   const bypass = bypassPeerDeliver(registry, loaded, resolveTarget, targetLabel, msg, "enqueue failed");
   if (!bypass.ok) return "failed";

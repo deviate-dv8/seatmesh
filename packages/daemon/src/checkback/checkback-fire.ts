@@ -24,13 +24,18 @@ export function checkbackUnboundedRenew(kind: string | undefined): boolean {
  * Whether a due row should re-arm after a successful fire.
  * Caps ordinary peer/room CBs by fireCount (fallback: age ≈ renewSec * max).
  */
-export function shouldRenewCheckback(row: CheckbackRow, nowMs = Date.now()): boolean {
+export function shouldRenewCheckback(
+  row: CheckbackRow,
+  nowMs = Date.now(),
+  maxFires = CHECKBACK_MAX_FIRES,
+): boolean {
   if (!row.renewSec || row.renewSec <= 0) return false;
   if (checkbackUnboundedRenew(row.kind)) return true;
   const fires = row.fireCount ?? 0;
-  if (fires >= CHECKBACK_MAX_FIRES) return false;
+  const cap = maxFires >= 1 ? maxFires : CHECKBACK_MAX_FIRES;
+  if (fires >= cap) return false;
   const created = Date.parse(row.createdAt || "") || nowMs;
-  const maxLifeMs = row.renewSec * 1000 * CHECKBACK_MAX_FIRES;
+  const maxLifeMs = row.renewSec * 1000 * cap;
   if (nowMs - created >= maxLifeMs) return false;
   return true;
 }

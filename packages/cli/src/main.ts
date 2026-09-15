@@ -18,6 +18,7 @@ import {
   listBaseColumns,
   chatRoomConfigForLoaded,
   clearAckEndedSync,
+  resolveAckRedirectDefaults,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import { createRegistryForProfile } from "@seat-mesh/providers";
@@ -99,11 +100,13 @@ import {
   runFlush,
   printFlushResults,
   runSwitch,
+  runSeatSwap,
   runSet,
   runTag,
   setPaneTitle,
   setPaneStatus,
   printSeatContexts,
+  runAgentHub,
   runPeek,
   runPaneKind,
   runPaneMeta,
@@ -135,6 +138,10 @@ import { buildChatCommands } from "./commands/chat-cli.js";
 import { buildCheckbackCommands } from "./commands/checkback-cli.js";
 import { buildTargetCommands } from "./commands/target-cli.js";
 import { buildAckCommands } from "./commands/ack-cli.js";
+import {
+  resolvePeerEndedAckId,
+  shouldAutoAckReply,
+} from "./commands/ack-reply.js";
 import { buildLimitCommands } from "./commands/limit-cli.js";
 import { buildRolesCommands } from "./commands/roles-cli.js";
 import { buildNotifyCommand } from "./commands/notify-cli.js";
@@ -143,6 +150,12 @@ import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
 import { buildRoomCommands } from "./commands/room-cli.js";
 import { runInit } from "./setup/init.js";
 import { runAgentContextInit } from "./setup/agent-context-init.js";
+import {
+  printSessionCheck,
+  printSessionRepair,
+  runSessionCheck,
+  runSessionRepair,
+} from "./setup/session-health.js";
 import { runSeatCommand } from "./commands/seat-cli.js";
 import { coordCommand } from "./commands/coord-cli.js";
 
@@ -184,6 +197,21 @@ Setup (run once per project, by a human)
   roles status|migrate [--to VER]|steps   locked role-pack up/down (1.1.x)
   version [--json] [--check-registry]   CLI vs npm latest vs profile .seatmesh-version
 
+Put an agent on a pane (human — most common)
+  help human          ← full cheat sheet (aliases: put-agent | panes)
+  switch <target> <opencode|claude|agent|kiro>   empty shell → agent CLI
+  switch <target> empty                          agent → plain shell
+  launch <target|all>                            resume configured CLI (no type pick)
+  kind <target>                                  agent vs terminal?
+  Examples: switch slot-1 opencode · switch here claude · npx seatmesh switch mini-1 opencode
+
+Give a seat a todo (human or base agent — no contracts)
+  todo give <target> "…"     ← FOCUS+TASK+inject+CB≥20m  (preferred)
+  todo <target> "…"          ← same shorthand
+  assign <target> "…"        ← same engine
+  todo list [target] | todo check <target> "…"
+  Examples: todo give slot-1 "fix login" · agent todo mini-2 "draft README"
+
 Status / diagnostics
   report [--json] [--verbose]   stack status (one line default; --verbose = full section dump)
   verify              layout + labels health
@@ -210,7 +238,9 @@ Agent runtime (pane — always via gateway)
   Shared/operator (outside agent — humans + session ops)
   session | update | init | report | test | layout | save | inbox restart | target …
 
-  Examples: agent whoami | agent kind slot-1 | agent peer <t> "<msg>" | agent ack <id> "<note>" | agent cb list
+  Examples: switch slot-1 opencode | agent whoami | agent help peer | agent hub | agent kind slot-1
+  Discover: help human  # put agent on pane · help <cmd> · agent help <cmd> · <cmd> --help
+  Tab complete: eval "$(seatmesh completion zsh)"  # or bash|fish; see: completion install
   Operator EOD: target add "finish s13 tickets" [--deadline eod|6h] · target list · target done <id> · target triage <id>
 
   --profile <dir|yaml>   optional; default walk-up .sm/; multi-config: --profile .sm-<name>
@@ -234,8 +264,14 @@ async function main(): Promise<void> {
   const [cmd, sub, ...tail] = rest;
 
   // Bare `npx seatmesh` / help: logo+version once per terminal; later invocations plain usage.
+  // `help <cmd>` → per-command usage (agents: `agent help <cmd>`).
   const helpCmd = cmd === "-h" || cmd === "--help" || cmd === "help";
   const blankCmd = !cmd || (cmd.startsWith("-") && !helpCmd);
+  if (helpCmd && cmd === "help" && sub) {
+    const { printCmdHelp } = await import("./commands/help-text.js");
+    if (!printCmdHelp(sub)) process.exit(2);
+    return;
+  }
   if (blankCmd || helpCmd) {
     const { printSeatmeshBanner } = await import("./ui/banner.js");
     const {
@@ -254,7 +290,50 @@ async function main(): Promise<void> {
       console.log("");
     }
     printPlainUsage(profileArg);
+    const { printGlobalHelpHint } = await import("./commands/help-text.js");
+    printGlobalHelpHint();
     return;
+  }
+
+  // Per-command --help / `cmd help` — never execute the verb (no launch/reload/whoami side effects).
+  if (cmd !== "agent") {
+    const { wantsCmdHelp, printCmdHelp } = await import("./commands/help-text.js");
+    if (wantsCmdHelp(rest)) {
+      if (!printCmdHelp(cmd)) process.exit(2);
+      return;
+    }
+  }
+
+  // Universal shorthands (all agents): ask/msg/tell → peer; ackmsg → peer --ack; reply → ack reply
+  if (
+    cmd === "ask" ||
+    cmd === "msg" ||
+    cmd === "tell" ||
+    cmd === "ackmsg" ||
+    cmd === "answered" ||
+    cmd === "reply"
+  ) {
+    const { expandAgentShorthand } = await import("./commands/agent-shorthand.js");
+    const args = [sub, ...tail].filter((a): a is string => a != null && a !== "");
+    try {
+      const { argvRest, label } = expandAgentShorthand(cmd, args);
+      console.error(`shorthand: ${label}`);
+      const bin = process.argv[0]!;
+      const script = process.argv[1]!;
+      // Preserve --profile if present in original argv
+      const profileIdx = process.argv.indexOf("--profile");
+      const profileArgs =
+        profileIdx >= 0 && process.argv[profileIdx + 1]
+          ? ["--profile", process.argv[profileIdx + 1]!]
+          : process.argv.some((a) => a.startsWith("--profile="))
+            ? [process.argv.find((a) => a.startsWith("--profile="))!]
+            : [];
+      process.argv = [bin, script, ...profileArgs, ...argvRest];
+      return main();
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(2);
+    }
   }
 
   const { maybePrintVersionNudge } = await import("./ui/version-nudge.js");
@@ -263,8 +342,15 @@ async function main(): Promise<void> {
     process.env.SEATMESH_SKIP_VERSION_CHECK === "1" ||
     cmd === "session" ||
     cmd === "sessions" ||
-    cmd === "start";
+    cmd === "start" ||
+    cmd === "completion";
   if (!skipNudge) maybePrintVersionNudge();
+
+  if (cmd === "completion") {
+    const { runCompletionCommand } = await import("./commands/completion.js");
+    runCompletionCommand([sub, ...tail].filter((a): a is string => a != null));
+    return;
+  }
 
   if (cmd === "version") {
     const { printVersionInfo } = await import("./ui/version-nudge.js");
@@ -324,6 +410,12 @@ async function main(): Promise<void> {
       console.log(
         `  role-pack: ${r.rolePack.direction} ${r.rolePack.from ?? "none"} → ${r.rolePack.to}` +
           (r.rolePack.steps.length ? ` [${r.rolePack.steps.join(",")}]` : ""),
+      );
+    }
+    if (r.configMerge?.added.length) {
+      console.log(
+        `  config-merge: ${r.configMerge.added.join(", ")}` +
+          (dryRun ? " (dry-run)" : ""),
       );
     }
     if (isNpxEphemeralInstall()) {
@@ -425,8 +517,69 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "sessions") {
-    const { runSessionsCommand } = await import("./commands/sessions-cli.js");
+    const { runSessionsCommand, printAgentSessionsList } = await import(
+      "./commands/sessions-cli.js"
+    );
+    // After `agent sessions` strip: only list/json — never attach/pick/forget/register.
+    const fromAgent = process.env.SEATMESH_AGENT_GATEWAY === "1";
+    if (fromAgent) {
+      const action = (sub ?? "list").toLowerCase();
+      if (["attach", "forget", "register", "pick", "add"].includes(action)) {
+        console.error(
+          `UNAUTHORIZED: sessions ${action} is operator-only — run without agent: seatmesh sessions ${action} …`,
+        );
+        console.error("hint: seatmesh agent sessions   # list other meshes");
+        console.error('hint: seatmesh agent remote pia secretary "…"  # cross-mesh peer');
+        process.exit(2);
+      }
+      const loaded = meshLoaded(profileArg);
+      await printAgentSessionsList(loaded, { json: rest.includes("--json") || tail.includes("--json") });
+      return;
+    }
     process.exit(await runSessionsCommand(sub, tail, profileArg));
+  }
+
+  if (cmd === "remote" || cmd === "meshes") {
+    const loaded = meshLoaded(profileArg);
+    const { printAgentSessionsList } = await import("./commands/sessions-cli.js");
+    const json = rest.includes("--json") || sub === "--json";
+    // bare / list / --json → discover
+    if (!sub || sub === "list" || sub === "--json" || sub === "-h" || sub === "--help") {
+      if (sub === "-h" || sub === "--help") {
+        const { printCmdHelp } = await import("./commands/help-text.js");
+        printCmdHelp("remote");
+        return;
+      }
+      await printAgentSessionsList(loaded, { json });
+      return;
+    }
+    // remote @alias:seat <msg...>
+    const atTarget = parseRemotePeerTarget(sub);
+    if (atTarget) {
+      const rawMsg = [ ...tail ].join(" ").trim();
+      if (!rawMsg) {
+        console.error('usage: remote @alias:seat "<msg>"');
+        process.exit(2);
+      }
+      runRemotePeer(loaded, atTarget.alias, atTarget.seat, rawMsg);
+      return;
+    }
+    // remote <alias> <seat> <msg...>
+    const alias = sub.replace(/^@/, "");
+    const seat = tail[0];
+    const rawMsg = tail.slice(1).join(" ").trim();
+    if (!seat || !rawMsg) {
+      console.error('usage: remote <alias> <seat> "<msg>"');
+      console.error('   or: remote @alias:seat "<msg>"');
+      console.error("   or: remote [--json]   # list meshes");
+      process.exit(2);
+    }
+    if (!/^[a-z][a-z0-9-]{0,31}$/i.test(alias) || !/^[a-z][a-z0-9-]{0,31}$/i.test(seat)) {
+      console.error(`bad remote target: ${alias} ${seat} (want alias seat, e.g. pia secretary)`);
+      process.exit(2);
+    }
+    runRemotePeer(loaded, alias.toLowerCase(), seat.toLowerCase(), rawMsg);
+    return;
   }
 
   if (cmd === "profile" && sub === "show") {
@@ -515,7 +668,21 @@ async function main(): Promise<void> {
       sessionStatus(loaded);
       return;
     }
-    console.error("usage: session attach|up|down|status|sync|init <sm-name>");
+    if (sub === "check") {
+      const r = runSessionCheck(loaded);
+      printSessionCheck(r);
+      process.exit(r.ok ? 0 : 1);
+    }
+    if (sub === "repair") {
+      const noSync = tail.includes("--no-sync");
+      const skipInbox = tail.includes("--no-inbox");
+      const r = runSessionRepair(loaded, { sync: !noSync, skipInbox });
+      printSessionRepair(r);
+      process.exit(r.check.ok ? 0 : 1);
+    }
+    console.error(
+      "usage: session attach|up|down|status|sync|check|repair|init <sm-name>",
+    );
     process.exit(2);
   }
 
@@ -784,12 +951,13 @@ async function main(): Promise<void> {
 
   if (cmd === "peer") {
     const loaded = meshLoaded(profileArg);
+    const redirDefaults = resolveAckRedirectDefaults(loaded);
     let direct = false;
     let endedId: string | undefined;
     let redirectFrom: string | undefined;
-    let redirectBlock = "*managers";
-    let redirectTo = "secretary";
-    let redirectTtlMin = 45;
+    let redirectBlock = redirDefaults.block;
+    let redirectTo = redirDefaults.rewriteTo;
+    let redirectTtlMin = redirDefaults.ttlMin;
     const args: string[] = [];
     const rawArgs = [sub, ...tail].filter((x): x is string => x != null && x !== "");
     for (let i = 0; i < rawArgs.length; i++) {
@@ -801,8 +969,9 @@ async function main(): Promise<void> {
       if (a === "--ended" || a === "--ack") {
         const id = rawArgs[i + 1];
         if (!id || id.startsWith("-")) {
-          console.error("usage: peer … --ended <ack-id>");
-          process.exit(2);
+          // Bare --ack / --ended: auto-pick open ACK for this peer target.
+          endedId = "__auto__";
+          continue;
         }
         endedId = id;
         i++;
@@ -846,7 +1015,7 @@ async function main(): Promise<void> {
           console.error("usage: peer … --redirect-ttl <minutes>");
           process.exit(2);
         }
-        redirectTtlMin = Number(v) || 45;
+        redirectTtlMin = Number(v) || redirDefaults.ttlMin;
         i++;
         continue;
       }
@@ -865,9 +1034,32 @@ async function main(): Promise<void> {
     const rawMsg = textParts.join(" ").trim();
     if (!target || !rawMsg) {
       console.error(
-        "usage: peer verify [target] | peer [--direct] [--ended <ack-id>] [--redirect-from <seat>] <manager|secretary|slot-N|mini-N|@alias:seat|pane> <msg...>",
+        "usage: peer verify [target] | peer [--direct] [--ended|--ack [ack-id]] [--redirect-from <seat>] <target> <msg...>\n" +
+          "  --ack / --ended [id]  close open ask (id optional = auto-match from target)\n" +
+          "  ack-class msg (ACK/FYI/PASS) auto-closes matching open ask\n" +
+          "  or: agent ack reply <id> [msg]  (peer back + close in one shot)",
       );
       process.exit(2);
+    }
+    if (shouldAutoAckReply(rawMsg, endedId)) {
+      endedId = "__auto__";
+    }
+    try {
+      const resolvedEnded = await resolvePeerEndedAckId(loaded, target, endedId);
+      endedId = resolvedEnded;
+    } catch (e) {
+      if (endedId === "__auto__") {
+        console.error(`WARN: --ack auto: ${(e as Error).message}`);
+        endedId = undefined;
+      } else {
+        throw e;
+      }
+    }
+    if (endedId === "__auto__") {
+      console.error(
+        `WARN: --ack auto: no open ask matching ${target} — peer sent without close`,
+      );
+      endedId = undefined;
     }
     const armRedirect = async (fromSeat: string, reason: string) => {
       const cfg = chatRoomConfigForLoaded(loaded);
@@ -1229,13 +1421,21 @@ async function main(): Promise<void> {
   if (cmd === "ppa") {
     const loaded = meshLoaded(profileArg);
     const reg = createRegistryForProfile(loaded.profile);
-    const ppaSub = sub ?? "perf-index";
-    if (ppaSub !== "perf-index" && ppaSub !== "index") {
-      console.error("usage: ppa [perf-index]");
-      process.exit(2);
+    const args = [sub, ...tail].filter((a): a is string => Boolean(a));
+    const raw = args.includes("--raw") || args.includes("perf-index") || args.includes("index");
+    const idleIdx = args.findIndex((a) => a === "--idle" || a === "--idle-sec");
+    const idleSec =
+      idleIdx >= 0 && args[idleIdx + 1] ? Number.parseInt(args[idleIdx + 1]!, 10) : undefined;
+    if (args.some((a) => a === "-h" || a === "--help" || a === "help")) {
+      const { printCmdHelp } = await import("./commands/help-text.js");
+      printCmdHelp("ppa");
+      return;
     }
     try {
-      runPpa(loaded, reg);
+      runPpa(loaded, reg, {
+        raw,
+        idleSec: idleSec != null && Number.isFinite(idleSec) ? idleSec : undefined,
+      });
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -1246,6 +1446,21 @@ async function main(): Promise<void> {
   if (cmd === "contexts" || cmd === "seats") {
     const loaded = meshLoaded(profileArg);
     printSeatContexts(loaded, rest.includes("--json"));
+    return;
+  }
+
+  if (cmd === "hub" || cmd === "get") {
+    const loaded = meshLoaded(profileArg);
+    await runAgentHub(loaded, [sub, ...tail].filter((x): x is string => x != null && x !== ""));
+    return;
+  }
+
+  // Discoverable aliases — no literal "read-history" existed; map to chat + room tip.
+  if (cmd === "read-history" || cmd === "history" || cmd === "readhistory") {
+    const loaded = meshLoaded(profileArg);
+    const extra = [sub, ...tail].filter((x): x is string => x != null && x !== "");
+    await runAgentHub(loaded, ["chat", ...extra]);
+    console.log("also: seatmesh agent room tail [-r slug] [-n N]  ·  hub room");
     return;
   }
 
@@ -1286,6 +1501,12 @@ async function main(): Promise<void> {
       return;
     }
     runSeatCommand(loaded, [sub, ...tail]);
+    return;
+  }
+
+  if (cmd === "todo" || cmd === "todos") {
+    const loaded = meshLoaded(profileArg);
+    runSeatCommand(loaded, ["task", ...(sub ? [sub, ...tail] : tail)]);
     return;
   }
 
@@ -1521,6 +1742,32 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "swap") {
+    const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, "swap");
+    const a = sub;
+    const b = tail.find((t) => !t.startsWith("-"));
+    if (!a || !b) {
+      console.error(
+        "usage: swap <slot-A|mini-A> <slot-B|mini-B> [--identity]\n" +
+          "  default: visual tmux swap-pane (session data stays with each agent)\n" +
+          "  --identity: exchange numbers + seat dirs + mesh-agents (peer addresses swap)",
+      );
+      process.exit(2);
+    }
+    const identity = tail.includes("--identity");
+    try {
+      const result = runSeatSwap(loaded, a, b, { identity });
+      console.log(
+        `OK: swap ${result.mode} ${result.a} ↔ ${result.b} (${result.paneA} ↔ ${result.paneB})`,
+      );
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (cmd === "report") {
     const loaded = meshLoaded(profileArg);
     const { printStatusReport } = await import("./report/status-report.js");
@@ -1593,6 +1840,33 @@ async function main(): Promise<void> {
   if (cmd === "agent") {
     const loaded = meshLoaded(profileArg);
     const reg = createRegistryForProfile(loaded.profile);
+
+    // agent help / agent --help — never UNAUTHORIZED; teach the card + per-cmd usage.
+    if (
+      !sub ||
+      sub === "help" ||
+      sub === "-h" ||
+      sub === "--help"
+    ) {
+      if (sub === "help" && tail[0] && !tail[0].startsWith("-")) {
+        const { printCmdHelp } = await import("./commands/help-text.js");
+        if (!printCmdHelp(tail[0])) process.exit(2);
+        return;
+      }
+      if (sub === "help" || sub === "-h" || sub === "--help") {
+        const { printAgentHelpIndex } = await import("./commands/help-text.js");
+        printAgentHelpIndex();
+        const w = runWhoami(loaded, "here");
+        printAgentCard(w);
+        return;
+      }
+      // bare `agent` — card only (+ one help hint)
+      const w = runWhoami(loaded, "here");
+      printAgentCard(w);
+      console.log("help=seatmesh agent help <cmd>  # usage for one verb");
+      return;
+    }
+
     if (sub && AGENT_META.has(sub)) {
       if (sub === "apply") {
         const { bundle, opts } = parseAgentApplyArgs(tail);
@@ -1629,6 +1903,7 @@ async function main(): Promise<void> {
         printAgentUnauthorized(decision);
         process.exit(2);
       }
+      process.env.SEATMESH_AGENT_GATEWAY = "1";
       process.argv = stripAgentFromArgv(process.argv);
       return main();
     }

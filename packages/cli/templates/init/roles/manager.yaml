@@ -25,6 +25,8 @@ files:
 policies:
   - id: manager_throughput
     text: spawn minis for long generate; master stays coordination + PROPOSAL gate
+  - id: progress_fyi
+    text: "FYI/PROG/DONE/PROVED from workers = observe-only; do not peer-reply next steps unless operator asked or body is a real ask (BLOCKED?)"
   - id: peer
     cmd: 'seatmesh --profile .sm agent peer <target> "<msg>"'
   - id: minis

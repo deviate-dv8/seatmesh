@@ -75,7 +75,7 @@ seatmesh --profile /path/to/profile …
 | Skip empty on launch | `conventions.launchSkipsEmpty` | OK — internal `skipEmpty` param reads JSON |
 | Coord reload policy | `layout.base.coordSync` + `conventions.coordSync` | OK — **not** a CLI flag |
 | Daemon port / poll | `daemon.port`, `daemon.pollMs` | OK |
-| Chat checkback defaults | `chatRooms.checkback.*` | CLI `checkback start` ignores yaml today |
+| Chat checkback defaults | `chatRooms.checkback.*` | CLI renew default + daemon maxFires from yaml |
 | Connectivity enable + port | `connectivity.enabled`, `connectivity.proxyPort` | OK |
 | CPE policy (schema) | `connectivity.policy.*` | **Parsed, not used** by recovery |
 
@@ -161,23 +161,24 @@ data:
 
 ### 3.3 Launch / agent commands
 
-**Today:** `agent-builder.ts` hardcodes `opencode-cpe.sh`, claude
-`--permission-mode auto`, env prefix.
+**Today:** `agent-builder.ts` launches plain `opencode --auto` (+ claude
+`--permission-mode auto`, env prefix). CPE wrappers are config-only.
 
-**Target:**
+**Target (optional overrides for meshes that need a wrapper):**
 
 ```yaml
 agents:
   launch:
     envPrefix: "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor"
     wrappers:
-      opencode: scripts/opencode-cpe.sh
+      opencode: scripts/opencode-cpe.sh   # opt-in; not engine default
       opencodeMain: scripts/opencode-main.sh
     claude:
       permissionMode: auto
 ```
 
-Resume rows stay in `mesh-agents.json` (`resumeCmd` wins when present).
+Resume rows stay in `mesh-agents.json` (`resumeCmd` wins when present — clear or
+re-save to drop stale CPE wrappers after upgrading).
 
 ### 3.4 Comms prefixes (documented but missing from schema)
 

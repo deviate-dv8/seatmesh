@@ -2,6 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-15** | `seatmesh@1.1.5` | Notify Info/Yes/No native buttons; local Info cards GFM+Mermaid (zoom/pan/expand); session check/repair; CB workspace scope; policy config; agent help/COMMANDS |
 | **2026-09-15** | `seatmesh@1.1.4` | Early-adopter UX: `start` idempotent create-or-attach; `session down`; manager terminal welcome (whoami/switch); `sessions` documented |
 | **2026-09-15** | `seatmesh@1.1.3` | Cursor/Claude respawn prove: agent --trust; composer-ready verify+retry (OC parity); fresh whoami on success expected |
 | **2026-09-15** | `seatmesh@1.1.2` | ACK redirect temp-block: after manager→secretary redirect, mini ACK to manager rewritten to secretary |

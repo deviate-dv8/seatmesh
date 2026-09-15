@@ -27,7 +27,7 @@ const CLAUDE_WAIT_RETRY = { maxTries: 70, pollMs: 400, requireComposerReady: tru
 
 /**
  * Wait until OpenCode is detected and composer-ready, then stamp @mesh_oc_session.
- * Call only after pasteLaunchCmd — not before cpe-proxy-up / opencode boot finish.
+ * Call only after pasteLaunchCmd — not before opencode boot finish.
  */
 export function waitForOpenCodeLaunch(
   registry: ProviderRegistry,

@@ -1,9 +1,8 @@
 /**
  * Agent launch command builder — one place for pane shell setup before a CLI runs.
  *
- * OpenCode CPE proxy: NEVER bare `opencode`. Always `scripts/opencode-cpe.sh`, which
- * runs cpe-proxy-up, exports HTTPS_PROXY in the pane shell, then exec opencode --auto.
- * (OpenCode ignores JSON network.proxy — env in the shell is the proven path.)
+ * OpenCode is plain `opencode --auto` (same style as claude/kiro/agent). CPE / proxy
+ * wrappers live in workspace configs (e.g. scripts/opencode-cpe.sh) — not the engine.
  */
 
 const LAUNCH_PREFIX = "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor";
@@ -50,11 +49,12 @@ export function buildAgentLaunchCmd(
         ? `${LAUNCH_PREFIX} kiro-cli chat --resume-id ${resumeId} --trust-all-tools --model claude-opus-5`
         : `${LAUNCH_PREFIX} kiro-cli chat --trust-all-tools --model claude-opus-5`;
     case "opencode":
-      return resumeId
-        ? `cd ${workspace} && ${workspace}/scripts/opencode-cpe.sh --session ${resumeId}`
-        : `cd ${workspace} && ${workspace}/scripts/opencode-cpe.sh`;
     case "opencode-main":
-      return `cd ${workspace} && ${workspace}/scripts/opencode-main.sh`;
+      // Plain OC — no CPE/proxy wrapper. Workspace configs may still set a custom
+      // resumeCmd in mesh-agents.json when they need scripts/opencode-cpe.sh.
+      return resumeId
+        ? `${LAUNCH_PREFIX} opencode --auto --session ${resumeId}`
+        : `${LAUNCH_PREFIX} opencode --auto`;
     default:
       return null;
   }

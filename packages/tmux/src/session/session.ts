@@ -8,6 +8,7 @@ import { labelMeshSession } from "./labels.js";
 import { ensureMeshInbox, stopMeshInbox } from "../comms/inbox-bridge.js";
 import { launchSession } from "../agents/launch.js";
 import { ensureMeshSessionEnv, installSessionSaveHooks, spawnDetachedSessionSync } from "./session-env.js";
+import { ensureLogsWindow } from "./logs-window.js";
 import { saveMeshSession } from "./save-session.js";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import { inboxHealth, meshInboxPort, meshInboxStatusLine } from "../comms/inbox-bridge.js";
@@ -130,6 +131,8 @@ export function sessionUp(loaded: LoadedProfile): void {
     layoutMinisFromProfile(session, minis, wd, layout.minis);
   }
 
+  ensureLogsWindow(loaded, session);
+
   ensureSeatFiles(loaded);
   ensureMeshSessionEnv(session, {
     workspaceId: loaded.workspaceId,
@@ -211,8 +214,10 @@ export function sessionSync(loaded: LoadedProfile): void {
     workspace: loaded.workspace,
     profilePath: loaded.profilePath,
   });
+  ensureLogsWindow(loaded, session);
   installSessionSaveHooks(session, loaded);
   ensureMeshInbox(loaded, { quiet: true });
+  applyMeshSessionBorders(session, activeSessionWindows(loaded, session));
   logCoordSyncResults(syncCoordClisFromProfile(loaded, { trigger: "attach" }));
   try {
     saveMeshSession(loaded, createRegistryForProfile(loaded.profile));
@@ -282,6 +287,7 @@ export function relayoutMeshSession(
 
   layoutWorkersFromProfile(session, layout.workers.window, wd, layout.workers);
   layoutMinisFromProfile(session, layout.minis.window, wd, layout.minis);
+  ensureLogsWindow(loaded, session);
   ensureBaseLayout(loaded, session);
   labelMeshSession(loaded, session);
   if (!opts.skipMinisLeads) {
@@ -331,7 +337,7 @@ export function sessionStatus(loaded: LoadedProfile): void {
 
   const flags = layoutWindowFlags(loaded);
   console.log(
-    `layout_nvim=${flags.nvim} manager_stack=${managerStack(loaded).join("+")} workers=${flags.workers} minis=${flags.minis}`,
+    `layout_nvim=${flags.nvim} manager_stack=${managerStack(loaded).join("+")} workers=${flags.workers} minis=${flags.minis} logs=${flags.logs}`,
   );
 
   console.log("--- panes ---");

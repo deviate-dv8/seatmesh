@@ -21,14 +21,23 @@ raw-paste into tmux from scripts when a command exists.
 | What can I run (scoped) | `agent` / `agent <cmd>` |
 | Who am I / hub inline | `whoami [target]` |
 | Validate role-index paths | `whoami --validate` |
+| Retrieve contexts/todos/acks/cbs/chat/room/shared | `hub` · `hub <entity>` (alias `get`) |
+| Usage for one command | `help <cmd>` · `agent help <cmd>` · `<cmd> --help` |
+| Put agent on a pane (human) | `help human` · `switch <target> <cli>` |
+| Shell tab completion | `completion install` · `eval "$(seatmesh completion zsh)"` |
+| Greppable command catalog | `docs/COMMANDS.md` · `docs/cli/<verb>.md` (`rg "^## peer$" docs/COMMANDS.md`) |
+| Other live meshes | `remote` · `remote <alias> <seat> "…"` · `sessions` · `peer @alias:seat` |
 | Role briefing inject | fresh launch/switch/restart injects FRESH SUMMON — agent runs `seatmesh --profile .sm agent whoami` |
 | Ensure seat templates | `seat init` (also runs on reload / session up) |
 | Give a seat work | `assign <target> <text>` — FOCUS NOW + TASK + peer SENT. Do not hand-edit FOCUS. |
 | Flip seat Mark | `seat mark <target> <OPEN\|BUSY\|BLOCKED>` |
 | Write FOCUS NOW only | `seat now <target> <text>` (no peer) |
-| Append / check a TASK | `seat task add <target> "<text>"` / `seat task check <target> "<match>"` |
+| Reply / ask | `ask <t> "…"` · `msg <t> "…"` · `peer` · `ackmsg <t> "…"` · `reply <id>` |
+| Give a seat a todo | `todo give <target> "…"` · `todo <target> "…"` |
+| Append / check a TASK | `todo add\|check <target> "…"` (file-only add; check → `todos.reportTo`) |
 | Append a reminder | `seat remind <target> "<text>"` |
 | Seat map | `contexts [--json]` |
+| Who is slacking? | `ppa` (idle∧open work; `--raw` = telemetry) |
 | Cold archive | `snapshot here <slug>` |
 
 ## Comms
@@ -68,12 +77,16 @@ Targets for `peer`: `manager`, `secretary`, `slot-N`, `mini-N`, pane id.
 
 | Need | Command |
 |------|---------|
-| Launch / restart CLIs | `launch [all\|manager\|secretary\|1-6\|mini-N\|…]` |
-| Switch CLI type | `switch <target> <agent\|claude\|kiro\|opencode\|empty>` |
+| **Empty shell → agent CLI** | `switch <target> <opencode\|claude\|agent\|kiro>` — see `help human` |
+| Agent → plain shell | `switch <target> empty` |
+| Launch / restart configured CLI | `launch [all\|manager\|secretary\|1-6\|mini-N\|…]` |
+| Give seat **work** (not a CLI) | `assign <target> "<text>"` |
+| Swap two workers/minis (screen) | `swap <a> <b>` (manager/secretary) |
+| Swap numbers + seat dirs | `swap <a> <b> --identity` |
 | Rescue stuck composer | `flush <target>` |
 | Pane status / scrollback | `peek <target> status\|full` |
 | Agent vs terminal? | `kind <target>` (aliases: `what`, `typeof`) |
-| Performance index | `ppa [perf-index]` |
+| Who is slacking? | `ppa` · `ppa --raw` |
 | Pane op queue | `ops list\|clear` |
 
 ## Minis and secretary

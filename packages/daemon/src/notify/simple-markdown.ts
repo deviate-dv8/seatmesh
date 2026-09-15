@@ -1,64 +1,55 @@
 /**
- * Tiny safe markdown → HTML for seatmesh Info cards (no deps).
- * Supports headings, lists, bold/italic, links, images (incl. data URIs), paragraphs.
+ * Info-card markdown → HTML (marked GFM) with Mermaid fence support.
+ * ```mermaid blocks become <pre class="mermaid"> for client-side mermaid.js.
  */
+import { Marked } from "marked";
+
+const marked = new Marked({
+  gfm: true,
+  breaks: false,
+});
+
+marked.use({
+  renderer: {
+    code({ text, lang }: { text: string; lang?: string }) {
+      const language = (lang ?? "").trim().toLowerCase();
+      if (language === "mermaid") {
+        return `<pre class="mermaid">${escapeHtml(text)}</pre>\n`;
+      }
+      const cls = language ? ` class="language-${escapeAttr(language)}"` : "";
+      return `<pre><code${cls}>${escapeHtml(text)}</code></pre>\n`;
+    },
+    image({ href, title, text }: { href: string; title: string | null; text: string }) {
+      const src = String(href ?? "").trim();
+      if (!src || !/^(https?:|data:image\/)/i.test(src)) {
+        return escapeHtml(text || "");
+      }
+      const alt = escapeAttr(text || "");
+      const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+      return `<img src="${escapeAttr(src)}" alt="${alt}" class="md-img"${titleAttr} />`;
+    },
+    link({ href, title, text }: { href: string; title?: string | null; text: string }) {
+      const url = String(href ?? "").trim();
+      if (!url || !/^https?:\/\//i.test(url)) {
+        return text;
+      }
+      const titleAttr = title ? ` title="${escapeAttr(title)}"` : "";
+      return `<a href="${escapeAttr(url)}" target="_blank" rel="noopener"${titleAttr}>${text}</a>`;
+    },
+  },
+});
+
+/** Render card markdown → safe-ish HTML (GFM + mermaid fences). */
 export function renderSimpleMarkdown(src: string): string {
   const text = src.replace(/\r\n/g, "\n").trim();
   if (!text) return "";
+  const html = marked.parse(text, { async: false });
+  return typeof html === "string" ? html : "";
+}
 
-  const lines = text.split("\n");
-  const out: string[] = [];
-  let i = 0;
-  let inUl = false;
-
-  const flushUl = () => {
-    if (inUl) {
-      out.push("</ul>");
-      inUl = false;
-    }
-  };
-
-  while (i < lines.length) {
-    const line = lines[i] ?? "";
-    const trimmed = line.trim();
-
-    if (!trimmed) {
-      flushUl();
-      i++;
-      continue;
-    }
-
-    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
-    if (heading) {
-      flushUl();
-      const level = heading[1]!.length;
-      out.push(`<h${level}>${inline(heading[2]!)}</h${level}>`);
-      i++;
-      continue;
-    }
-
-    if (/^[-*]\s+/.test(trimmed)) {
-      if (!inUl) {
-        out.push("<ul>");
-        inUl = true;
-      }
-      out.push(`<li>${inline(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
-      i++;
-      continue;
-    }
-
-    flushUl();
-    // paragraph: gather until blank
-    const chunk: string[] = [trimmed];
-    i++;
-    while (i < lines.length && lines[i]!.trim() && !/^(#{1,3})\s+/.test(lines[i]!.trim()) && !/^[-*]\s+/.test(lines[i]!.trim())) {
-      chunk.push(lines[i]!.trim());
-      i++;
-    }
-    out.push(`<p>${inline(chunk.join(" "))}</p>`);
-  }
-  flushUl();
-  return out.join("\n");
+/** True when body has a ```mermaid fence (card should load mermaid.js). */
+export function markdownNeedsMermaid(src: string): boolean {
+  return /```\s*mermaid\b/i.test(src);
 }
 
 function escapeHtml(s: string): string {
@@ -67,24 +58,4 @@ function escapeHtml(s: string): string {
 
 function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, "&quot;");
-}
-
-function inline(s: string): string {
-  let t = escapeHtml(s);
-  // images ![alt](url) — allow http(s) and data:
-  t = t.replace(
-    /!\[([^\]]*)\]\((data:[^)\s]+|https?:[^)\s]+)\)/g,
-    (_m, alt: string, url: string) =>
-      `<img src="${escapeAttr(url)}" alt="${escapeAttr(alt)}" class="md-img" />`,
-  );
-  // links [text](url)
-  t = t.replace(
-    /\[([^\]]+)\]\((https?:[^)\s]+)\)/g,
-    (_m, label: string, url: string) =>
-      `<a href="${escapeAttr(url)}" target="_blank" rel="noopener">${label}</a>`,
-  );
-  t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  t = t.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
-  t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
-  return t;
 }

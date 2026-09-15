@@ -5,8 +5,10 @@ import {
   chatRoomConfigForLoaded,
   formatAckStatusLine,
   openAcks,
+  resolveAckRedirectDefaults,
 } from "@seat-mesh/core";
 import { ensureMeshInbox, meshInboxPort } from "@seat-mesh/tmux";
+import { runAckReply } from "./ack-reply.js";
 
 function requireMeshInbox(loaded: LoadedProfile): void {
   if (ensureMeshInbox(loaded, { quiet: true })) return;
@@ -59,7 +61,7 @@ async function listAcks(
 
 export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
   const ack = new Command("ack").description(
-    "Unanswered asks ledger — clear with: ack <id> \"<one line>\"",
+    "Unanswered asks ledger — close with: ack <id>   (note optional; no peer reply required)",
   );
 
   ack
@@ -73,6 +75,25 @@ export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
       const loaded = getLoaded();
       requireMeshInbox(loaded);
       await listAcks(loaded, opts);
+    });
+
+  ack
+    .command("reply")
+    .description(
+      "Peer back to the asker + close ACK in one shot (limits n+1). Default msg: ACK",
+    )
+    .argument("<id>", "ack id or prefix")
+    .argument("[msg...]", "optional peer body (default: ACK)")
+    .action(async (id: string, msgParts: string[]) => {
+      const loaded = getLoaded();
+      requireMeshInbox(loaded);
+      try {
+        const r = await runAckReply(loaded, id, msgParts.join(" "));
+        console.log(`ok ack-reply id=${r.ackId} -> ${r.target} msg=${r.msg}`);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
     });
 
   ack
@@ -110,11 +131,7 @@ export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
           return;
         }
 
-        const note = (noteParts ?? []).join(" ").trim();
-        if (!note) {
-          console.error('usage: ack <id> "<one line of what you did>"');
-          process.exit(2);
-        }
+        const note = (noteParts ?? []).join(" ").trim() || "closed";
         const data = await fetchJson<{ entry?: AckRow; error?: string }>(
           `${inboxBase(loaded)}/ack`,
           {
@@ -137,17 +154,21 @@ export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
       "Arm temp block: ACK-class from <seat> to manager is rewritten to secretary (stops n+1 wrong target)",
     )
     .argument("<from>", "sender seat (mini-1, worker-2, …)")
-    .option("--block <target>", "wrong recipient to block", "*managers")
-    .option("--to <seat>", "rewrite destination", "secretary")
-    .option("--ttl-min <n>", "block lifetime minutes", "45")
+    .option("--block <target>", "wrong recipient to block (acks.redirect.block)")
+    .option("--to <seat>", "rewrite destination (acks.redirect.rewriteTo)")
+    .option("--ttl-min <n>", "block lifetime minutes (acks.redirect.ttlMin)")
     .option("--reason <text>", "why armed")
     .action(
       async (
         from: string,
-        opts: { block: string; to: string; ttlMin: string; reason?: string },
+        opts: { block?: string; to?: string; ttlMin?: string; reason?: string },
       ) => {
         const loaded = getLoaded();
         requireMeshInbox(loaded);
+        const redir = resolveAckRedirectDefaults(loaded);
+        const blockTarget = (opts.block ?? "").trim() || redir.block;
+        const rewriteTo = (opts.to ?? "").trim() || redir.rewriteTo;
+        const ttlMin = Number(opts.ttlMin) > 0 ? Number(opts.ttlMin) : redir.ttlMin;
         const data = await fetchJson<{ ok: boolean; block: { id: string; untilMs: number } }>(
           `${inboxBase(loaded)}/ack/redirect-block`,
           {
@@ -155,17 +176,16 @@ export function buildAckCommands(getLoaded: () => LoadedProfile): Command {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               fromSeat: from,
-              blockTarget: opts.block,
-              rewriteTo: opts.to,
-              ttlMin: Number(opts.ttlMin) || 45,
+              blockTarget,
+              rewriteTo,
+              ttlMin,
               armedBy: "ack-redirect",
               reason: opts.reason,
             }),
           },
-        );
-        const until = new Date(data.block.untilMs).toISOString();
+        );        const until = new Date(data.block.untilMs).toISOString();
         console.log(
-          `OK: ack-redirect ${from} block=${opts.block}→${opts.to} until=${until} id=${data.block.id}`,
+          `OK: ack-redirect ${from} block=${blockTarget}→${rewriteTo} until=${until} id=${data.block.id}`,
         );
       },
     );

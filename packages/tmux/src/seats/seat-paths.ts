@@ -76,6 +76,11 @@ export function seatFile(
   return dir ? path.join(dir, name) : null;
 }
 
+/** Cross-seat MD notes — HQ + workers + minis (not per-seat FOCUS/TASKS). */
+export function sharedSeatsDir(loaded: LoadedProfile): string {
+  return path.join(buildResolvedPaths(loaded).seatsRoot, "_shared");
+}
+
 export function gateQueuePath(loaded: LoadedProfile): string {
   return meshRuntimePaths(loaded).gateQueue;
 }

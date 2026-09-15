@@ -18,22 +18,27 @@ Default config is workspace `.sm/` (walk-up). No `--profile` needed.
 
 ## When you need the operator's eyes (beta)
 
-**Beta** — use notify; do not assume toasts/links/Yes-No always work. Fall back to `agent peer` / `agent room say` if needed.
+**Beta** — use notify; fall back to peer/room if toast fails. Full recipe: `agent help notify`.
 
 ```bash
 # Eyes + link
 seatmesh agent notify "<session>" "<check>" --url "<link>"
 
-# Decision: Info · Yes · No (Info = browser card)
-seatmesh agent notify yesno "<title>" "<body>" [--target secretary] [--yes-msg "…"]
+# Info only (markdown card, no Yes/No)
+seatmesh agent notify info "<title>" --body "## Why…"
+
+# Decision: Info · Yes · No on one card
+seatmesh agent notify yesno "<title>" "<blurb>" --body "## Stakes…" \
+  [--md file] [--image path] [--target secretary] [--yes-msg "…"] [--no-msg "…"]
 ```
 
 | yesno piece | Meaning |
 |-------------|---------|
 | **title** | Decision name (toast + card heading) |
-| **body** | Description / stakes (put URL in body if useful) |
-| **Info** | Opens browser decision UI (`/act/card/…`) |
-| **Yes / No** | One-shot → peer to `--target` |
+| **blurb** | Short toast line (not the full markdown) |
+| **--body / --md** | Info card content (markdown) |
+| **Info** | Opens browser `/act/card/…` |
+| **Yes / No** | One-shot peer to `--target` |
 
 Full table + rules: `.sm/AGENTS.md`.
 
@@ -41,9 +46,9 @@ Full table + rules: `.sm/AGENTS.md`.
 
 | Job | Command |
 |-----|---------|
-| Operator eyes (beta) | `agent notify "<session>" "<check>" [--url <link>]` |
-| Rich details / images | `agent notify details\|md "<title>" --md <file> [--image <path>]` |
-| Yes/No decision (beta) | `agent notify yesno "<title>" "<body>"` |
+| Operator eyes (beta) | `agent notify …` · `help notify` (eyes / info / yesno) |
+| Rich details / images | `agent notify info\|md "<title>" --md <file>\|--body "…" [--image]` |
+| Yes/No decision (beta) | `agent notify yesno "<title>" "<blurb>" --body "…" [--target]` |
 | Reply / ask | `agent peer <target> "<msg>" [--ended <ack-id>]` |
 | Close ask | `agent ack <id> "<note>"` |
 | List / stop checkback | `agent cb list` · `agent cb cancel <id>` |

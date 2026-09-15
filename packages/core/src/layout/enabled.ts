@@ -12,3 +12,7 @@ export function workersLayoutEnabled(layout: MeshLayout, saved?: SavedLayout | n
 export function minisLayoutEnabled(layout: MeshLayout, saved?: SavedLayout | null): boolean {
   return saved?.minis?.enabled ?? layout.minis.enabled ?? false;
 }
+
+export function logsLayoutEnabled(layout: MeshLayout, saved?: SavedLayout | null): boolean {
+  return saved?.logs?.enabled ?? layout.logs?.enabled ?? true;
+}

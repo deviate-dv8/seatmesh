@@ -120,8 +120,6 @@ export function unseenSummaryForAgent(
   return countUnseenMessages(messages, agentId, state[agentId]);
 }
 
-const THIN_NOTIFY_MIN_MS = 5 * 60 * 1000;
-
 /**
  * Skip thin room pings on a per-agent cooldown.
  * Do NOT key off unseen growth — busy rooms grow unseen on every FYI and that
@@ -142,7 +140,7 @@ export function shouldSkipThinRoomNotify(
   if (!cur?.lastThinNotifyAt) return false;
   const age = nowMs - Date.parse(cur.lastThinNotifyAt);
   if (!Number.isFinite(age) || age < 0) return false;
-  return age < THIN_NOTIFY_MIN_MS;
+  return age < (cfg.thinNotifyMinMs ?? 5 * 60 * 1000);
 }
 
 export function recordThinRoomNotify(

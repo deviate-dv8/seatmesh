@@ -24,6 +24,12 @@ export interface CheckbackRow {
   expiresAt?: string;
   senderLabel?: string;
   recipientLabel?: string;
+  /** Seat label at arm time (mini-N / slot-N / role) for retarget after pane-id reuse. */
+  ownerLabel?: string;
+  /** Mesh workspace that armed this CB — fire must stay inside it. */
+  workspaceId?: string;
+  /** Tmux session name at arm time. */
+  sessionName?: string;
   /** Successful fires so far — ordinary CBs stop renewing after CHECKBACK_MAX_FIRES. */
   fireCount?: number;
   /** When set, cc-limit-retry fires only if pane session still matches. */

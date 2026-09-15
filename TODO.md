@@ -24,7 +24,7 @@
 - [x] **0.2** 3×2 workers + 4×2 minis layout → equal `select-layout` grid (`layoutWorkers3x2` / `layoutMinis4x2`; `./sm.sh layout` fixes live session)
 - [x] **0.3** `@mesh_*` labels + border strip → `labels.ts`, `borders.ts`
 - [x] **0.4** Launch CLIs on session up → `launch.ts` + `agent-builder.ts` (reads harness JSON read-only)
-- [x] **0.4b** Pane env before CLI → `session-env.ts` (NO_COLOR scrub) + `opencode-cpe.sh` for OC proxy
+- [x] **0.4b** Pane env before CLI → `session-env.ts` (NO_COLOR scrub); OC plain launch (CPE scripts optional/config-only)
 - [x] **0.5** `./sm.sh verify`
 - [x] **0.6** `./sm.sh labels`
 

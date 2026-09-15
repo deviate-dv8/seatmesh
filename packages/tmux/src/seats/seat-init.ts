@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildResolvedPaths, seatDirSegment, type LoadedProfile } from "@seat-mesh/core";
-import { gateQueuePath } from "./seat-paths.js";
+import { gateQueuePath, sharedSeatsDir } from "./seat-paths.js";
 
 const GATE_QUEUE_TEMPLATE = `# serial gate queue (canonical — fresh agents start here)
 
@@ -12,6 +12,37 @@ const GATE_QUEUE_TEMPLATE = `# serial gate queue (canonical — fresh agents sta
 |---|-------|-------|--------|-----------------|
 | 6 | overview-metrics alert scope | worker-6 | **OPEN** | Mirror login.block.ts in overview-metrics.block.ts |
 | 7 | full-gate playwright | mini-1 | **BLOCKED** on #6 | After worker-6 DONE |
+`;
+
+const SHARED_README = `# Shared mesh notes (\`seats/_shared\`)
+
+One folder for **base HQ** (manager / secretary), **workers**, and **minis**.
+
+Use when more than one seat must read/edit the same MD — slot progress scratch, supervise
+handoffs, redirected secretary notes. Per-seat \`FOCUS\` / \`TASKS\` stay private.
+Secretary \`SUPERVISE-LAST.md\` stays the machine supervise ledger (not this folder).
+
+**Whoami:** \`shared=\` on cold-start · \`read_first\` → \`NOTES.md\`.
+
+Add more \`.md\` files here as needed; do not invent a second shared tree.
+`;
+
+const SHARED_NOTES = `# Shared NOTES
+
+**Updated:** (set when you edit)
+
+## Slot / mini progress
+
+| Seat | Status | Note |
+|------|--------|------|
+| | | |
+
+## Supervise / redirect
+
+(empty — secretary or lead appends during supervise)
+
+## Scratch
+
 `;
 
 export interface SeatInitResult {
@@ -57,7 +88,25 @@ Run \`seatmesh --profile .sm agent whoami\` — cold-start block has GATE-QUEUE 
   return anyNew;
 }
 
-/** Idempotent: create missing seat trio + GATE-QUEUE only — never overwrite live FOCUS/TASKS. */
+function ensureShared(loaded: LoadedProfile): string[] {
+  const dir = sharedSeatsDir(loaded);
+  const created: string[] = [];
+  fs.mkdirSync(dir, { recursive: true });
+  const seeds: Record<string, string> = {
+    "README.md": SHARED_README,
+    "NOTES.md": SHARED_NOTES,
+  };
+  for (const [name, body] of Object.entries(seeds)) {
+    const p = path.join(dir, name);
+    if (!fs.existsSync(p)) {
+      fs.writeFileSync(p, body);
+      created.push(p);
+    }
+  }
+  return created;
+}
+
+/** Idempotent: create missing seat trio + GATE-QUEUE + _shared — never overwrite live FOCUS/TASKS. */
 export function runSeatInit(loaded: LoadedProfile): SeatInitResult {
   const root = buildResolvedPaths(loaded).seatsRoot;
   const dirs = loaded.profile.seats.dirs;
@@ -90,6 +139,9 @@ export function runSeatInit(loaded: LoadedProfile): SeatInitResult {
       ensured.push(d);
     }
   }
+
+  for (const p of ensureShared(loaded)) created.push(p);
+  ensured.push(sharedSeatsDir(loaded));
 
   const gq = gateQueuePath(loaded);
   if (!fs.existsSync(gq)) {

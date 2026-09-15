@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { LoadedProfile } from "@seat-mesh/core";
 import { tmux } from "../lib/tmux-run.js";
+import { applyMeshStatusChrome } from "./session-chrome.js";
 
 /**
  * Absolute path to the seatmesh CLI entry (dist/main.js) when invoked as the CLI.
@@ -135,5 +136,12 @@ export function ensureMeshSessionEnv(
   }
   if (opts.profilePath) {
     tmux(["set-environment", "-t", session, "MESH_PROFILE_PATH", opts.profilePath]);
+  }
+
+  if (opts.workspace && opts.sessionName) {
+    applyMeshStatusChrome(session, {
+      workspace: opts.workspace,
+      sessionName: opts.sessionName,
+    });
   }
 }

@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   chatRoomConfigForLoaded,
-  formatAckCloseShell,
   formatAckOpenLine,
   listRooms,
   loadRoomProfile,
@@ -11,6 +10,7 @@ import {
   resolveAgentId,
   roomDir,
   runtimePathHint,
+  shortAckId,
   unseenSummaryForAgent,
   isManagerKind,
   seatmeshCmd,
@@ -20,6 +20,7 @@ import {
 
 const m = (sub: string) => seatmeshCmd(sub);
 import type { WhoamiResult } from "./whoami.js";
+import { hubRetrievalWhoamiLines } from "./hub-lines.js";
 
 interface CheckbackRow {
   id: string;
@@ -157,6 +158,7 @@ export function buildWhoamiContextLines(
   lines.push("--- context ---");
   lines.push(`agent_id=${agentId}`);
   lines.push(`fresh_summon=run ${m("whoami")} first; hub is that dump; later peer is a task`);
+  lines.push(...hubRetrievalWhoamiLines());
   if (mini) lines.push(`mini=${mini}`);
   if (opts.jobRole) lines.push(`job_role=${opts.jobRole}`);
 
@@ -245,8 +247,12 @@ export function buildWhoamiContextLines(
         lines.push(`ack=${formatAckOpenLine(row)}`);
       }
       if (open.length > 5) lines.push(`ack_more=${open.length - 5}`);
-      lines.push(`ack_cmds=${m("ack")} | ${formatAckCloseShell(open[0]!)}`);
-      lines.push("ack_hint=chat reply does NOT clear — run ack_cmds / peer … --ended <id>");
+      lines.push(
+        `ack_cmds=${m("ack")} | ${m("ack <id>")} | ${m(`ack reply ${shortAckId(open[0]!.id)} "ACK"`)}`,
+      );
+      lines.push(
+        "ack_hint=close: ack <id> · reply+close: ack reply <id> | peer <from> --ack · chat alone does NOT clear",
+      );
     }
   }
 

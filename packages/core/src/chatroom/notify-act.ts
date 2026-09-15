@@ -27,5 +27,7 @@ export interface NotifyActCard {
 export interface NotifyActRegisterCardInput {
   title: string;
   body: string;
+  /** External https URL → "Open" button on the Info card (not a one-shot act). */
+  openUrl?: string;
 }
 

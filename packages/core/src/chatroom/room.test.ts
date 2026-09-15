@@ -58,6 +58,8 @@ const testChatCfg: ChatRoomConfig = {
   checkbackRenew: "3m",
   checkbackCallPendingDuration: "1m",
   checkbackCallPendingRenew: "1m",
+  checkbackMaxFires: 3,
+  thinNotifyMinMs: 5 * 60 * 1000,
   inboxBase: "http://127.0.0.1:1",
 };
 

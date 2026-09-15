@@ -14,7 +14,9 @@ import {
   readProfileSeatmeshVersion,
 } from "../ui/version-nudge.js";
 import { runMigrateRuntime, type MigrateRuntimeResult } from "./migrate-runtime.js";
+import { mergeMeshConfigOnUpdate, type MeshConfigMergeResult } from "./merge-mesh-config.js";
 import { roleTemplatesDir } from "./init.js";
+import { ensureSeatFiles } from "@seat-mesh/tmux";
 
 export interface UpdateOptions {
   profileArg?: string;
@@ -28,6 +30,7 @@ export interface UpdateResult {
   pathsManifest: string;
   migrate?: MigrateRuntimeResult;
   rolePack?: ReturnType<typeof runRolePackMigrate>;
+  configMerge?: MeshConfigMergeResult;
   packageVersion: string;
   previousVersion: string | null;
   /** Any _vendor file or paths.json actually changed (or would change in dry-run). */
@@ -190,12 +193,35 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
 
   ensureRuntimeDirs(loaded, refreshed, skipped, dryRun);
 
+  const configMerge = mergeMeshConfigOnUpdate(loaded, dryRun);
+  for (const key of configMerge.added) {
+    refreshed.push(`${configMerge.profilePath}#${key}`);
+  }
+
+  // Seed seats/_shared (+ missing FOCUS/TASKS trios) — never overwrite live seat MDs.
+  if (!dryRun) {
+    const seats = ensureSeatFiles(loaded);
+    for (const p of seats.created) {
+      if (!refreshed.includes(p)) refreshed.push(p);
+    }
+  } else {
+    const sharedNotes = path.join(buildResolvedPaths(loaded).seatsRoot, "_shared", "NOTES.md");
+    if (!fs.existsSync(sharedNotes)) refreshed.push(sharedNotes);
+  }
+
   const vendorTouched = refreshed.some((p) => p.includes(`${path.sep}_vendor${path.sep}`));
   const changed =
     refreshed.length > 0 ||
     previousVersion !== packageVersion ||
-    rolePack.direction !== "noop";
-  if (!dryRun && (vendorTouched || previousVersion !== packageVersion || rolePack.direction !== "noop")) {
+    rolePack.direction !== "noop" ||
+    (configMerge.added.length > 0);
+  if (
+    !dryRun &&
+    (vendorTouched ||
+      previousVersion !== packageVersion ||
+      rolePack.direction !== "noop" ||
+      configMerge.wrote)
+  ) {
     writeProfileVersion(loaded.profileDir, packageVersion, false);
   }
 
@@ -205,6 +231,7 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
     pathsManifest,
     migrate,
     rolePack,
+    configMerge,
     packageVersion,
     previousVersion,
     changed,

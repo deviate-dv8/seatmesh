@@ -1,4 +1,4 @@
-import { assignPrompt, type LoadedProfile } from "@seat-mesh/core";
+import { assignPrompt, resolveTodosConfig, type LoadedProfile } from "@seat-mesh/core";
 import {
   armCoordExpectAfterAssign,
   isHumanCoTypedTarget,
@@ -8,6 +8,7 @@ import { enqueuePrompt } from "../inject/prompt.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { parseSeatTarget } from "./seat-paths.js";
 import { appendTask, setFocusNow } from "./seat-update.js";
+import { addSeatTodo } from "./seat-todo.js";
 
 export interface AssignResult {
   target: string;
@@ -55,7 +56,20 @@ export function runAssign(
     via = sent.via;
   }
 
-  armCoordExpectAfterAssign(loaded, { target: targetRaw, assignText: now });
+  const todosCfg = resolveTodosConfig(loaded);
+  armCoordExpectAfterAssign(loaded, {
+    target: targetRaw,
+    assignText: now,
+    duration: todosCfg.checkbackDuration,
+    renew: todosCfg.checkbackRenew,
+  });
+
+  // Assignee todo CB (≥20m). appendTask already ran — addSeatTodo is idempotent on the line.
+  try {
+    addSeatTodo(loaded, target, now, targetRaw);
+  } catch {
+    /* CB arm best-effort */
+  }
 
   return {
     target: targetRaw,
