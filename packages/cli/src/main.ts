@@ -41,8 +41,10 @@ import {
   listSessionPanes,
   sessionAttach,
   sessionUp,
+  sessionDown,
   sessionStatus,
   sessionSync,
+  tmuxHasSession,
   relayoutMeshSession,
   realignAllLayouts,
   reloadMesh,
@@ -173,10 +175,10 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   Cold start: bin/seatmesh auto-runs npm install + build when dist is stale
 
 Setup (run once per project, by a human)
-  start               init (if no .sm/ here) + session up, in one step
-  init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir
+  start               ONE command: init if needed + create-or-attach session (fresh or existing)
+  init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir only
   session init <sm-name> [--force] [--name NAME]   create .sm-<name>/ (multi-config)
-  sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
+  sessions [list|attach|forget|register] [--json]   global registry + TUI picker (all meshes)
   update [--dry-run] [--migrate] [--no-restart-inbox]
                                         refresh _vendor (file-by-file) + role-pack migrate + paths.json
   roles status|migrate [--to VER]|steps   locked role-pack up/down (1.1.x)
@@ -188,7 +190,7 @@ Status / diagnostics
   test                          smoke: layout, providers, inbox, proxy
 
 Session / layout (infra shape, operator or manager)
-  session attach|up|status|sync|init <sm-name>
+  session attach|up|down|status|sync|init <sm-name>
   reload [--layout]   rebuild engine + labels (no session kill; --layout re-grids)
   layout [--no-leads] [--dry-run] [--yes]   workers + minis grid (queued)
   layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
@@ -374,6 +376,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "start") {
+    // One command for fresh OR existing: init if needed → attach (creates if missing).
     let startProfileArg = profileArg;
     if (!profileArg && !findDotSmConfig()) {
       const r = runInit({});
@@ -387,9 +390,14 @@ async function main(): Promise<void> {
     } catch {
       /* non-fatal */
     }
-    sessionUp(loaded);
-    console.log(`OK: session '${loaded.sessionName}' up`);
-    printMeshInboxStatus(loaded);
+    if (tmuxHasSession(loaded.sessionName)) {
+      console.log(`OK: session '${loaded.sessionName}' already up — attaching`);
+      printMeshInboxStatus(loaded);
+    } else {
+      console.log(
+        `OK: creating session '${loaded.sessionName}' (manager = terminal + whoami/switch hints)`,
+      );
+    }
     sessionAttach(loaded);
     return;
   }
@@ -412,7 +420,7 @@ async function main(): Promise<void> {
     } catch {
       /* non-fatal */
     }
-    console.log("  next: seatmesh session up");
+    console.log("  next: npx seatmesh start");
     return;
   }
 
@@ -444,7 +452,7 @@ async function main(): Promise<void> {
       if (!rawName || rawName.startsWith("-")) {
         console.error("usage: session init <sm-name> [--force] [--name NAME]");
         console.error("  creates .sm-<name>/ (default project config is still .sm via: init)");
-        console.error("  then: seatmesh --profile .sm-<name> session up");
+        console.error("  then: seatmesh --profile .sm-<name> start");
         process.exit(2);
       }
       const force = tail.includes("--force");
@@ -463,7 +471,7 @@ async function main(): Promise<void> {
       } catch {
         /* non-fatal */
       }
-      console.log(`  next: seatmesh --profile ${smDirName} session up`);
+      console.log(`  next: seatmesh --profile ${smDirName} start`);
       console.log(`  agents: seatmesh --profile ${smDirName} agent …`);
       console.log(`  default .sm/ still needs no --profile (walk-up)`);
       return;
@@ -484,6 +492,13 @@ async function main(): Promise<void> {
       printMeshInboxStatus(loaded);
       return;
     }
+    if (sub === "down" || sub === "stop" || sub === "kill") {
+      const r = sessionDown(loaded);
+      console.log(
+        `OK: session down name=${loaded.sessionName} killed=${r.sessionKilled} inboxStopped=${r.inboxStopped}`,
+      );
+      return;
+    }
     if (sub === "attach" || !sub) {
       // Don't block tmux attach on registry I/O — fire and forget.
       void touchRegistry();
@@ -500,7 +515,7 @@ async function main(): Promise<void> {
       sessionStatus(loaded);
       return;
     }
-    console.error("usage: session attach|up|status|sync|init <sm-name>");
+    console.error("usage: session attach|up|down|status|sync|init <sm-name>");
     process.exit(2);
   }
 

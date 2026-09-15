@@ -1,17 +1,19 @@
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { parseGridSpec, type LoadedProfile } from "@seat-mesh/core";
+import { managerPaneWelcomeShell, parseGridSpec, type LoadedProfile } from "@seat-mesh/core";
 import { managerStack, realignBaseLayout } from "./base-layout.js";
 import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
-import { ensureMeshInbox } from "../comms/inbox-bridge.js";
+import { ensureMeshInbox, stopMeshInbox } from "../comms/inbox-bridge.js";
 import { launchSession } from "../agents/launch.js";
 import { ensureMeshSessionEnv, installSessionSaveHooks, spawnDetachedSessionSync } from "./session-env.js";
 import { saveMeshSession } from "./save-session.js";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import { inboxHealth, meshInboxPort, meshInboxStatusLine } from "../comms/inbox-bridge.js";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
+import { meshManagerPane } from "../lib/pane-meta.js";
+import { withPaneInputEnabled } from "../inject/inject.js";
 import { assertRelayoutSafe } from "./layout-guard.js";
 import {
   applyMinisLeadsFromProfile,
@@ -41,6 +43,45 @@ function tmuxBatch(args: string[][]): void {
   }
 }
 
+function sleepMs(ms: number): void {
+  spawnSync("sleep", [String(ms / 1000)]);
+}
+
+/**
+ * Fresh manager = plain terminal with whoami/switch hints (early-adopter onboarding).
+ * Does not launch an agent CLI — operator switches when ready.
+ */
+export function paintManagerWelcome(loaded: LoadedProfile, session: string): void {
+  const layout = loaded.profile.layout;
+  if (!layout) return;
+  const pane =
+    meshManagerPane(session, layout.base.window) ??
+    tmux(["list-panes", "-t", `${session}:${layout.base.window}`, "-F", "#{pane_id}"]).out
+      .split("\n")
+      .map((s) => s.trim())
+      .find((s) => s.startsWith("%"));
+  if (!pane) return;
+  const script = managerPaneWelcomeShell();
+  withPaneInputEnabled(pane, () => {
+    tmux(["send-keys", "-t", pane, "C-c"]);
+    sleepMs(80);
+    tmux(["send-keys", "-t", pane, "clear", "Enter"]);
+    sleepMs(120);
+    // One paste of the echo block (bash -c so newlines survive).
+    const b64 = Buffer.from(script, "utf8").toString("base64");
+    tmux([
+      "send-keys",
+      "-t",
+      pane,
+      "-l",
+      `echo ${JSON.stringify(b64)} | base64 -d | bash`,
+    ]);
+    sleepMs(60);
+    tmux(["send-keys", "-t", pane, "Enter"]);
+  });
+  tmux(["set-option", "-p", "-t", pane, "@mesh_status", "terminal · run whoami / switch here"]);
+}
+
 /** Create seatmesh session: base always; nvim/workers/minis optional on cold start. */
 export function sessionUp(loaded: LoadedProfile): void {
   const session = loaded.sessionName;
@@ -49,7 +90,9 @@ export function sessionUp(loaded: LoadedProfile): void {
   if (!layout) throw new Error("profile missing layout");
 
   if (tmuxHasSession(session)) {
-    throw new Error(`session '${session}' already exists — seatmesh --profile .sm session attach`);
+    throw new Error(
+      `session '${session}' already exists — npx seatmesh start  (or: session attach | session down)`,
+    );
   }
 
   const flags = layoutWindowFlags(loaded);
@@ -107,6 +150,9 @@ export function sessionUp(loaded: LoadedProfile): void {
     tmux(["send-keys", "-t", `${session}:${nvim}`, "nvim", "Enter"]);
   }
 
+  // Manager stays a terminal with onboarding echoes (whoami + switch). Other seats may launch.
+  paintManagerWelcome(loaded, session);
+
   if (process.env.MESH_SKIP_LAUNCH !== "1") {
     launchSession(loaded);
   }
@@ -118,6 +164,35 @@ export function sessionUp(loaded: LoadedProfile): void {
   } catch {
     /* non-fatal */
   }
+}
+
+/**
+ * Tear down mesh session + inbox (early-adopter recovery when up is wedged).
+ * Safe if session already gone.
+ */
+export function sessionDown(
+  loaded: LoadedProfile,
+  opts: { keepInbox?: boolean } = {},
+): { sessionKilled: boolean; inboxStopped: boolean } {
+  const session = loaded.sessionName;
+  let inboxStopped = false;
+  if (!opts.keepInbox) {
+    try {
+      stopMeshInbox(loaded);
+      inboxStopped = true;
+    } catch {
+      /* already down */
+    }
+  }
+  let sessionKilled = false;
+  if (tmuxHasSession(session)) {
+    const r = tmux(["kill-session", "-t", session]);
+    sessionKilled = r.ok;
+    if (!r.ok) {
+      throw new Error(`session down failed: ${r.err || r.out || "tmux kill-session"}`);
+    }
+  }
+  return { sessionKilled, inboxStopped };
 }
 
 /**

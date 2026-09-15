@@ -78,10 +78,14 @@ function writeGlobalRegistrySync(reg: GlobalRegistry): void {
   fs.writeFileSync(file, `${JSON.stringify(sorted, null, 2)}\n`);
 }
 
-/** Project `.sm/` profiles only — not bundled minimal fallback. */
+/** Project `.sm/` or `.sm-<id>/` profiles — not bundled minimal fallback. */
 export function isProjectProfilePath(profilePath: string): boolean {
   const norm = profilePath.split(path.sep).join("/");
-  return norm.includes(`/${SM_DIR}/`) || norm.endsWith(`/${SM_DIR}/mesh.config.yaml`);
+  if (norm.includes(`/${SM_DIR}/`) || norm.endsWith(`/${SM_DIR}/mesh.config.yaml`)) {
+    return true;
+  }
+  // Multi-config: .sm-cpe/mesh.config.yaml
+  return /\/\.sm-[a-zA-Z0-9][a-zA-Z0-9_-]*\//.test(norm);
 }
 
 export function sessionLabel(loaded: LoadedProfile): string {

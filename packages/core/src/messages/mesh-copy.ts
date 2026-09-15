@@ -168,6 +168,37 @@ export function secretaryColdStartBrief(): string {
   );
 }
 
+/**
+ * Printed into the manager pane on fresh `session up` / `start` (plain shell).
+ * Operator runs whoami + switch from here — no agent CLI auto-launched on manager.
+ */
+export function managerPaneWelcomeShell(): string {
+  const who = seatmeshCmd("whoami");
+  const swAgent = seatmeshCmd("switch here agent");
+  const swClaude = seatmeshCmd("switch here claude");
+  const swOc = seatmeshCmd("switch here opencode");
+  return [
+    "echo ''",
+    "echo '══════════════════════════════════════════════════════'",
+    "echo ' seatmesh — manager pane (terminal)'",
+    "echo '══════════════════════════════════════════════════════'",
+    "echo ' Run your agents HERE.'",
+    `echo '  1) ${who}'`,
+    "echo '  2) switch CLI on this pane:'",
+    `echo '       ${swAgent}      # Cursor'`,
+    `echo '       ${swClaude}'`,
+    `echo '       ${swOc}'`,
+    "echo ' Global pick / resume any mesh:'",
+    "echo '       npx seatmesh sessions'",
+    "echo ' Next time (fresh or existing):'",
+    "echo '       npx seatmesh start'",
+    "echo ' Tear down if session is wedged:'",
+    "echo '       npx seatmesh session down'",
+    "echo '══════════════════════════════════════════════════════'",
+    "echo ''",
+  ].join("\n");
+}
+
 /** One-shot brief pasted to secretary when supervise arms. */
 export function secretarySuperviseBrief(opts: {
   managerPane: string;

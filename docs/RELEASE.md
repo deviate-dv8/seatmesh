@@ -2,6 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-15** | `seatmesh@1.1.4` | Early-adopter UX: `start` idempotent create-or-attach; `session down`; manager terminal welcome (whoami/switch); `sessions` documented |
 | **2026-09-15** | `seatmesh@1.1.3` | Cursor/Claude respawn prove: agent --trust; composer-ready verify+retry (OC parity); fresh whoami on success expected |
 | **2026-09-15** | `seatmesh@1.1.2` | ACK redirect temp-block: after manager→secretary redirect, mini ACK to manager rewritten to secretary |
 | **2026-09-15** | `seatmesh@1.1.0` | Official 1.1: role-pack locked `_vendor` + `*.extend.yaml` + base role MDs; `roles status\|migrate`; CC-limit CB + `limit idle` |

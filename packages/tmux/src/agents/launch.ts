@@ -214,7 +214,9 @@ export function launchSession(
     console.warn("manager-b removed — use a worker slot or seatmesh --profile .sm agent room say -r managers for coordination");
   }
 
-  if (wantAll || want.has("manager") || want.has("master")) {
+  // Manager stays a terminal on session up / start (welcome + whoami/switch).
+  // Explicit only: `seatmesh launch manager` or `agent switch here …`.
+  if (want.has("manager") || want.has("master")) {
     const pane = meshManagerPane(session, layout.base.window) ?? basePanes[0];
     if (pane && state.manager) {
       const cmd = resolveLaunchCmd(state.manager, active.workspace);
