@@ -35,9 +35,11 @@ export function buildAgentLaunchCmd(
 
   switch (t) {
     case "agent":
+      // --trust: skip "accept this workspace" prompt (blocks spawn if unanswered).
+      // --approve-mcps: avoid MCP approval dialogs on first boot.
       return resumeId
-        ? `${LAUNCH_PREFIX} agent --resume ${resumeId} --workspace ${workspace}`
-        : `${LAUNCH_PREFIX} agent --workspace ${workspace}`;
+        ? `${LAUNCH_PREFIX} agent --trust --approve-mcps --resume ${resumeId} --workspace ${workspace}`
+        : `${LAUNCH_PREFIX} agent --trust --approve-mcps --workspace ${workspace}`;
     case "claude":
       return resumeId
         ? `${LAUNCH_PREFIX} claude --permission-mode auto --resume ${resumeId}`

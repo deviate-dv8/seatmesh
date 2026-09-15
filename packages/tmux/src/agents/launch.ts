@@ -14,7 +14,7 @@ import { buildAgentLaunchCmd } from "./agent-builder.js";
 import {
   isOpenCodeLaunch,
   registryForProfile,
-  verifyOpenCodeAfterPaste,
+  verifyHarnessAfterPaste,
 } from "./launch-verify.js";
 import {
   loadLaunchState,
@@ -153,17 +153,7 @@ export function tryLaunchPane(
       pasteLaunchCmd(paneId, cmd);
     });
 
-    if (!isOpenCodeLaunch(type, cmd)) {
-      const brief = injectAfterLaunch(loaded, registry, label, paneId);
-      if (!brief.ok) {
-        console.error(`WARN: post-launch brief ${label}: ${brief.detail}`);
-      } else {
-        console.log(`OK: post-launch brief ${label} ${brief.detail}`);
-      }
-      return { paneId, label, status: "launched", cmd };
-    }
-
-    const verified = verifyOpenCodeAfterPaste(loaded, registry, paneId, () =>
+    const verified = verifyHarnessAfterPaste(loaded, registry, paneId, type, cmd, () =>
       withPaneInputEnabled(paneId, () => pasteLaunchCmd(paneId, cmd)),
     );
     if (!verified.ok) {

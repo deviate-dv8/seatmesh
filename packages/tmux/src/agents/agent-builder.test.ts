@@ -17,6 +17,22 @@ describe("buildAgentLaunchCmd kiro", () => {
   });
 });
 
+describe("buildAgentLaunchCmd agent (cursor)", () => {
+  const ws = "/tmp/workspace";
+
+  it("passes --trust --approve-mcps so workspace accept prompt does not block spawn", () => {
+    expect(buildAgentLaunchCmd("agent", ws)).toBe(
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor agent --trust --approve-mcps --workspace /tmp/workspace",
+    );
+  });
+
+  it("keeps --trust with --resume", () => {
+    expect(buildAgentLaunchCmd("cursor-agent", ws, "abc-uuid")).toBe(
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor agent --trust --approve-mcps --resume abc-uuid --workspace /tmp/workspace",
+    );
+  });
+});
+
 describe("buildAgentLaunchCmd opencode", () => {
   const ws = "/tmp/workspace";
 

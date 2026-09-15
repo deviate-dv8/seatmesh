@@ -137,12 +137,19 @@ function launchUiReady(registry: ProviderRegistry, paneId: string, providerId: s
   if (providerId === "cursor-agent") {
     const state = composerFromCapture(snap, providerId);
     if (state.phase === "limit") return false;
-    // After switch/launch, capture may be blank (plain_shell) before the TUI paints;
-    // waitForCli already proved the agent process is live — inject FRESH SUMMON anyway.
-    if (state.phase === "plain_shell") return true;
+    if (
+      /trust (this |the )?workspace|do you trust the authors|workspace trust|accept this workspace/i.test(
+        tail,
+      )
+    ) {
+      return false;
+    }
+    // Blank capture early in boot is ok only after process detect — still require
+    // some Agent chrome or composerReady (do not inject into a trust dialog).
     return (
-      /Add a follow-up|Plan, search|composer|ctrl\+c to stop|cursor|Agent/i.test(tail) ||
-      prov.composerReady(snap)
+      /Add a follow-up|Plan, search|composer|ctrl\+c to stop|\bAgent\b/i.test(tail) ||
+      (state.phase !== "plain_shell" && prov.composerReady(snap)) ||
+      (state.phase === "plain_shell" && /agent(\s|$)/i.test(snap.currentCommand ?? ""))
     );
   }
   if (providerId === "opencode") {
@@ -181,7 +188,15 @@ export function injectAfterLaunch(
     sleepMs(400);
   }
   if (!ui && live.providerId === "cursor-agent") {
-    ui = true;
+    // Do not force-inject into a workspace-trust dialog.
+    const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
+    if (
+      !/trust (this |the )?workspace|do you trust the authors|workspace trust|accept this workspace/i.test(
+        tail,
+      )
+    ) {
+      ui = true;
+    }
   }
   if (!ui) {
     return { ok: false, detail: `TUI not ready (${live.providerId}) on ${paneId} — brief not injected` };

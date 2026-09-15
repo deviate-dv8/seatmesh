@@ -254,7 +254,11 @@ export function secretaryRestart(
   withActivePanePreserved(paneId, () => pasteLaunchCmd(paneId, cmd));
 
   const cliWait =
-    typ === "claude" ? { maxTries: 80, pollMs: 500 } : { maxTries: 50, pollMs: 400 };
+    typ === "claude" || typ === "agent"
+      ? { maxTries: 80, pollMs: 500, requireComposerReady: true as const }
+      : typ === "opencode" || typ === "oc"
+        ? { maxTries: 70, pollMs: 500, requireComposerReady: true as const }
+        : { maxTries: 50, pollMs: 400 };
   const live = waitForCli(reg, paneId, capturePaneSnapshot, cliWait);
   if (!live) {
     tmux(["set-option", "-p", "-t", paneId, "@mesh_status", "restart-fail"]);

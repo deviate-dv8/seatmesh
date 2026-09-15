@@ -35,6 +35,15 @@ export const cursorAgentProvider: AgentProvider = {
   },
 
   composerReady(pane: PaneSnapshot) {
+    const tail = pane.captureTail ?? "";
+    // Workspace trust / accept dialog — not ready for inject until dismissed.
+    if (
+      /trust (this |the )?workspace|do you trust the authors|workspace trust|accept this workspace/i.test(
+        tail,
+      )
+    ) {
+      return false;
+    }
     return defaultComposerReady(pane, "cursor-agent");
   },
 

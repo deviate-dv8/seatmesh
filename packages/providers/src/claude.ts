@@ -54,6 +54,10 @@ export const claudeProvider: AgentProvider = {
   },
 
   composerReady(pane: PaneSnapshot) {
+    const tail = pane.captureTail ?? "";
+    // Process detect matches the launch cmdline early; wait for TUI chrome.
+    if (!/auto mode on|⏵⏵/i.test(tail)) return false;
+    if (!/❯/.test(tail)) return false;
     return defaultComposerReady(pane, "claude");
   },
 

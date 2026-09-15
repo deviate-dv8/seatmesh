@@ -4,7 +4,7 @@ import { portsForSlot } from "@seat-mesh/core";
 import { buildLaunchCmd } from "./agents-state.js";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { pasteLaunchCmd } from "./launch.js";
-import { isOpenCodeLaunch, verifyOpenCodeAfterPaste } from "./launch-verify.js";
+import { isOpenCodeLaunch, verifyHarnessAfterPaste } from "./launch-verify.js";
 import { injectAfterLaunch } from "../seats/cold-start-inject.js";
 import { invalidatePaneContext } from "../seats/cold-start-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
@@ -168,17 +168,14 @@ export function runSwitch(
     if (!ok) console.error("WARN: kiro trust dialog not seen — pane may still be starting");
     sleepMs(800);
   }
-  if (isOpenCodeLaunch(newType, cmd)) {
-    const verified = verifyOpenCodeAfterPaste(loaded, registry, paneId, () =>
-      pasteLaunchCmd(paneId, cmd),
-    );
-    if (!verified.ok) {
+  const verified = verifyHarnessAfterPaste(loaded, registry, paneId, newType, cmd, () =>
+    pasteLaunchCmd(paneId, cmd),
+  );
+  if (!verified.ok) {
+    if (isOpenCodeLaunch(newType, cmd) || newType === "agent" || newType === "claude") {
       throw new Error(`switch ${target}: ${verified.reason}`);
     }
-  } else if (newType === "agent") {
-    sleepMs(2800);
-  } else {
-    sleepMs(1500);
+    console.error(`WARN: switch ${target}: ${verified.reason}`);
   }
 
   const targetLabel =
