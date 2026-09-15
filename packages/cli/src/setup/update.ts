@@ -5,16 +5,16 @@ import {
   buildResolvedPaths,
   contractsDirFor,
   loadProfile,
+  runRolePackMigrate,
   writePathsManifest,
   type LoadedProfile,
 } from "@seat-mesh/core";
 import {
   readInstalledCliVersion,
   readProfileSeatmeshVersion,
-  resolveLatestRegistryVersion,
-  semverLess,
 } from "../ui/version-nudge.js";
 import { runMigrateRuntime, type MigrateRuntimeResult } from "./migrate-runtime.js";
+import { roleTemplatesDir } from "./init.js";
 
 export interface UpdateOptions {
   profileArg?: string;
@@ -27,6 +27,7 @@ export interface UpdateResult {
   skipped: string[];
   pathsManifest: string;
   migrate?: MigrateRuntimeResult;
+  rolePack?: ReturnType<typeof runRolePackMigrate>;
   packageVersion: string;
   previousVersion: string | null;
   /** Any _vendor file or paths.json actually changed (or would change in dry-run). */
@@ -99,7 +100,37 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
 
   const rolesVendorSrc = path.join(VENDOR_ROOT, "roles");
   const rolesVendorDest = path.join(loaded.profileDir, "roles", "_vendor");
-  syncVendorTree(rolesVendorSrc, rolesVendorDest, refreshed, skipped, dryRun);
+  // Sync locked files (skip extend/ stubs dir — those are user-facing copies)
+  if (fs.existsSync(rolesVendorSrc)) {
+    for (const ent of fs.readdirSync(rolesVendorSrc, { withFileTypes: true })) {
+      if (ent.name === "extend") continue;
+      const src = path.join(rolesVendorSrc, ent.name);
+      const dest = path.join(rolesVendorDest, ent.name);
+      if (ent.isDirectory()) {
+        syncVendorTree(src, dest, refreshed, skipped, dryRun);
+      } else {
+        syncVendorFile(src, dest, refreshed, skipped, dryRun);
+      }
+    }
+  }
+
+  // Ensure empty extend stubs exist (never overwrite user extend)
+  const extendSrc = path.join(rolesVendorSrc, "extend");
+  if (fs.existsSync(extendSrc)) {
+    for (const ent of fs.readdirSync(extendSrc, { withFileTypes: true })) {
+      if (!ent.isFile() || !ent.name.endsWith(".extend.yaml")) continue;
+      const dest = path.join(loaded.profileDir, "roles", ent.name);
+      if (fs.existsSync(dest)) {
+        skipped.push(dest);
+        continue;
+      }
+      if (!dryRun) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(path.join(extendSrc, ent.name), dest);
+      }
+      refreshed.push(dest);
+    }
+  }
 
   const agentsSrc = path.join(VENDOR_ROOT, "AGENTS.md");
   const agentsDest = path.join(loaded.profileDir, "AGENTS.md");
@@ -144,11 +175,27 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
     migrate = runMigrateRuntime({ profileArg: opts.profileArg, dryRun });
   }
 
+  // Role-pack up/down to CURRENT_ROLE_PACK_VERSION (idempotent).
+  const rolePack = runRolePackMigrate({
+    rolesDir: path.join(loaded.profileDir, "roles"),
+    templateRolesDir: roleTemplatesDir(),
+    dryRun,
+    log: (line) => {
+      if (!dryRun) refreshed.push(`role-pack:${line}`);
+    },
+  });
+  for (const t of rolePack.touched) {
+    if (!refreshed.includes(t)) refreshed.push(t);
+  }
+
   ensureRuntimeDirs(loaded, refreshed, skipped, dryRun);
 
   const vendorTouched = refreshed.some((p) => p.includes(`${path.sep}_vendor${path.sep}`));
-  const changed = refreshed.length > 0 || previousVersion !== packageVersion;
-  if (!dryRun && (vendorTouched || previousVersion !== packageVersion)) {
+  const changed =
+    refreshed.length > 0 ||
+    previousVersion !== packageVersion ||
+    rolePack.direction !== "noop";
+  if (!dryRun && (vendorTouched || previousVersion !== packageVersion || rolePack.direction !== "noop")) {
     writeProfileVersion(loaded.profileDir, packageVersion, false);
   }
 
@@ -157,6 +204,7 @@ export function runUpdate(opts: UpdateOptions = {}): UpdateResult {
     skipped,
     pathsManifest,
     migrate,
+    rolePack,
     packageVersion,
     previousVersion,
     changed,

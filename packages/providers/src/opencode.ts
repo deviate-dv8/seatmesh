@@ -18,7 +18,7 @@ import {
   opencodeInputDraft,
   paneStoredOpenCodeSession,
   scrapeOpenCodeSessionFromCapture,
-  scrapePromptTurnGeneric,
+  scrapePromptTurnOpenCode,
   sessionIdFromDetection,
 } from "./shared.js";
 
@@ -99,7 +99,9 @@ export const opencodeProvider: AgentProvider = {
   },
 
   scrapePromptTurn(pane) {
-    return scrapePromptTurnGeneric(pane);
+    // Never fall back to the generic block-split — on OC it records Build/footer
+    // chrome and shell scrollback as humanPrompt. Prefer null over junk.
+    return scrapePromptTurnOpenCode(pane);
   },
 
   humanDraft(pane: PaneSnapshot): string {

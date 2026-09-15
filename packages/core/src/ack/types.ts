@@ -2,7 +2,7 @@
 export type AckSource = "operator" | "inbox" | "peer" | "room";
 
 /** How an open row was cleared (audit only — `ackedAt` is the state). */
-export type AckCloseBy = "explicit" | "filed" | "operator";
+export type AckCloseBy = "explicit" | "filed" | "operator" | "pane-reply";
 
 /**
  * One unanswered ask against one seat, in ACK.jsonl.

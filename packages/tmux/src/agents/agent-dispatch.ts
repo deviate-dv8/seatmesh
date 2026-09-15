@@ -127,6 +127,7 @@ const ROLE_EXTRA_VERBS: Record<SlotRole, Set<string>> = {
     "peer",
     "to-slot",
     "to-mini",
+    "limit",
   ]),
   secretary: new Set([
     "secretary",
@@ -137,6 +138,7 @@ const ROLE_EXTRA_VERBS: Record<SlotRole, Set<string>> = {
     "to-master",
     "assign", // digest / limited — deeper gates still apply
     "inbox",
+    "limit",
   ]),
   worker: new Set(["peer", "to-slot", "to-mini", "to-master"]),
   mini: new Set(["peer", "to-slot", "to-mini", "mini"]),

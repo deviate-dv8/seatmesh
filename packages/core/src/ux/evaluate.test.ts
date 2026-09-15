@@ -90,6 +90,15 @@ describe("evaluateUxRules", () => {
     expect(hit?.state.phase).toBe("empty");
   });
 
+  it("detects kiro monthly usage limit", () => {
+    const tail =
+      "The monthly usage limit has been reached (request_id:a1b2c3d4-e5f6-7890-abcd-ef1234567890)\n";
+    const hit = evaluateUxRules(snap(tail, "kiro"), "kiro", config);
+    expect(hit?.state.phase).toBe("limit");
+    expect(hit?.state.limitKind).toBe("kiro-limit");
+    expect(hit?.border).toBe("KIRO-LIMIT");
+  });
+
   it("classifies limit kinds for connectivity", () => {
     const kinds = uxLimitKinds(config);
     expect(kinds.proxyDownKinds.has("oc-connect")).toBe(true);

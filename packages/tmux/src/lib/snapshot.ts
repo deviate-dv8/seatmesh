@@ -46,6 +46,7 @@ export function capturePaneSnapshot(paneId: string): PaneSnapshot | null {
   for (const key of [
     "mesh_role",
     "mesh_slot",
+    "mesh_mini",
     "mesh_ports",
     "mesh_title",
     "mesh_name",

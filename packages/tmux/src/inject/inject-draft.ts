@@ -1,5 +1,10 @@
 import { isSmInjectText } from "@seat-mesh/core";
-import { claudeInputDraft, coordComposerDraft } from "@seat-mesh/providers";
+import {
+  claudeInputDraft,
+  coordComposerDraft,
+  kiroInputDraft,
+  opencodeInputDraft,
+} from "@seat-mesh/providers";
 
 export { isSmInjectText };
 
@@ -12,6 +17,8 @@ export function humanDraftToPreserve(
 ): string {
   let draft = coordComposerDraft(captureTail, providerId, captureTailAnsi).trim();
   if (!draft && providerId === "claude") draft = claudeInputDraft(captureTail);
+  if (!draft && providerId === "kiro") draft = kiroInputDraft(captureTail);
+  if (!draft && providerId === "opencode") draft = opencodeInputDraft(captureTail);
   if (!draft) return "";
   if (isSmInjectText(draft)) return "";
   const body = injectBody.trim();

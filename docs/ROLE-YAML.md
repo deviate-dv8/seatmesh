@@ -12,31 +12,27 @@ consumer paths baked into the npm package.
 
 ```text
 <workspace>/.sm/
-  mesh.config.yaml
   roles/
-    common.yaml       # merged into every role (banner, shared policies, shared guards)
-    manager.yaml
-    secretary.yaml
-    worker.yaml
-    mini.yaml
-  README.md           # human: what .sm is, how to extend roles
+    _vendor/                 # LOCKED — seatmesh update / roles migrate
+      ROLE_PACK.json         # pack version (1.1.0+)
+      common.yaml            # includes `locked: [banner, read_first, policies]`
+      manager.yaml
+      …
+      docs/*.md              # locked base POV markdown
+    common.extend.yaml       # USER — never overwritten
+    manager.extend.yaml
+    …
+    columns/<id>.yaml        # optional column overlays (user)
 ```
 
-**Engine package** ships **init templates** only:
+**Merge order:** `_vendor/common` + `_vendor/<kind>` + `<kind>.extend.yaml`  
+(legacy flat `roles/<kind>.yaml` still loads if `_vendor` is missing.)
 
-```text
-services/seatmesh/packages/cli/templates/init/roles/
-  common.yaml
-  manager.yaml        # not master.yaml
-  secretary.yaml
-  worker.yaml
-  mini.yaml
-```
+**Engine package** ships templates under `packages/cli/templates/init/roles/`.
 
-`npx seatmesh init` copies templates -> `.sm/roles/`. User edits dotdir; init never
-overwrites on re-run unless `--force`.
-
-**Not in package `profiles/consumer/`** — consumer extends `.sm/roles/` with `.agent/` paths.
+`npx seatmesh init` installs `_vendor/` + empty `*.extend.yaml`.  
+`npx seatmesh update` refreshes `_vendor/` and runs role-pack migrate.  
+`npx seatmesh roles migrate --to 1.0.0` flattens back for rollback.
 
 ---
 

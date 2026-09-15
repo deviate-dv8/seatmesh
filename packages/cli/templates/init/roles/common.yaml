@@ -1,3 +1,10 @@
+# LOCKED — refreshed by `seatmesh update` / role-pack migrate. Edit ../common.extend.yaml only.
+# Sections in `locked:` keep engine entries; extend may append banners/read_first/files or add new policy ids.
+role_pack: "1.1.0"
+locked:
+  - banner
+  - read_first
+  - policies
 # Whoami-only. Standing rules live in always-on host dots, not this file.
 banner:
   - "prompts=mesh-copy.ts consts only — never paste patterns.md into a pane"
@@ -9,3 +16,7 @@ read_first:
     note: seatmesh CLI gateway — agent <cmd>; notify for operator eyes + --url
   - path: docs/ONE-PATH.md
     note: one command per job
+  - path: .sm/roles/_vendor/docs/common.md
+    note: locked base POV (engine)
+files:
+  - .sm/roles/_vendor/docs/EXTEND.md

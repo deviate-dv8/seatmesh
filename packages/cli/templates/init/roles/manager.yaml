@@ -1,3 +1,9 @@
+# LOCKED — refreshed by `seatmesh update`. Edit ../manager.extend.yaml only.
+role_pack: "1.1.0"
+locked:
+  - banner
+  - read_first
+  - policies
 kind: manager
 extends: common
 banner:
@@ -7,6 +13,8 @@ read_first:
     note: layout + daemon port + seats.root
   - path: docs/ROLE-YAML.md
     note: extend .sm/roles/ with project playbooks
+  - path: .sm/roles/_vendor/docs/manager.md
+    note: locked manager POV (engine)
 files:
   - docs/ONE-PATH.md
   - docs/COMMS.md
@@ -21,3 +29,5 @@ policies:
     cmd: 'seatmesh --profile .sm agent peer <target> "<msg>"'
   - id: minis
     cmd: "seatmesh --profile .sm agent mini list"
+  - id: limit_idle
+    cmd: "seatmesh --profile .sm agent limit idle   # CC-LIMIT banner → idle; CBs stay armed"

@@ -43,7 +43,10 @@ export function buildAgentLaunchCmd(
         ? `${LAUNCH_PREFIX} claude --permission-mode auto --resume ${resumeId}`
         : `${LAUNCH_PREFIX} claude --permission-mode auto`;
     case "kiro":
-      return resumeId ? `kiro --resume ${resumeId}` : "kiro";
+      // kiro-cli is the binary on PATH (not `kiro`). Opus = claude-opus-5.
+      return resumeId
+        ? `${LAUNCH_PREFIX} kiro-cli chat --resume-id ${resumeId} --trust-all-tools --model claude-opus-5`
+        : `${LAUNCH_PREFIX} kiro-cli chat --trust-all-tools --model claude-opus-5`;
     case "opencode":
       return resumeId
         ? `cd ${workspace} && ${workspace}/scripts/opencode-cpe.sh --session ${resumeId}`

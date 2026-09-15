@@ -23,6 +23,8 @@ export * from "./profile/profile.js";
 export * from "./profile/profile-edit.js";
 export * from "./paths/runtime-paths.js";
 export * from "./runtime/role-index.js";
+export * from "./runtime/role-pack.js";
+export * from "./runtime/role-migrate.js";
 export * from "./chatroom/index.js";
 export * from "./jsonl/index.js";
 export * from "./chatfile/index.js";

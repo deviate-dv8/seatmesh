@@ -65,6 +65,8 @@ Never: “please check my pane” without notify.
 | Reply / ask | `agent peer <target> "<msg>" [--ended <ack-id>]` |
 | Close ask | `agent ack <id> "<note>"` |
 | List / stop checkback | `agent cb list` · `agent cb cancel <id>` |
+| CC-LIMIT banner → idle (leads) | `agent limit idle` · `agent limit idle-clear` (CBs still fire) |
+| Role-pack (operator) | `roles status` · `roles migrate` · `update` (refresh locked `_vendor`) |
 | Room | `agent room tail [-r slug]` · `agent room say …` |
 | Peek | `agent peek <target> status\|full` |
 | Agent vs terminal | `agent kind <target>` (aliases: `what`, `typeof`) |

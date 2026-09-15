@@ -139,6 +139,17 @@ describe("reminder schedule", () => {
     expect(openAcksForSeat([done], "secretary")).toHaveLength(1);
   });
 
+  it("never reminder-injects operator-sourced asks (avoids n+1 human prompt)", () => {
+    const op = row({ source: "operator", reminders: 0 });
+    const peer = row({
+      id: "ack-peer01",
+      source: "peer",
+      from: "manager",
+      reminders: 0,
+    });
+    expect(remindableAcks([op, peer])).toEqual([peer]);
+  });
+
   it("drops closed rows from every open view", () => {
     const closed = closeAckRow(row(), "explicit", "restarted inbox");
     expect(closed.ackedAt).toBeTruthy();

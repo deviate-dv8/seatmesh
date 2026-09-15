@@ -27,6 +27,10 @@ import { isInboxDelivered } from "../store/create-queue-store.js";
 import { isPeerPendingDelivery } from "../peer/peer-pending.js";
 import { PpaStateStore } from "../state/ppa-state.js";
 import { observePaneComposer } from "../ack/ack-watch.js";
+import {
+  hasLimitIdleOverride,
+  isLimitBorderStatus,
+} from "./limit-idle-override.js";
 import { coordComposerDraft } from "@seat-mesh/providers";
 import {
   formatBannerAck,
@@ -144,7 +148,7 @@ function phaseLabel(phase: string, busyLabel?: string, limitKind?: string): stri
 }
 
 /** Limit / proxy borders — must not flicker to idle on a blank capture redraw. */
-const STICKY_NEGATIVE_RE = /^(CC-LIMIT|PROXY-DOWN|OC-LIMIT:|LIMIT\b)/i;
+const STICKY_NEGATIVE_RE = /^(CC-LIMIT|CURSOR-LIMIT|KIRO-LIMIT|PROXY-DOWN|OC-LIMIT:|LIMIT\b)/i;
 
 interface StickyNeg {
   status: string;
@@ -232,6 +236,8 @@ function borderFromState(
     }
     if (st.limitKind === "oc-connect") return "CONNECT";
     if (st.limitKind === "cc-limit") return "CC-LIMIT";
+    if (st.limitKind === "cursor-usage-limit") return "CURSOR-LIMIT";
+    if (st.limitKind === "kiro-limit") return "KIRO-LIMIT";
     return `OC-LIMIT:${st.limitKind ?? "limit"}`;
   }
   if (ux) {
@@ -306,12 +312,19 @@ function paintOnePaneBorder(
           st.draftFingerprint?.trim() ||
           coordComposerDraft(snap.captureTail, prov.id, snap.captureTailAnsi) ||
           "";
-        observePaneComposer(paneId, label, draft, snap.captureTail);
+        observePaneComposer(paneId, label, draft, snap.captureTail, st.phase);
       }
     }
   }
 
   borderStatus = applyStickyNegativeStatus(paneId, borderStatus, st);
+
+  // Operator/manager/secretary: force idle label while CC-LIMIT (etc.) override is on.
+  // Does not cancel armed cc-limit-retry checkbacks.
+  if (hasLimitIdleOverride(paneId) && isLimitBorderStatus(borderStatus)) {
+    borderStatus = st?.phase === "busy" ? phaseLabel("busy", st.busyLabel) : "idle";
+    resetStickyNegativeStatus(paneId);
+  }
 
   if (coordInbox) {
     inboxN += counts.unsent + (counts.unsent === 0 ? counts.unresolved : 0);

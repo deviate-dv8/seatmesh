@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { buildAgentLaunchCmd } from "./agent-builder.js";
 
+describe("buildAgentLaunchCmd kiro", () => {
+  const ws = "/tmp/workspace";
+
+  it("launches kiro-cli chat with opus when no resume id", () => {
+    expect(buildAgentLaunchCmd("kiro", ws)).toBe(
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor kiro-cli chat --trust-all-tools --model claude-opus-5",
+    );
+  });
+
+  it("passes --resume-id when resume id is set", () => {
+    expect(buildAgentLaunchCmd("kiro", ws, "abc-123")).toBe(
+      "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor kiro-cli chat --resume-id abc-123 --trust-all-tools --model claude-opus-5",
+    );
+  });
+});
+
 describe("buildAgentLaunchCmd opencode", () => {
   const ws = "/tmp/workspace";
 

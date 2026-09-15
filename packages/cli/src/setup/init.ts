@@ -97,10 +97,47 @@ export function runInit(opts: InitOptions = {}): InitResult {
   writeTpl("README.md");
   writeTpl("AGENTS.md");
 
+  // Role-pack 1.1+: locked templates → roles/_vendor/; user stubs → *.extend.yaml
   const rolesSrc = path.join(TEMPLATE_ROOT, "roles");
   const rolesDest = path.join(smDir, "roles");
-  fs.mkdirSync(rolesDest, { recursive: true });
-  copyTree(rolesSrc, rolesDest, created, skipped, Boolean(opts.force));
+  const vendorDest = path.join(rolesDest, "_vendor");
+  fs.mkdirSync(vendorDest, { recursive: true });
+  for (const ent of fs.readdirSync(rolesSrc, { withFileTypes: true })) {
+    if (ent.name === "extend") continue;
+    const src = path.join(rolesSrc, ent.name);
+    const dest = path.join(vendorDest, ent.name);
+    if (ent.isDirectory()) {
+      fs.mkdirSync(dest, { recursive: true });
+      copyTree(src, dest, created, skipped, Boolean(opts.force));
+      continue;
+    }
+    if (fs.existsSync(dest) && !opts.force) {
+      skipped.push(dest);
+      continue;
+    }
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    created.push(dest);
+  }
+  const extendSrc = path.join(rolesSrc, "extend");
+  if (fs.existsSync(extendSrc)) {
+    for (const ent of fs.readdirSync(extendSrc, { withFileTypes: true })) {
+      if (!ent.isFile() || !ent.name.endsWith(".extend.yaml")) continue;
+      const dest = path.join(rolesDest, ent.name);
+      if (fs.existsSync(dest) && !opts.force) {
+        skipped.push(dest);
+        continue;
+      }
+      fs.copyFileSync(path.join(extendSrc, ent.name), dest);
+      created.push(dest);
+    }
+  }
+
+  // Stamp pack version file for status/migrate
+  const packSrc = path.join(vendorDest, "ROLE_PACK.json");
+  if (fs.existsSync(packSrc)) {
+    created.push(packSrc);
+  }
 
   const agents = ensureAgentsCliDoc(smDir, {
     workspace,
@@ -113,15 +150,44 @@ export function runInit(opts: InitOptions = {}): InitResult {
   return { smDir, configPath, created, skipped };
 }
 
-/** Copy missing role yaml templates from engine init (never overwrite existing). */
+/** Ensure locked vendor roles + empty extend stubs exist (never overwrite user extend). */
 export function ensureMissingRoleTemplates(smDir: string): { created: string[] } {
   const rolesSrc = path.join(TEMPLATE_ROOT, "roles");
   const rolesDest = path.join(smDir, "roles");
+  const vendorDest = path.join(rolesDest, "_vendor");
   const created: string[] = [];
   if (!fs.existsSync(rolesSrc)) return { created };
-  fs.mkdirSync(rolesDest, { recursive: true });
-  copyTree(rolesSrc, rolesDest, created, [], false);
+  fs.mkdirSync(vendorDest, { recursive: true });
+  for (const ent of fs.readdirSync(rolesSrc, { withFileTypes: true })) {
+    if (ent.name === "extend") continue;
+    const src = path.join(rolesSrc, ent.name);
+    const dest = path.join(vendorDest, ent.name);
+    if (ent.isDirectory()) {
+      fs.mkdirSync(dest, { recursive: true });
+      copyTree(src, dest, created, [], false);
+      continue;
+    }
+    if (fs.existsSync(dest)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    created.push(dest);
+  }
+  const extendSrc = path.join(rolesSrc, "extend");
+  if (fs.existsSync(extendSrc)) {
+    for (const ent of fs.readdirSync(extendSrc, { withFileTypes: true })) {
+      if (!ent.isFile() || !ent.name.endsWith(".extend.yaml")) continue;
+      const dest = path.join(rolesDest, ent.name);
+      if (fs.existsSync(dest)) continue;
+      fs.copyFileSync(path.join(extendSrc, ent.name), dest);
+      created.push(dest);
+    }
+  }
   return { created };
+}
+
+/** Absolute path to engine role templates (for migrate). */
+export function roleTemplatesDir(): string {
+  return path.join(TEMPLATE_ROOT, "roles");
 }
 
 const AGENTS_MD = "AGENTS.md";

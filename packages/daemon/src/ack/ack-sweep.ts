@@ -23,7 +23,7 @@ import {
   openAckForInboxRow,
   openAckForPeerRow,
 } from "./ack-open.js";
-import { drainOperatorPrompts, noteDaemonInject } from "./ack-watch.js";
+import { drainOperatorPrompts, drainOperatorPaneReplyCloses, noteDaemonInject } from "./ack-watch.js";
 
 export { openAckForInboxRow, openAckForPeerRow } from "./ack-open.js";
 
@@ -70,6 +70,27 @@ export function openAcksFromOperatorPrompts(ctx: MeshOrchestratorCtx): number {
     });
     ctx.log(`ACK open id=${opened.id.slice(0, 10)} seat=${opened.seat} source=operator`);
     n++;
+  }
+  return n;
+}
+
+/**
+ * Operator typed into the pane — the agent answering in that same pane is the
+ * reply. Close those rows without a reminder inject (remind would be n+1 prompt).
+ */
+export function closeOperatorAcksOnPaneReply(ctx: MeshOrchestratorCtx): number {
+  const panes = drainOperatorPaneReplyCloses();
+  if (!panes.length) return 0;
+  const want = new Set(panes);
+  let n = 0;
+  for (const row of openAcks(ctx.store.readAcks())) {
+    if (row.source !== "operator") continue;
+    if (!want.has(row.paneId)) continue;
+    const res = ctx.store.ackAck(row.id, "pane-reply", "agent replied in pane");
+    if (res.ok) {
+      ctx.log(`ACK pane-reply id=${row.id.slice(0, 10)} seat=${row.seat}`);
+      n++;
+    }
   }
   return n;
 }
@@ -203,6 +224,7 @@ export function fireAckReminders(ctx: MeshOrchestratorCtx): number {
 /** One orchestrator tick worth of ACK bookkeeping. */
 export function ackSweepTick(ctx: MeshOrchestratorCtx): void {
   openAcksFromOperatorPrompts(ctx);
+  closeOperatorAcksOnPaneReply(ctx);
   closeAcksOnFilings(ctx);
   fireAckReminders(ctx);
 }

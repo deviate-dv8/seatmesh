@@ -192,7 +192,9 @@ paths:
 
 | Path | Who writes | `npx seatmesh update` |
 |------|------------|------------------------|
-| `roles/_vendor/**` | package templates | **Replace** when upstream hash/version bumps |
+| `roles/_vendor/**` | package templates (role-pack) | **Replace** when content differs |
+| `roles/_vendor/ROLE_PACK.json` | engine | **Stamp** pack version (e.g. 1.1.0) |
+| `roles/_vendor/docs/*.md` | package | **Replace** — locked base POV MDs |
 | `roles/*.extend.yaml` | user / project | **Never touch** |
 | `contracts/_vendor/**` | package templates | **Replace** on update |
 | `contracts/*.extend.yaml` | user | **Never touch** |
@@ -202,6 +204,18 @@ paths:
 | `paths.json` | engine | **Regenerate** from yaml |
 
 User **never edits `_vendor/`**. Project POV goes in `*.extend.yaml` only.
+
+Each vendor role yaml declares:
+
+```yaml
+locked:
+  - banner
+  - read_first
+  - policies
+```
+
+`seatmesh roles migrate` / `roles migrate --to 1.0.0` moves packs **up or down**.
+`seatmesh update` refreshes `_vendor` and auto-migrates to the current pack.
 
 ---
 

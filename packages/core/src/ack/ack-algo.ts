@@ -62,7 +62,14 @@ export function ackRemindDelaySec(reminders: number): number {
 
 /** Rows worth injecting a reminder for (stale ones are report-only). */
 export function remindableAcks(rows: AckRow[]): AckRow[] {
-  return openAcks(rows).filter((r) => r.reminders < ACK_REMIND_MAX);
+  return openAcks(rows).filter((r) => {
+    if (r.reminders >= ACK_REMIND_MAX) return false;
+    // Operator typed the ask into the pane already — re-injecting it as ACK
+    // mail is the n+1 prompt (human turn, then reminder turn). Banner/whoami
+    // still list the row; only mesh-mail ACKs get reminder injects.
+    if (r.source === "operator") return false;
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------

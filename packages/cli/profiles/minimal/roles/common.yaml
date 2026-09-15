@@ -1,6 +1,6 @@
-# Merged into every role index — printed at top of whoami.
+# Merged into every role index — printed at top of ./sm.sh whoami.
 banner:
-  - "engine=seatmesh | seatmesh --profile .sm agent whoami every turn; config in .sm/"
+  - "engine=seatmesh | ./sm.sh whoami every turn; config in .sm/"
   - "one_path=docs/ONE-PATH.md | one command per job (extend paths in .sm/roles/*.extend.yaml)"
   - "comms=enqueue only; inbox daemon injects — no raw tmux send-keys"
   - "inbox_inject_not_dan=[mesh-inbox] lines are daemon steering — shell/seat files only; not a new user task"

@@ -100,38 +100,74 @@ function bottomLines(text: string, n: number): string {
 
 /** OpenCode composer draft above the Build auto footer (harness parity). */
 export function opencodeInputDraft(captureTail: string): string {
-  const b = bottomLines(captureTail, 14);
+  const b = bottomLines(captureTail, 18);
   const lines = b.split("\n");
   let footerIdx = -1;
+  // Prefer the Build-auto status row when present (ctrl+p alone sits below it and
+  // would otherwise treat "Build auto · …" as the draft).
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (/Build\s+auto\s+·\s+Big Pickle\s+OpenCode Zen/i.test(lines[i]!)) {
+    if (/Build\s+auto\s+·/i.test(lines[i]!)) {
       footerIdx = i;
       break;
     }
   }
+  if (footerIdx < 0) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!;
+      if (
+        /ctrl\+p commands/i.test(line) ||
+        (/\bOpenCode\b/i.test(line) && /·|ctrl\+/i.test(line)) ||
+        (/Ask anything|Type a message|Send a message/i.test(line) && i === lines.length - 1)
+      ) {
+        footerIdx = i;
+        break;
+      }
+    }
+  }
+  if (footerIdx <= 0) {
+    for (let i = lines.length - 1; i >= 0; i--) {
+      if (/ctrl\+p|ctrl\+t|esc\b/i.test(lines[i]!)) {
+        footerIdx = i;
+        break;
+      }
+    }
+  }
   if (footerIdx <= 0) return "";
+
+  // OC paints the live composer inside a ┃ box between the prior ▣ Build status
+  // and the "Build auto ·" footer. Only those box rows are drafts — walking into
+  // scrollback (assistant text) made clear loops never see empty and spam Escape,
+  // which interrupts a live generation.
   const draftLines: string[] = [];
-  let passedBlank = false;
   for (let i = footerIdx - 1; i >= 0; i--) {
-    const trimmed = lines[i]!.trim();
+    const trimmed = (lines[i] ?? "").trim();
     if (!trimmed) {
       if (draftLines.length > 0) break;
-      passedBlank = true;
       continue;
     }
-    if (/^[^\x00-\x7f]+$/.test(trimmed) && !/\p{L}/u.test(trimmed)) {
+    if (/^▣\s+Build\s+·/.test(trimmed) || /Build\s+auto\s+·/i.test(trimmed)) {
+      break;
+    }
+    if (/ctrl\+p commands/i.test(trimmed)) {
       if (draftLines.length > 0) break;
       continue;
     }
-    if (/^▣\s+Build\s+·/.test(trimmed)) {
-      if (draftLines.length > 0) break;
+    // Box row: "┃  text" / "│ text" / bare "┃"
+    if (/^[┃│]/.test(trimmed)) {
+      const box = trimmed.replace(/^[┃│]\s*/, "").trim();
+      if (!box) continue;
+      if (/^[▀]+$/.test(box)) continue;
+      draftLines.unshift(box);
       continue;
     }
-    if (passedBlank) break;
-    draftLines.unshift(trimmed);
+    // Non-box line above the composer = scrollback. Never vacuum it as a draft.
+    break;
   }
   const draft = draftLines.join(" ").trim();
-  if (!draft || /Ask anything/i.test(draft)) return "";
+  if (!draft || /Ask anything|Type a message|Send a message|What would you like/i.test(draft)) {
+    return "";
+  }
+  if (/^\[mesh-inbox/i.test(draft)) return "";
   return draft;
 }
 
@@ -256,8 +292,45 @@ export function coordComposerDraft(
   captureTailAnsi?: string,
 ): string {
   if (providerId === "opencode") return opencodeInputDraft(captureTail);
-  if (providerId === "cursor-agent") return agentInputDraft(captureTail, captureTailAnsi);
+  if (providerId === "cursor-agent" || providerId === "agent") {
+    return agentInputDraft(captureTail, captureTailAnsi);
+  }
   if (providerId === "claude") return claudeInputDraft(captureTail);
+  if (providerId === "kiro") return kiroInputDraft(captureTail);
+  return "";
+}
+
+/**
+ * Kiro chat composer draft. Same ❯/›/> family as Claude, but without Claude's
+ * divider-chip gate (kiro layout differs — that gate left every draft empty).
+ */
+export function kiroInputDraft(captureTail: string): string {
+  const lines = captureTail.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^\s*[❯›>]\s+(.*)$/.exec(lines[i] ?? "");
+    if (!m) continue;
+    const first = (m[1] ?? "").trim();
+    if (isPlaceholderPromptContent(first)) continue;
+    if (CLAUDE_NON_DRAFT_HINT_RE.test(first)) continue;
+    if (/^\[mesh-inbox/i.test(first)) continue;
+    if (/^intent=/i.test(first)) continue;
+    if (/^Check:/i.test(first)) continue;
+    // Divider-sandwiched chrome (suggested chips) — skip.
+    const prev = (lines[i - 1] ?? "").trim();
+    const next = (lines[i + 1] ?? "").trim();
+    if (RULE_LINE_RE.test(prev) && RULE_LINE_RE.test(next)) continue;
+    const parts = [first];
+    for (let j = i + 1; j < lines.length; j++) {
+      const cont = lines[j] ?? "";
+      const trimmed = cont.trim();
+      if (!trimmed) break;
+      if (/^\s*[❯›>]\s/.test(cont)) break;
+      if (RULE_LINE_RE.test(trimmed)) break;
+      if (/ctrl\+|shift\+tab|auto mode/i.test(cont)) break;
+      parts.push(trimmed);
+    }
+    return parts.join(" ").trim();
+  }
   return "";
 }
 
@@ -267,6 +340,9 @@ const OC_CONNECT_RE =
   /cannot\s+connect\s+to\s+api|unable\s+to\s+connect|service\s+unavailable|connection\s+error|ECONNREFUSED|socket\s+connection\s+was\s+closed/i;
 const CC_LIMIT_RE =
   /rate limit|usage limit|try again|quota/i;
+/** kiro-cli monthly/quota wall — hold inject (queue) and continue other seats. */
+const KIRO_LIMIT_RE =
+  /monthly\s+usage\s+limit\s+has\s+been\s+reached|usage\s+limit\s+has\s+been\s+reached(?:\s*\(\s*request_id:)?|you(?:'ve| have)\s+reached\s+(?:your\s+)?(?:monthly\s+)?usage\s+limit|request_id:\s*[0-9a-fA-F-]{8,}/i;
 
 const OC_BUSY_RE =
   /Thinking|Working|Running|⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|esc interrupt/i;
@@ -393,7 +469,23 @@ export function composerFromCapture(
     }
   }
 
-  if (providerId !== "claude" && /Working|Running|Thinking/.test(tail)) {
+  if (providerId === "kiro") {
+    // Detect monthly usage wall before busy/typing — inbox holds (queues) and continues.
+    if (KIRO_LIMIT_RE.test(tail)) {
+      return { phase: "limit", limitKind: "kiro-limit" };
+    }
+    const bottom = tail.split("\n").slice(-10).join("\n");
+    if (/Working|Running|Thinking|Generating/i.test(bottom)) {
+      const m = bottom.match(/(Working|Running|Thinking|Generating[^\n]*)/i);
+      return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
+    }
+    const kDraft = kiroInputDraft(tail);
+    if (kDraft) {
+      return { phase: "typing", draftFingerprint: kDraft.slice(0, 80) };
+    }
+  }
+
+  if (providerId !== "claude" && providerId !== "kiro" && /Working|Running|Thinking/.test(tail)) {
     const m = tail.match(/(Working|Running|Thinking[^\n]*)/);
     return { phase: "busy", busyLabel: m?.[1] ?? "busy" };
   }
@@ -456,6 +548,107 @@ function isNoiseBlock(text: string): boolean {
   return false;
 }
 
+/** OpenCode UI chrome — never a human prompt or agent reply for ChatFile. */
+function isOpenCodeChromeText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (/^▣\s*Build\s*·/i.test(t)) return true;
+  if (/Build\s+auto\s+·/i.test(t)) return true;
+  if (/ctrl\+p commands/i.test(t)) return true;
+  if (/^\/home\//i.test(t) && /ctrl\+p|OpenCode/i.test(t)) return true;
+  if (/esc\s*interrupt/i.test(t)) return true;
+  if (/^[┃│╹▀\s]+$/.test(t)) return true;
+  if (/^Click to expand$/i.test(t)) return true;
+  if (/^\+?\s*Thought:/i.test(t)) return true;
+  if (/^[⠏⠋⠙⠹⠸⠼⠴⠦⠧⠇]\s*(Thinking|Working|Running)?/i.test(t)) return true;
+  return false;
+}
+
+function stripOpenCodeBoxPrefix(line: string): string {
+  return line.replace(/^\s*[┃│]\s?/, "").trimEnd();
+}
+
+function isOpenCodeBoxLine(line: string): boolean {
+  return /^\s*[┃│]/.test(line);
+}
+
+/**
+ * OpenCode completed turn: user text lives in a ┃ box, then the assistant reply,
+ * then `▣ Build · … · <duration>`. Empty composer + footer / in-flight Build
+ * (no duration) must not become a turn.
+ */
+export function scrapePromptTurnOpenCode(pane: PaneSnapshot): PromptCapture | null {
+  const raw = pane.captureTail ?? "";
+  if (!raw.trim()) return null;
+  const lines = raw.split("\n");
+
+  // Completed status has a duration after the second · (e.g. "· 3.9s", "· 2m 58s").
+  // In-flight "▣  Build · Big Pickle" (no duration) is still generating — skip it.
+  const COMPLETED_BUILD_RE = /^\s*▣\s*Build\s*·[^·\n]+·\s*\d/i;
+
+  let buildIdx = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (COMPLETED_BUILD_RE.test(lines[i] ?? "")) {
+      buildIdx = i;
+      break;
+    }
+  }
+  if (buildIdx <= 0) return null;
+
+  // Walk up from ▣ Build: skip blanks, collect agent reply until a content ┃ box.
+  const replyLines: string[] = [];
+  let i = buildIdx - 1;
+  while (i >= 0 && !(lines[i] ?? "").trim()) i--;
+  for (; i >= 0; i--) {
+    const line = lines[i] ?? "";
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (replyLines.length > 0) {
+        replyLines.unshift("");
+      }
+      continue;
+    }
+    if (/^\s*▣\s*Build\s*·/i.test(trimmed)) break;
+    if (isOpenCodeBoxLine(line)) {
+      const box = stripOpenCodeBoxPrefix(line).trim();
+      if (!box) continue;
+      break;
+    }
+    if (isOpenCodeChromeText(trimmed)) continue;
+    replyLines.unshift(trimmed);
+  }
+
+  while (i >= 0 && !(lines[i] ?? "").trim()) i--;
+  const promptLines: string[] = [];
+  for (; i >= 0; i--) {
+    const line = lines[i] ?? "";
+    if (!isOpenCodeBoxLine(line)) {
+      if (promptLines.length > 0) break;
+      break;
+    }
+    const box = stripOpenCodeBoxPrefix(line).trim();
+    if (!box) {
+      if (promptLines.length > 0) break;
+      continue;
+    }
+    if (/^QUEUED$/i.test(box)) continue;
+    if (isOpenCodeChromeText(box)) continue;
+    promptLines.unshift(box);
+  }
+
+  const humanPrompt = promptLines.join(" ").replace(/\s+/g, " ").trim();
+  const agentResponse = replyLines
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!humanPrompt || !agentResponse) return null;
+  if (isOpenCodeChromeText(humanPrompt) || isOpenCodeChromeText(agentResponse)) return null;
+  if (humanPrompt.length < 2 || agentResponse.length < 2) return null;
+  if (/^\+?\s*Thought:/i.test(agentResponse) && agentResponse.length < 40) return null;
+  return { humanPrompt, agentResponse };
+}
+
 /** Shared scrape heuristic for all CLI providers (pane capture, not chat UI). */
 export function scrapePromptTurnGeneric(pane: PaneSnapshot): PromptCapture | null {
   const raw = pane.captureTail;
@@ -481,10 +674,11 @@ export function scrapePromptTurnGeneric(pane: PaneSnapshot): PromptCapture | nul
     const blocks = raw
       .split(/\n\n+/)
       .map((b) => b.trim())
-      .filter((b) => b && !isNoiseBlock(b));
+      .filter((b) => b && !isNoiseBlock(b) && !isOpenCodeChromeText(b));
     if (blocks.length < 2) return null;
     const human = blocks[blocks.length - 2]!;
     const response = blocks[blocks.length - 1]!;
+    if (isOpenCodeChromeText(human) || isOpenCodeChromeText(response)) return null;
     return { humanPrompt: human, agentResponse: response };
   }
 
@@ -510,7 +704,9 @@ export function scrapePromptTurnGeneric(pane: PaneSnapshot): PromptCapture | nul
   const human = humanLines.join("\n").trim();
 
   if (!human || !response || human.length < 2 || response.length < 2) return null;
-  if (isNoiseBlock(response)) return null;
+  if (isNoiseBlock(response) || isOpenCodeChromeText(human) || isOpenCodeChromeText(response)) {
+    return null;
+  }
   return { humanPrompt: human, agentResponse: response };
 }
 

@@ -47,9 +47,15 @@ import { broadcastOcResumeToRemotes } from "./connectivity/oc-resume-broadcast.j
 import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
 import {
   armCcLimitRetryCheckback,
+  armCcLimitRetryForAllClaudePanes,
+  ccLimitRetryFireAtMs,
   paneSessionFingerprint,
-  parseCcLimitRetryAtMs,
 } from "./connectivity/cc-limit-retry.js";
+import {
+  clearLimitIdleOverride,
+  setLimitIdleOverride,
+} from "./border/limit-idle-override.js";
+import { resetStickyNegativeStatus } from "./border/border-paint.js";
 import {
   drainPaneOpsOnce,
   enqueuePaneOp,
@@ -331,10 +337,24 @@ async function main(): Promise<void> {
       log,
       resumeOpenCodePanes,
       onCcLimitRise: (paneId, snap) => {
-        const fp = paneSessionFingerprint(registry, snap);
-        const at =
-          parseCcLimitRetryAtMs(snap.captureTail) ?? Date.now() + 30 * 60_000;
-        armCcLimitRetryCheckback(store, paneId, fp, at, log);
+        const fireAt = ccLimitRetryFireAtMs(snap.captureTail);
+        // One CC limited → arm every live Claude pane at the same fire time.
+        // Each CB carries that pane's fingerprint; OC/kiro swap cancels that seat only.
+        const n = armCcLimitRetryForAllClaudePanes(
+          store,
+          registry,
+          session,
+          baseWindow,
+          workersWindow,
+          minisWindow,
+          fireAt,
+          log,
+          paneId,
+        );
+        if (!n) {
+          const fp = paneSessionFingerprint(registry, snap);
+          armCcLimitRetryCheckback(store, paneId, fp, fireAt, log);
+        }
       },
       onCursorUsageLimitRise: (paneId) => {
         if (cursorUsageAutoFallback(paneId)) {
@@ -584,6 +604,44 @@ async function main(): Promise<void> {
         const n = store.ackAllAcks(body.seat);
         log(`ack clear-all n=${n} seat=${body.seat ?? "*"}`);
         return json(res, 200, { ok: true, cleared: n });
+      }
+
+      // Force limit borders back to idle (visual). Does not cancel cc-limit-retry CBs.
+      if (req.method === "POST" && url.pathname === "/limit/idle") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          pane?: string;
+          all?: boolean;
+          ttlHours?: number;
+        };
+        const ttlMs = Math.max(1, Number(body.ttlHours ?? 24)) * 60 * 60_000;
+        if (body.all || body.pane === "*" || body.pane === "all" || !body.pane) {
+          setLimitIdleOverride("*", ttlMs);
+          resetStickyNegativeStatus();
+          log(`limit-idle override=all ttlHours=${body.ttlHours ?? 24}`);
+          return json(res, 200, { ok: true, override: "all", ttlMs });
+        }
+        const pane = String(body.pane).trim();
+        if (!pane.startsWith("%")) {
+          return json(res, 400, { ok: false, error: "pane must be tmux pane id like %12" });
+        }
+        setLimitIdleOverride(pane, ttlMs);
+        resetStickyNegativeStatus(pane);
+        log(`limit-idle override pane=${pane} ttlHours=${body.ttlHours ?? 24}`);
+        return json(res, 200, { ok: true, override: pane, ttlMs });
+      }
+
+      if (req.method === "POST" && url.pathname === "/limit/idle/clear") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { pane?: string; all?: boolean };
+        if (body.all || !body.pane || body.pane === "*") {
+          clearLimitIdleOverride();
+          log("limit-idle override cleared (all)");
+          return json(res, 200, { ok: true, cleared: "all" });
+        }
+        clearLimitIdleOverride(String(body.pane).trim());
+        log(`limit-idle override cleared pane=${body.pane}`);
+        return json(res, 200, { ok: true, cleared: body.pane });
       }
 
       if (req.method === "POST" && url.pathname === "/ack") {

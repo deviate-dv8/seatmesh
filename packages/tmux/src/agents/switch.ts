@@ -35,6 +35,26 @@ function sleepMs(ms: number): void {
   spawnSync("sleep", [String(ms / 1000)]);
 }
 
+/** kiro-cli --trust-all-tools still shows a one-time warning (default = No, exit). */
+function acceptKiroTrustDialog(paneId: string): boolean {
+  for (let i = 0; i < 25; i++) {
+    const snap = capturePaneSnapshot(paneId);
+    const text = snap?.captureTail ?? "";
+    if (text.includes("Yes, and don't ask again")) {
+      tmux(["send-keys", "-t", paneId, "Down"]);
+      sleepMs(150);
+      tmux(["send-keys", "-t", paneId, "Down"]);
+      sleepMs(150);
+      tmux(["send-keys", "-t", paneId, "Enter"]);
+      sleepMs(500);
+      return true;
+    }
+    if (/kiro_default|ask a question/.test(text)) return true;
+    sleepMs(300);
+  }
+  return false;
+}
+
 export interface SwitchOptions {
   /** Default true — switch always starts clean unless --keep-resume or --resume ID. */
   fresh?: boolean;
@@ -143,6 +163,11 @@ export function runSwitch(
     : buildLaunchCmd(newType, loaded.workspace, keepRid);
   if (!cmd) throw new Error(`no launch command for type ${newType}`);
   pasteLaunchCmd(paneId, cmd);
+  if (newType === "kiro") {
+    const ok = acceptKiroTrustDialog(paneId);
+    if (!ok) console.error("WARN: kiro trust dialog not seen — pane may still be starting");
+    sleepMs(800);
+  }
   if (isOpenCodeLaunch(newType, cmd)) {
     const verified = verifyOpenCodeAfterPaste(loaded, registry, paneId, () =>
       pasteLaunchCmd(paneId, cmd),

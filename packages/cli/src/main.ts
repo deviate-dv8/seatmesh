@@ -133,6 +133,8 @@ import { buildChatCommands } from "./commands/chat-cli.js";
 import { buildCheckbackCommands } from "./commands/checkback-cli.js";
 import { buildTargetCommands } from "./commands/target-cli.js";
 import { buildAckCommands } from "./commands/ack-cli.js";
+import { buildLimitCommands } from "./commands/limit-cli.js";
+import { buildRolesCommands } from "./commands/roles-cli.js";
 import { buildNotifyCommand } from "./commands/notify-cli.js";
 import { buildPreviewCommand } from "./commands/preview-cli.js";
 import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
@@ -176,7 +178,8 @@ Setup (run once per project, by a human)
   session init <sm-name> [--force] [--name NAME]   create .sm-<name>/ (multi-config)
   sessions [pick|list|attach|forget|register] [--json]   global registry + TUI picker
   update [--dry-run] [--migrate] [--no-restart-inbox]
-                                        refresh _vendor (file-by-file) + paths.json; restart inbox
+                                        refresh _vendor (file-by-file) + role-pack migrate + paths.json
+  roles status|migrate [--to VER]|steps   locked role-pack up/down (1.1.x)
   version [--json] [--check-registry]   CLI vs npm latest vs profile .seatmesh-version
 
 Status / diagnostics
@@ -315,6 +318,12 @@ async function main(): Promise<void> {
       for (const line of r.migrate.copied) console.log(`  migrate copied: ${line}`);
       for (const line of r.migrate.skipped) console.log(`  migrate skipped: ${line}`);
     }
+    if (r.rolePack) {
+      console.log(
+        `  role-pack: ${r.rolePack.direction} ${r.rolePack.from ?? "none"} → ${r.rolePack.to}` +
+          (r.rolePack.steps.length ? ` [${r.rolePack.steps.join(",")}]` : ""),
+      );
+    }
     if (isNpxEphemeralInstall()) {
       console.log(
         "  note: npx cache CLI — profile vendor updated only; npm package is re-fetched each npx run",
@@ -330,6 +339,24 @@ async function main(): Promise<void> {
       }
     } else if (noRestartInbox) {
       console.log("  inbox: skip restart (--no-restart-inbox)");
+    }
+    return;
+  }
+
+  if (cmd === "roles") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildRolesCommands(getLoaded);
+    if (!sub) {
+      branch.outputHelp();
+      return;
+    }
+    try {
+      await branch.parseAsync([sub, ...tail], { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
     }
     return;
   }
@@ -1824,6 +1851,24 @@ async function main(): Promise<void> {
     const branch = buildAckCommands(getLoaded);
     try {
       await branch.parseAsync(rest.slice(1), { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
+    }
+    return;
+  }
+
+  if (cmd === "limit") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildLimitCommands(getLoaded);
+    if (!sub) {
+      branch.outputHelp();
+      return;
+    }
+    try {
+      await branch.parseAsync([sub, ...tail], { from: "user" });
     } catch (e) {
       const err = e as { code?: string };
       if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;

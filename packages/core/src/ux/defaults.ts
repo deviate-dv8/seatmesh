@@ -68,6 +68,18 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     onRise: "none",
   },
   {
+    id: "kiro-limit",
+    for: ["kiro"],
+    priority: 86,
+    when: {
+      scan: { tailLines: 20 },
+      match:
+        "monthly\\s+usage\\s+limit\\s+has\\s+been\\s+reached|usage\\s+limit\\s+has\\s+been\\s+reached|you(?:'ve| have)\\s+reached\\s+(?:your\\s+)?(?:monthly\\s+)?usage\\s+limit|request_id:\\s*[0-9a-fA-F-]{8,}",
+    },
+    set: { phase: "limit", kind: "kiro-limit", border: "KIRO-LIMIT" },
+    onRise: "none",
+  },
+  {
     id: "cursor-generating",
     for: ["cursor-agent"],
     priority: 70,

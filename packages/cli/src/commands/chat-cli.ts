@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { Command } from "commander";
 import {
   type LoadedProfile,
-  chatFileConfig,
+  chatFileConfigForLoaded,
   appendSlotPrompt,
   tailSlotPrompts,
   querySlotPrompts,
@@ -10,6 +10,7 @@ import {
   recordAllPanes,
   resolveAgentId,
   resolveSlotKeyFromPane,
+  formatChatTranscript,
 } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import { runWhoami, capturePaneSnapshot, listSessionPanes } from "@seat-mesh/tmux";
@@ -33,11 +34,8 @@ function printRecords(rows: Awaited<ReturnType<typeof tailSlotPrompts>>, json: b
     return;
   }
   for (const r of rows) {
-    const sid = r.sessionId ?? "-";
-    const model = r.model ?? "-";
-    console.log(
-      `${r.ts}\t${r.slot}\t${r.providerId}\t${sid}\t${model}\thuman=${r.humanPrompt.slice(0, 60).replace(/\n/g, " ")}`,
-    );
+    console.log(formatChatTranscript(r));
+    console.log("---");
   }
 }
 
@@ -54,7 +52,7 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
     .option("--json", "JSON output")
     .action(async (opts: { slot?: string; lines: string; json?: boolean }) => {
       const loaded = getLoaded();
-      const cfg = chatFileConfig(loaded.profile);
+      const cfg = chatFileConfigForLoaded(loaded);
       const slot = resolveSlotFromWhere(loaded, opts.slot);
       const rows = await tailSlotPrompts(loaded.workspace, cfg, slot, Number.parseInt(opts.lines, 10));
       printRecords(rows, Boolean(opts.json));
@@ -66,6 +64,7 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
     .option("--slot <key>")
     .option("--session <id>")
     .option("--provider <id>")
+    .option("--agent <id>", "speaker id e.g. mini-1-oc, slot-3-kiro")
     .option("--model <name>")
     .option("--since <iso>")
     .option("--limit <n>", "max rows", "100")
@@ -75,17 +74,19 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
         slot?: string;
         session?: string;
         provider?: string;
+        agent?: string;
         model?: string;
         since?: string;
         limit: string;
         json?: boolean;
       }) => {
         const loaded = getLoaded();
-        const cfg = chatFileConfig(loaded.profile);
+        const cfg = chatFileConfigForLoaded(loaded);
         const rows = await querySlotPrompts(loaded.workspace, cfg, {
           slot: opts.slot,
           sessionId: opts.session,
           providerId: opts.provider,
+          agent: opts.agent,
           model: opts.model,
           since: opts.since,
           limit: Number.parseInt(opts.limit, 10),
@@ -115,7 +116,7 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
         pane?: string;
       }) => {
         const loaded = getLoaded();
-        const cfg = chatFileConfig(loaded.profile);
+        const cfg = chatFileConfigForLoaded(loaded);
         const slot = resolveSlotFromWhere(loaded, opts.slot);
         const reg = createRegistryForProfile(loaded.profile);
         let providerId = opts.provider ?? "unknown";
@@ -138,7 +139,9 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
           humanPrompt: opts.human,
           agentResponse: opts.response,
         });
-        console.log(`ok id=${row.id} slot=${row.slot} turnHash=${row.turnHash}`);
+        console.log(
+          `ok id=${row.id} slot=${row.slot} agent=${row.agent} humanKind=${row.humanKind} turnHash=${row.turnHash}`,
+        );
       },
     );
 
@@ -150,7 +153,7 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
     .option("--session <name>", "tmux session name")
     .action(async (opts: { pane?: string; all?: boolean; session?: string }) => {
       const loaded = getLoaded();
-      const cfg = chatFileConfig(loaded.profile);
+      const cfg = chatFileConfigForLoaded(loaded);
       const reg = createRegistryForProfile(loaded.profile);
 
       if (opts.all) {
@@ -200,7 +203,7 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
         return;
       }
       console.log(
-        `ok id=${result.record?.id} slot=${resolveSlotKeyFromPane(snap)} session=${result.record?.sessionId ?? "-"}`,
+        `ok id=${result.record?.id} slot=${result.record?.slot} agent=${result.record?.agent} humanKind=${result.record?.humanKind} session=${result.record?.sessionId ?? "-"}`,
       );
     });
 

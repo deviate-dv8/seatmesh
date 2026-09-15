@@ -7,6 +7,7 @@ import { resolveHarnessPath } from "../paths/paths-manifest.js";
 import type { LoadedProfile } from "../profile/profile.js";
 import { appendJsonlLine, readJsonlAll, readJsonlTail } from "../jsonl/store.js";
 import { SlotPromptRecordSchema, type PromptQuery, type SlotPromptRecord } from "./types.js";
+import { chatAgentSpeaker, chatHumanKind } from "./speaker.js";
 
 export interface ChatFileConfig {
   root: string;
@@ -34,10 +35,14 @@ export function chatFilePath(workspace: string, cfg: ChatFileConfig, slotKey: st
 
 export function turnHash(input: {
   sessionId?: string;
+  agent?: string;
+  providerId?: string;
   humanPrompt: string;
   agentResponse?: string;
 }): string {
-  const raw = `${input.sessionId ?? ""}\n${input.humanPrompt}\n${input.agentResponse ?? ""}`;
+  // Include agent/provider so a seat that switched CLIs does not collapse turns.
+  const who = input.agent ?? input.providerId ?? "";
+  const raw = `${input.sessionId ?? ""}\n${who}\n${input.humanPrompt}\n${input.agentResponse ?? ""}`;
   return createHash("sha256").update(raw).digest("hex").slice(0, 16);
 }
 
@@ -49,10 +54,19 @@ function parseRecord(row: unknown): SlotPromptRecord | null {
 export async function appendSlotPrompt(
   workspace: string,
   cfg: ChatFileConfig,
-  record: Omit<SlotPromptRecord, "id" | "ts" | "turnHash"> & { id?: string; ts?: string },
+  record: Omit<SlotPromptRecord, "id" | "ts" | "turnHash" | "agent" | "humanKind"> & {
+    id?: string;
+    ts?: string;
+    agent?: string;
+    humanKind?: "human" | "system";
+  },
 ): Promise<SlotPromptRecord> {
+  const agent = record.agent?.trim() || chatAgentSpeaker(record.slot, record.providerId);
+  const humanKind = record.humanKind ?? chatHumanKind(record.humanPrompt);
   const hash = turnHash({
     sessionId: record.sessionId,
+    agent,
+    providerId: record.providerId,
     humanPrompt: record.humanPrompt,
     agentResponse: record.agentResponse,
   });
@@ -70,6 +84,8 @@ export async function appendSlotPrompt(
     ts: record.ts ?? new Date().toISOString(),
     turnHash: hash,
     ...record,
+    agent,
+    humanKind,
   });
   await appendJsonlLine(file, row);
   return row;
@@ -91,7 +107,7 @@ export async function querySlotPrompts(
   cfg: ChatFileConfig,
   query: PromptQuery,
 ): Promise<SlotPromptRecord[]> {
-  const root = resolveFromWorkspace(workspace, cfg.root);
+  const root = cfg.rootAbs ?? resolveFromWorkspace(workspace, cfg.root);
   if (!fs.existsSync(root)) return [];
 
   const slots = query.slot
@@ -110,6 +126,9 @@ export async function querySlotPrompts(
 
   rows = rows.filter((r) => {
     if (query.providerId && r.providerId !== query.providerId) return false;
+    if (query.agent && (r.agent ?? chatAgentSpeaker(r.slot, r.providerId)) !== query.agent) {
+      return false;
+    }
     if (query.sessionId && r.sessionId !== query.sessionId) return false;
     if (query.model && r.model !== query.model) return false;
     if (query.since && Date.parse(r.ts) < Date.parse(query.since)) return false;

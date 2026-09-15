@@ -1,0 +1,4 @@
+# USER — never overwritten by `seatmesh update` / role-pack migrate.
+# Locked vendor sections (see roles/_vendor/manager.yaml `locked:`) keep engine entries.
+# Append banners / read_first / files, or add new policy ids only.
+# role_pack: 1.1.0

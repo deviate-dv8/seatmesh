@@ -2,6 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
 import { seatKindFromId } from "../schema/seat-kind.js";
+import {
+  DEFAULT_LOCKED_SECTIONS_1_1,
+  lockedSectionsFromYaml,
+  roleExtendPath,
+  roleLegacyFlatPath,
+  roleVendorPath,
+  stripRoleMetaKeys,
+  vendorRolesDir,
+} from "./role-pack.js";
 
 export interface RoleIndexEntry {
   path: string;
@@ -36,9 +45,16 @@ export interface RoleIndex {
   guards?: RoleAllowDeny;
   /** Attached-external (seatmesh func) allow/deny per role. */
   funcs?: RoleAllowDeny;
+  /** Engine-owned sections from vendor (informational; set on load). */
+  locked?: string[];
 }
 
-type RoleYaml = Partial<RoleIndex> & { extends?: string; kind?: string };
+type RoleYaml = Partial<RoleIndex> & {
+  extends?: string;
+  kind?: string;
+  locked?: unknown;
+  role_pack?: string;
+};
 
 /** Deny accumulates from base; child role's own allow list wins over base's allow. */
 function mergeAllowDeny(base?: RoleAllowDeny, role?: RoleAllowDeny): RoleAllowDeny | undefined {
@@ -72,6 +88,66 @@ function mergeRoleIndex(base: Partial<RoleIndex>, role: RoleIndex): RoleIndex {
     vars: { ...(base.vars ?? {}), ...(role.vars ?? {}) },
     guards: mergeAllowDeny(base.guards, role.guards),
     funcs: mergeAllowDeny(base.funcs, role.funcs),
+    locked: role.locked ?? base.locked,
+  };
+}
+
+/**
+ * Merge user extend onto vendor with locked-section rules:
+ * - locked `policies`: vendor ids win; extend may only add new ids
+ * - locked `banner` / `read_first` / `files` / `inject`: union (append); extend cannot clear
+ * - locked `guards`/`funcs`: deny accumulates; allow from extend only if section unlocked
+ * - unlocked sections: child wins (same as mergeRoleIndex)
+ */
+export function mergeExtendRespectingLocked(
+  vendor: RoleIndex,
+  extend: Partial<RoleIndex>,
+  lockedSections: string[],
+): RoleIndex {
+  const locked = new Set(lockedSections.map((s) => s.trim()).filter(Boolean));
+  const policyById = new Map<string, RolePolicy>();
+  for (const p of vendor.policies ?? []) policyById.set(p.id, p);
+  for (const p of extend.policies ?? []) {
+    if (locked.has("policies") && policyById.has(p.id)) continue;
+    policyById.set(p.id, p);
+  }
+
+  const readFirst = [
+    ...(vendor.read_first ?? []),
+    ...(extend.read_first ?? []),
+  ].filter((item, _i, arr) => {
+    // dedupe by path, first wins (vendor)
+    return arr.findIndex((x) => x.path === item.path) === arr.indexOf(item);
+  });
+  const banners = [...(vendor.banner ?? []), ...(extend.banner ?? [])];
+  const files = [...new Set([...(vendor.files ?? []), ...(extend.files ?? [])])];
+  const inject = [...(vendor.inject ?? []), ...(extend.inject ?? [])];
+
+  let guards = vendor.guards;
+  let funcs = vendor.funcs;
+  if (extend.guards) {
+    guards = locked.has("guards")
+      ? mergeAllowDeny(vendor.guards, { deny: extend.guards.deny })
+      : mergeAllowDeny(vendor.guards, extend.guards);
+  }
+  if (extend.funcs) {
+    funcs = locked.has("funcs")
+      ? mergeAllowDeny(vendor.funcs, { deny: extend.funcs.deny })
+      : mergeAllowDeny(vendor.funcs, extend.funcs);
+  }
+
+  return {
+    kind: extend.kind ?? vendor.kind,
+    extends: extend.extends ?? vendor.extends,
+    banner: banners,
+    read_first: readFirst,
+    policies: [...policyById.values()],
+    files,
+    inject,
+    vars: { ...(vendor.vars ?? {}), ...(extend.vars ?? {}) },
+    guards,
+    funcs,
+    locked: lockedSections,
   };
 }
 
@@ -92,49 +168,133 @@ function normalizeRoleKind(kind: string): string {
   return kind === "master" ? "manager" : kind;
 }
 
-function roleYamlPath(rolesDir: string, name: string): string {
-  return path.join(rolesDir, `${name}.yaml`);
-}
-
 function columnOverlayPath(rolesDir: string, columnId: string): string {
   return path.join(rolesDir, "columns", `${columnId}.yaml`);
 }
 
-/** Load one yaml file and merge its `extends` chain (child wins on conflicts). */
+function toRoleIndex(name: string, raw: RoleYaml): RoleIndex {
+  const cleaned = stripRoleMetaKeys(raw as Record<string, unknown>) as RoleYaml;
+  const locked = lockedSectionsFromYaml(raw as Record<string, unknown>);
+  return {
+    kind: cleaned.kind ?? name,
+    extends: cleaned.extends,
+    banner: cleaned.banner,
+    read_first: cleaned.read_first,
+    policies: cleaned.policies,
+    files: cleaned.files,
+    inject: cleaned.inject,
+    vars: cleaned.vars,
+    guards: cleaned.guards,
+    funcs: cleaned.funcs,
+    locked: locked.length ? locked : undefined,
+  };
+}
+
+/**
+ * Resolve which yaml files define a role kind:
+ * 1. `_vendor/<name>.yaml` + optional `<name>.extend.yaml` (1.1+)
+ * 2. legacy flat `<name>.yaml` (1.0)
+ */
+export function resolveRoleSources(
+  rolesDir: string,
+  name: string,
+): { vendor?: string; extend?: string; legacy?: string; mode: "vendor+extend" | "legacy" | "missing" } {
+  const vendor = roleVendorPath(rolesDir, name);
+  const extend = roleExtendPath(rolesDir, name);
+  const legacy = roleLegacyFlatPath(rolesDir, name);
+  if (fs.existsSync(vendor)) {
+    return {
+      vendor,
+      extend: fs.existsSync(extend) ? extend : undefined,
+      mode: "vendor+extend",
+    };
+  }
+  if (fs.existsSync(legacy)) {
+    return { legacy, mode: "legacy" };
+  }
+  // extend-only is invalid without vendor
+  return { mode: "missing" };
+}
+
+function loadYamlRole(filePath: string, name: string): RoleIndex {
+  const raw = YAML.parse(fs.readFileSync(filePath, "utf8")) as RoleYaml;
+  return toRoleIndex(name, raw ?? {});
+}
+
+/** Load one role name: vendor(+extend) or legacy flat, then merge extends chain. */
 function loadRoleFileChain(
   rolesDir: string,
   name: string,
-  filePath: string,
   visiting: Set<string>,
+  /** Explicit path for column overlays (user files under roles/columns/). */
+  explicitPath?: string,
 ): RoleIndex {
-  const key = `${filePath}`;
+  const key = explicitPath ?? `role:${name}`;
   if (visiting.has(key)) {
-    throw new Error(`role extends cycle at ${filePath}`);
+    throw new Error(`role extends cycle at ${key}`);
   }
   visiting.add(key);
 
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`role index missing: ${filePath}`);
+  let self: RoleIndex;
+  let lockedSections: string[] = [];
+
+  if (explicitPath) {
+    if (!fs.existsSync(explicitPath)) {
+      throw new Error(`role index missing: ${explicitPath}`);
+    }
+    self = loadYamlRole(explicitPath, name);
+    lockedSections = self.locked ?? [];
+  } else {
+    const src = resolveRoleSources(rolesDir, name);
+    if (src.mode === "missing") {
+      throw new Error(
+        `role index missing: ${roleVendorPath(rolesDir, name)} (or legacy ${roleLegacyFlatPath(rolesDir, name)})`,
+      );
+    }
+    if (src.mode === "legacy") {
+      self = loadYamlRole(src.legacy!, name);
+      lockedSections = self.locked ?? [];
+    } else {
+      const vendor = loadYamlRole(src.vendor!, name);
+      lockedSections =
+        vendor.locked?.length
+          ? vendor.locked
+          : fs.existsSync(vendorRolesDir(rolesDir))
+            ? [...DEFAULT_LOCKED_SECTIONS_1_1]
+            : [];
+      if (src.extend) {
+        const ext = loadYamlRole(src.extend, name);
+        self = mergeExtendRespectingLocked(vendor, ext, lockedSections);
+      } else {
+        self = { ...vendor, locked: lockedSections };
+      }
+    }
   }
 
-  const raw = YAML.parse(fs.readFileSync(filePath, "utf8")) as RoleYaml;
-  const extendsName = raw.extends?.trim();
-  let merged: RoleIndex = { kind: raw.kind ?? name };
+  const extendsName = self.extends?.trim();
+  let merged: RoleIndex = { ...self, kind: self.kind ?? name, locked: lockedSections };
 
   if (extendsName) {
     const parentNorm = normalizeRoleKind(extendsName);
-    const parentPath = roleYamlPath(rolesDir, parentNorm);
-    const parent = loadRoleFileChain(rolesDir, parentNorm, parentPath, visiting);
-    merged = mergeRoleIndex(parent, { ...merged, ...stripExtends(raw), kind: raw.kind ?? name });
+    const parent = loadRoleFileChain(rolesDir, parentNorm, visiting);
+    merged = mergeRoleIndex(parent, {
+      ...merged,
+      kind: self.kind ?? name,
+      locked: lockedSections,
+    });
   } else if (name === "common") {
-    merged = mergeRoleIndex({}, { ...merged, ...stripExtends(raw), kind: "common" });
+    merged = mergeRoleIndex({}, { ...merged, kind: "common", locked: lockedSections });
   } else {
-    const commonPath = roleYamlPath(rolesDir, "common");
-    if (fs.existsSync(commonPath)) {
-      const common = loadRoleFileChain(rolesDir, "common", commonPath, visiting);
-      merged = mergeRoleIndex(common, { ...merged, ...stripExtends(raw), kind: raw.kind ?? name });
+    const commonSrc = resolveRoleSources(rolesDir, "common");
+    if (commonSrc.mode !== "missing") {
+      const common = loadRoleFileChain(rolesDir, "common", visiting);
+      merged = mergeRoleIndex(common, {
+        ...merged,
+        kind: self.kind ?? name,
+        locked: lockedSections,
+      });
     } else {
-      merged = mergeRoleIndex({}, { ...merged, ...stripExtends(raw), kind: raw.kind ?? name });
+      merged = mergeRoleIndex({}, { ...merged, kind: self.kind ?? name, locked: lockedSections });
     }
   }
 
@@ -142,14 +302,10 @@ function loadRoleFileChain(
   return merged;
 }
 
-function stripExtends(raw: RoleYaml): Partial<RoleIndex> {
-  const { extends: _e, ...rest } = raw;
-  return rest;
-}
-
 /**
  * Pane column id -> merged role index.
- * 1. Seat kind file (`manager.yaml`) with optional `extends:` chain (+ implicit common).
+ * 1. Seat kind file (`_vendor/manager.yaml` + `manager.extend.yaml`, or legacy flat)
+ *    with optional `extends:` chain (+ implicit common).
  * 2. Optional column overlay `.sm/roles/columns/<columnId>.yaml` with `extends: manager` (etc.).
  * Never load `roles/<columnId>.yaml` as a kind — use `columns/<columnId>.yaml`.
  */
@@ -158,12 +314,11 @@ export function loadRoleIndex(rolesDir: string, paneRoleId: string): RoleIndex {
   const seatKind = seatKindFromId(columnId);
   const overlayPath = columnOverlayPath(rolesDir, columnId);
   if (columnId !== seatKind && fs.existsSync(overlayPath)) {
-    const merged = loadRoleFileChain(rolesDir, columnId, overlayPath, new Set());
+    const merged = loadRoleFileChain(rolesDir, columnId, new Set(), overlayPath);
     merged.kind = seatKind;
     return merged;
   }
-  const kindPath = roleYamlPath(rolesDir, seatKind);
-  const merged = loadRoleFileChain(rolesDir, seatKind, kindPath, new Set());
+  const merged = loadRoleFileChain(rolesDir, seatKind, new Set());
   merged.kind = seatKind;
   return merged;
 }

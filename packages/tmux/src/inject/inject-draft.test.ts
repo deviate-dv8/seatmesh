@@ -68,4 +68,20 @@ describe("humanDraftToPreserve", () => {
       "[mesh-inbox] DIGEST (2)\n---\n1. [from:x] please say ok when done\n---\n2. other";
     expect(humanDraftToPreserve(tail, "claude", digest)).toBe("ok");
   });
+
+  it("kiro: preserves composer draft (coordComposerDraft used to always return empty)", () => {
+    const tail = "\u276f restore my kiro notes about the banner\n";
+    expect(humanDraftToPreserve(tail, "kiro", "INJECT")).toBe(
+      "restore my kiro notes about the banner",
+    );
+  });
+
+  it("opencode: preserves draft above Build auto footer", () => {
+    const tail =
+      "┃\n┃  rewrite the proxy health check\n┃\n" +
+      "┃  Build auto · Big Pickle OpenCode Zen\nctrl+p commands\n";
+    expect(humanDraftToPreserve(tail, "opencode", "INJECT")).toBe(
+      "rewrite the proxy health check",
+    );
+  });
 });

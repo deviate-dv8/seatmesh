@@ -1,3 +1,9 @@
+# LOCKED — refreshed by `seatmesh update`. Edit ../worker.extend.yaml only.
+role_pack: "1.1.0"
+locked:
+  - banner
+  - read_first
+  - policies
 kind: worker
 extends: common
 banner:
@@ -7,6 +13,8 @@ read_first:
     note: one command per job
   - path: docs/ROLE-YAML.md
     note: worker guards + seat POV
+  - path: .sm/roles/_vendor/docs/worker.md
+    note: locked worker POV (engine)
 files:
   - docs/COMMS.md
   - docs/DOTDIR.md

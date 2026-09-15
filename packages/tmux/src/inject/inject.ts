@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import type { InjectPlan } from "@seat-mesh/core";
-import { coordComposerDraft } from "@seat-mesh/providers";
+import { claudeIdleEmptyComposer, coordComposerDraft } from "@seat-mesh/providers";
 import { withPaneInjectLock } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 import { humanDraftToPreserve, isSmInjectText } from "./inject-draft.js";
@@ -60,6 +60,77 @@ function restoreDraftBuffer(paneId: string): void {
 }
 
 /**
+ * Cursor keeps an always-ready follow-up box — 200ms is enough.
+ * Claude / Kiro / OpenCode often still show Working/spinner (or no live prompt)
+ * after Enter; paste then misses the composer. Wait until empty composer is
+ * visible, then restore (never Enter).
+ */
+function waitComposerReadyForRestore(paneId: string, providerId: string): void {
+  if (providerId === "cursor-agent" || providerId === "agent") {
+    sleepMs(200);
+    return;
+  }
+  const lines =
+    providerId === "claude" || providerId === "kiro" || providerId === "opencode" ? 24 : 16;
+  const maxMs = providerId === "opencode" ? 5500 : 4500;
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    const { tail, ansi } = freshCapture(paneId, lines);
+    const draft = coordComposerDraft(tail, providerId, ansi).trim();
+    if (draft && isSmInjectText(draft)) {
+      sleepMs(180);
+      continue;
+    }
+    // Non-empty non-inject draft already there — don't clobber; bail.
+    if (draft) return;
+
+    if (providerId === "claude") {
+      if (claudeIdleEmptyComposer(tail) || /^\s*❯\s*$/m.test(tail)) return;
+      // Still Working with no live ❯ — keep waiting.
+      const bottom = tail.split("\n").slice(-8).join("\n");
+      if (/^(Working|Running|Thinking)\b/m.test(bottom)) {
+        sleepMs(200);
+        continue;
+      }
+      sleepMs(160);
+      continue;
+    }
+
+    if (providerId === "opencode") {
+      const bottom = tail.split("\n").slice(-10).join("\n");
+      // Escape interrupts a live OC generation — never send it while busy.
+      if (
+        /⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇/i.test(bottom) ||
+        /esc\s*interrupt/i.test(bottom)
+      ) {
+        sleepMs(200);
+        continue;
+      }
+      if (/ctrl\+p commands|Build\s+auto|Ask anything|Type a message|Send a message/i.test(bottom)) {
+        // Idle composer — paste restore without Escape (Escape can still interrupt).
+        return;
+      }
+      sleepMs(180);
+      continue;
+    }
+
+    if (providerId === "kiro") {
+      const bottom = tail.split("\n").slice(-10).join("\n");
+      if (/Working|Running|Thinking|Generating/i.test(bottom) && !/^\s*[❯›>]\s*$/m.test(tail)) {
+        sleepMs(200);
+        continue;
+      }
+      if (/^\s*[❯›>]\s*$/m.test(tail) || /^\s*[❯›>]\s+/m.test(tail)) return;
+      sleepMs(160);
+      continue;
+    }
+
+    sleepMs(150);
+    return;
+  }
+}
+
+/**
  * Live human composer text — always fresh capture; mesh-inbox body does not skip save.
  * humanDraftToPreserve filters sm/chrome; stale [mesh-inbox] in composer is not restored.
  */
@@ -101,15 +172,23 @@ function clearComposerDraft(paneId: string, providerId: string, generating: bool
     return;
   }
   if (providerId === "opencode") {
+    // Escape interrupts OC generation. Prefer C-u; only Escape when idle clear stalls.
     for (let pass = 0; pass < 8; pass++) {
-      tmux(["send-keys", "-t", paneId, "Escape"]);
-      sleepMs(70);
+      const { tail: before, ansi: beforeAnsi } = freshCapture(paneId, 14);
+      const busy =
+        /⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇/i.test(before) || /esc\s*interrupt/i.test(before);
+      if (!busy && pass > 0) {
+        tmux(["send-keys", "-t", paneId, "Escape"]);
+        sleepMs(70);
+      }
       tmux(["send-keys", "-t", paneId, "C-u"]);
       sleepMs(60);
       tmux(["send-keys", "-t", paneId, "C-u"]);
       sleepMs(60);
       const { tail, ansi } = freshCapture(paneId, 14);
       if (!coordComposerDraft(tail, "opencode", ansi).trim()) break;
+      // Still non-empty while busy — C-u only, never escalate to Escape.
+      if (busy) continue;
     }
     return;
   }
@@ -223,7 +302,7 @@ function runInjectSequence(
   submitInject(paneId, plan, message, providerId);
 
   if (saved) {
-    sleepMs(providerId === "cursor-agent" || providerId === "agent" ? 200 : 150);
+    waitComposerReadyForRestore(paneId, providerId);
     restoreDraftBuffer(paneId);
   }
 }
@@ -258,7 +337,7 @@ function injectCursorAgent(
 /** Claude Code: clear stuck composer draft before paste (else inject is invisible). */
 function injectClaude(paneId: string, message: string, plan: InjectPlan): void {
   runInjectSequence(paneId, message, plan, "claude", {
-    captureLines: 12,
+    captureLines: 24,
     beforeClear: () => {
       if (plan.flushEscFirst) {
         tmux(["send-keys", "-t", paneId, "Escape"]);
@@ -280,7 +359,7 @@ function injectOpenCode(paneId: string, message: string, plan: InjectPlan): void
   const { tail } = freshCapture(paneId, 14);
   const generating = /esc interrupt|⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇/i.test(tail);
   runInjectSequence(paneId, message, plan, "opencode", {
-    captureLines: 14,
+    captureLines: 24,
     generating,
     shouldClear: ({ saved, meshInject, stale }) => {
       if (saved || meshInject || stale) return true;
@@ -315,7 +394,7 @@ export function injectToPane(
     }
     if (prov === "kiro") {
       runInjectSequence(paneId, message, plan, "kiro", {
-        captureLines: 14,
+        captureLines: 24,
         shouldClear: ({ saved, meshInject, stale }) => Boolean(saved || meshInject || stale),
       });
       return;

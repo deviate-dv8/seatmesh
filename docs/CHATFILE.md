@@ -1,8 +1,7 @@
 # ChatFile (per-slot prompt log)
 
-Append-only **CHAT.jsonl** per tmux seat — queryable history of **human prompt + agent
-response**, with **provider**, **session id**, and **model**. Avoids scraping pane
-scrollback when coordinating parallel agents.
+Append-only **CHAT.jsonl** per tmux seat — queryable history of **human/system prompt +
+agent response**, with **who spoke** (`agent`), provider, session id, and model.
 
 ## Storage
 
@@ -19,32 +18,42 @@ Profile: `chatFiles.root`, `chatFiles.filename` in `mesh.config.yaml`.
 
 | Field | Meaning |
 |-------|---------|
-| `slot` | `worker-N`, `mini-N`, `manager`, `secretary` |
+| `slot` | File key: `worker-N`, `mini-N`, `manager`, `secretary` |
+| `agent` | Speaker id: `slot-3-kiro`, `mini-1-oc`, `manager-claude` |
+| `humanKind` | `human` (typed) or `system` (mesh-inbox / cold-start inject) |
 | `providerId` | `cursor-agent`, `claude`, `kiro`, `opencode` |
 | `sessionId` | CLI resume / session UUID when known |
 | `model` | `--model` flag or provider default |
-| `humanPrompt` | Human or manager-injected text |
-| `agentResponse` | Last agent reply (when known) |
+| `humanPrompt` | Human or system-injected text |
+| `agentResponse` | Agent reply |
 
-## AgentProvider contract
+`agent` is seat + provider tag. When you switch CLIs on the same seat, new turns get a
+new `agent` (e.g. `mini-1-oc` → `mini-1-claude`). Dedupe hash includes `agent` so
+switched-provider turns do not collapse into each other.
 
-Every provider implements `PromptRecording` on `AgentProvider`:
+**Scrape caveat:** pane scrollback has no durable “who said this” marker. A scrape
+attributes the **latest completed turn** to the **currently running** CLI. Prefer
+recording soon after a turn, or `chat append` when you already know the speaker.
 
-- `sessionId(pane, detection)`
-- `modelId(pane)`
-- `scrapePromptTurn(pane)` — null when capture is not parseable
+## Transcript view (`chat tail`)
 
-Explicit append (`chat append`) or inject-time hooks can record when scrape misses.
+```text
+[system]: [mesh-inbox] OC-PROVE-1: FYI …
+[mini-1-oc]: scrape-quality-ok.
+---
+[human]: fix the banner
+[slot-3-kiro]: done
+```
 
 ## CLI
 
 ```bash
-./sm.sh chat tail --slot worker-1
-./sm.sh chat query --session <uuid> --json
-./sm.sh chat query --provider claude --limit 20
-./sm.sh chat append --human "run tests" --response "all green"
-./sm.sh chat record              # current TMUX_PANE
-./sm.sh chat record --all        # scan session panes
+seatmesh chat tail --slot mini-1
+seatmesh chat query --agent mini-1-oc --json
+seatmesh chat query --provider kiro --limit 20
+seatmesh chat append --human "run tests" --response "all green" --provider kiro
+seatmesh chat record --pane %8
+seatmesh chat record --all
 ```
 
 ## vs ChatRoom
@@ -53,4 +62,4 @@ Explicit append (`chat append`) or inject-time hooks can record when scrape miss
 |---|----------|----------|
 | Purpose | Agent-to-agent coordination | Prompt/response audit per seat |
 | Default room | `global` | Per-slot file |
-| Typical line | `CLAIMED:`, `FYI:` | Full human + agent turn |
+| Typical line | `CLAIMED:`, `FYI:` | `[human]:` / `[slot-3-kiro]:` / `[system]:` |

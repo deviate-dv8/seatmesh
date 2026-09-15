@@ -11,6 +11,12 @@ coverage/
 .env
 .env.local
 
+# Seatmesh profile / runtime (local mesh state — not product source)
+.sm/
+.sm-*/
+**/.sm/
+**/.sm-*/
+
 # OS / editor
 .DS_Store
 *.log

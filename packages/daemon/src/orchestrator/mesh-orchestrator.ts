@@ -484,10 +484,13 @@ export function fireDueCheckbacks(ctx: MeshOrchestratorCtx): void {
         row.sessionFingerprint ??
         ccLimitRetryFingerprintFromExpect(row.expect ?? "") ??
         "";
+      // Must still be Claude with the same session — OC/kiro/cursor swap cancels.
       if (!fp || !paneMatchesCcLimitFingerprint(ctx.registry, pane, fp)) {
         row.status = "cancelled";
         row.updatedAt = new Date().toISOString();
-        ctx.log(`cc-limit-retry cancel pane=${pane} (session replaced)`);
+        ctx.log(
+          `cc-limit-retry cancel pane=${pane} (not claude or session replaced)`,
+        );
         continue;
       }
       const meta = pane ? paneMetaForPane(pane) : null;

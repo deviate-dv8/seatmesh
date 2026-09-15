@@ -2,6 +2,13 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-15** | `seatmesh@1.1.0` | Official 1.1: role-pack locked `_vendor` + `*.extend.yaml` + base role MDs; `roles status\|migrate` up/down; CC-limit auto-CB + `limit idle`; draft/ChatFile/ACK fixes from 1.0.x line |
+| **2026-09-15** | `seatmesh@1.0.14` | Auto CC-limit checkback: reset+1m fanout to all Claude panes; skip if seat no longer Claude; `limit idle` for operator/manager/secretary |
+| **2026-09-15** | `seatmesh@1.0.13` | Operator ACK: no reminder inject (fixes n+1 prompt); auto-close on pane busy→idle reply |
+| **2026-09-15** | `seatmesh@1.0.12` | ChatFile speaker ids: [human]/[system]/[slot-3-kiro]/[mini-1-oc]; agent switch safe dedupe |
+| **2026-09-15** | `seatmesh@1.0.11` | OC ChatFile scrape: ┃ prompt + reply above completed ▣ Build (no footer chrome) |
+| **2026-09-15** | `seatmesh@1.0.10` | OC draft box-only extract (no Escape spam); mid-gen inject queues; kiro monthly usage → KIRO-LIMIT (hold queue) |
+| **2026-09-15** | `seatmesh@1.0.9` | Draft save/restore for claude/kiro/opencode: kiro extractor + wait idle composer before paste-back |
 | **2026-09-14** | `seatmesh@1.0.7` | checkback-verify CONTINUE consts + kiro single-Enter; blazing attach: bash short-circuit → `tmux attach` (tmux-zsign style); sync detached |
 | **2026-09-14** | `seatmesh@1.0.5` | Fast attach prep + auto-scrape 60s + detach/shutdown save hooks |
 | **2026-09-14** | `seatmesh@1.0.4` | whoami lists open ACKs; checkback cancel ids work; peer/room CB auto-stop after 3 fires |

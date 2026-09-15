@@ -433,6 +433,14 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
       }
       continue;
     }
+    if (st.phase === "limit" && st.limitKind === "kiro-limit" && prov.id === "kiro") {
+      if (!paneCcLimitSeen.has(`${paneId}:kiro-limit`)) {
+        paneCcLimitSeen.add(`${paneId}:kiro-limit`);
+        // Hold inject (queue) via limit phase — do not run OC proxy recovery.
+        log(`KIRO-LIMIT rising ${label} ${paneId} — queue held, continue other seats`);
+      }
+      continue;
+    }
     if (st.phase !== "limit" || !st.limitKind) {
       paneLimitCache.delete(paneId);
       paneConnectStreak.delete(paneId);
