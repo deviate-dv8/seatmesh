@@ -1,0 +1,14 @@
+# LOCKED — refreshed by seatmesh update
+id: supervise
+room_slug: supervise
+supervisor: secretary
+members:
+  - manager
+  - manager-2
+  - secretary
+leads:
+  - manager
+  - manager-2
+scope: Framework queue + minis throughput — not product merge or QA column moves
+guards:
+  deny: []

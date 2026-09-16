@@ -17,7 +17,8 @@ Run `profile show` to print resolved paths for the active profile.
 | `layout` | Windows, grids, coord CLI types, `coordSync` |
 | `session` | Tmux session name, worker count, mini max |
 | `orchestrator` | Redis URL, drain tuning |
-| `providers` | Enabled CLI families |
+| `providers` | Enabled CLI families (daemon detect/inject — compile-time registry) |
+| `agents` | Optional launch runner scripts (`runners.opencode`, etc.) — **not** new provider types |
 | `seats` | Seat file root, dir naming, templates |
 | `state` | Paths to agents JSON files |
 | `daemon` | Inbox port, autoStart, watch, poll intervals, manager prefix |
@@ -31,6 +32,46 @@ Run `profile show` to print resolved paths for the active profile.
 | `stack` | External command for `stack` subcommand passthrough |
 
 Schema source: `packages/core/src/schema/profile.ts`.
+
+## `providers:` (detect / inject enable list)
+
+Open string list. Builtin ids and **aliases** are fine:
+
+```yaml
+providers:
+  - cursor-agent
+  - claude
+  - opencode
+  - oc-proxy   # alias → enables the opencode provider for detect/inject
+  - empty
+  # - kimi     # allowed in schema; inject works once a kimi provider exists
+```
+
+| Entry | Enables provider id |
+|-------|---------------------|
+| `opencode`, `oc`, `oc-proxy` | `opencode` |
+| `agent`, `cursor`, `cursor-agent` | `cursor-agent` |
+| `claude`, `cc` | `claude` |
+| `kiro` | `kiro` |
+| `empty` | `empty` |
+| anything else | kept as-is (no schema reject) |
+
+## `agents.runners` (launch only)
+
+Overrides how a **CliType** is pasted into a pane. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+```yaml
+agents:
+  runners:
+    oc-proxy: scripts/opencode-cpe.sh
+```
+
+| Key | Effect |
+|-----|--------|
+| `runners.oc-proxy` | `switch … oc-proxy` / `layout.base.cli: oc-proxy` pastes the CPE script |
+| `runners.<custom>` | Launch line for that kind — peer/inject needs a matching Provider |
+
+`providers:` enables detect; `agents.runners` + `layout.base.cli` / `switch` pick the launch kind. List `oc-proxy` in both if you use CPE.
 
 ## Layout
 

@@ -38,22 +38,19 @@ export function runAssign(
   }
 
   const coTyped = isHumanCoTypedTarget(loaded, targetRaw);
-  let paneId = resolved.paneId;
-  let targetLabel = targetRaw;
-  let token: string | undefined;
-  let via: string | undefined;
 
+  // Always SEND the assign into the pane — co-typed seats still need the instruction.
+  // Room notice is additive FYI for managers, not a substitute for peer inject.
+  const sent = enqueuePrompt(loaded, targetRaw, assignPrompt(targetRaw, now), {
+    manager: true,
+  });
+  const paneId = sent.paneId;
+  const targetLabel = sent.targetLabel;
+  const token = sent.token;
+  let via = sent.via;
   if (coTyped) {
     postAssignRoomNotice(loaded, targetRaw, now);
-    via = "room+focus";
-  } else {
-    const sent = enqueuePrompt(loaded, targetRaw, assignPrompt(targetRaw, now), {
-      manager: true,
-    });
-    paneId = sent.paneId;
-    targetLabel = sent.targetLabel;
-    token = sent.token;
-    via = sent.via;
+    via = via ? `${via}+room` : "peer+room";
   }
 
   const todosCfg = resolveTodosConfig(loaded);

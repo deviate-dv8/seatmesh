@@ -52,7 +52,13 @@ providers:
   - cursor-agent
   - claude
   - opencode
+  - oc-proxy
   - empty
+
+# CPE OpenCode: layout.base.cli.<seat>: oc-proxy + this runner
+agents:
+  runners:
+    oc-proxy: scripts/opencode-cpe.sh
 
 seats:
   root: {{seatsRoot}}
@@ -75,6 +81,8 @@ roles:
   dir: roles
 
 daemon:
+  # Periodic mesh-agents.json save from live tmux (false or interval 0 = off).
+  autoScrape: true
   port: 31670
   # workspace: unique port per project (base + hash(workspace) % range) so two
   # seatmesh-managed projects never collide on one machine. Set to "profile"

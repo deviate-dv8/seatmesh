@@ -161,24 +161,23 @@ data:
 
 ### 3.3 Launch / agent commands
 
-**Today:** `agent-builder.ts` launches plain `opencode --auto` (+ claude
-`--permission-mode auto`, env prefix). CPE wrappers are config-only.
-
-**Target (optional overrides for meshes that need a wrapper):**
+**Implemented (2026-09-16):** one CliType per family; optional runner script per kind.
+No separate proxy type — `type` stays `opencode`.
 
 ```yaml
 agents:
-  launch:
-    envPrefix: "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor"
-    wrappers:
-      opencode: scripts/opencode-cpe.sh   # opt-in; not engine default
-      opencodeMain: scripts/opencode-main.sh
-    claude:
-      permissionMode: auto
+  runners:
+    opencode: scripts/opencode-cpe.sh   # CPE/proxy; switch/save still use type opencode
 ```
 
-Resume rows stay in `mesh-agents.json` (`resumeCmd` wins when present — clear or
-re-save to drop stale CPE wrappers after upgrading).
+- Launch: `buildKindLaunchCmd` in `packages/core/src/agents/runners.ts`
+- Wired: `switch`, `launch`, `set`, `tag`, `save`, `resolveLaunchCmd`
+- Save preserves `resumeCmd` when it contains `opencode-cpe.sh` (session id refreshed only)
+- **Not config:** new CLIs (e.g. Kimi) need a Provider + CliType — yaml runner alone does not
+  enable daemon detect/inject. See [ARCHITECTURE.md](ARCHITECTURE.md) § Agent CLI: three layers.
+
+Default when no runner: plain `opencode --auto` (same as claude/kiro/agent builtins in
+`buildBuiltinLaunchCmd`).
 
 ### 3.4 Comms prefixes (documented but missing from schema)
 

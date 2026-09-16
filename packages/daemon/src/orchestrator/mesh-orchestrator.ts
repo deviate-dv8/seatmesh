@@ -76,12 +76,14 @@ import {
   openAckForDeliveredInbox,
 } from "../ack/ack-sweep.js";
 import { notePaneDeliveryHold } from "../inject/pane-hold.js";
+import { pollSecretaryAutoRestart } from "../recovery/secretary-auto-restart.js";
 
 export interface MeshOrchestratorCtx {
   loaded: LoadedProfile;
   registry: ProviderRegistry;
   store: QueueStore;
   session: string;
+  /** Base tmux window name (secretary pane lives here). */
   baseWindow: string;
   workersWindow: string;
   minisWindow: string;
@@ -716,6 +718,13 @@ function yieldEventLoop(): Promise<void> {
 }
 
 export function orchestratorDrainTick(ctx: MeshOrchestratorCtx): DrainTickResult {
+  pollSecretaryAutoRestart({
+    loaded: ctx.loaded,
+    registry: ctx.registry,
+    session: ctx.session,
+    baseWindow: ctx.baseWindow,
+    log: ctx.log,
+  });
   if (ctx.paneOps) {
     drainPaneOpsOnce(ctx.paneOps);
   }
@@ -745,6 +754,13 @@ export function orchestratorDrainTick(ctx: MeshOrchestratorCtx): DrainTickResult
 
 /** Yield between heavy steps so daemon /health can answer during drain. */
 export async function orchestratorDrainTickAsync(ctx: MeshOrchestratorCtx): Promise<DrainTickResult> {
+  pollSecretaryAutoRestart({
+    loaded: ctx.loaded,
+    registry: ctx.registry,
+    session: ctx.session,
+    baseWindow: ctx.baseWindow,
+    log: ctx.log,
+  });
   if (ctx.paneOps) {
     drainPaneOpsOnce(ctx.paneOps);
   }

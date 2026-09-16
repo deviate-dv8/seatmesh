@@ -1,0 +1,11 @@
+# LOCKED — refreshed by seatmesh update
+id: balance
+room_slug: balance
+balance_lead: manager-2
+main_lead: manager
+interval: 10m
+balancees:
+  - slot-5
+  - slot-6
+scope: Work allocation across balancees
+auto_assign: true

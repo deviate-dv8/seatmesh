@@ -2,15 +2,18 @@ import {
   armCheckbackSync,
   cancelCheckbackSync,
   chatRoomConfigForLoaded,
+  formatPeerBulkDigest,
   formatTodoExpect,
+  PEER_BULK_MAX,
   resolveTodosConfig,
+  takePeerBulkBatch,
   todoCheckbackId,
   type LoadedProfile,
 } from "@seat-mesh/core";
 import { enqueuePrompt } from "../inject/prompt.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import type { SeatTarget } from "./seat-paths.js";
-import { appendTask, checkTask } from "./seat-update.js";
+import { appendTask, checkTask, listOpenTasks, setFocusMark, setFocusNow } from "./seat-update.js";
 
 export interface TodoAddResult {
   seatLabel: string;
@@ -29,6 +32,9 @@ export interface TodoCheckResult {
   reported: boolean;
   reportVia?: string;
   cbCancelled: boolean;
+  /** Remaining open TASKS after this check (bulk DIGEST to the seat). */
+  remainingOpen: number;
+  remainingBulkVia?: string;
 }
 
 export function seatLabelForTarget(target: SeatTarget, fallback = "here"): string {
@@ -91,7 +97,9 @@ export function addSeatTodo(
   };
 }
 
-/** Mark todo done + peer DONE: to configured reportTo + cancel todo CB. */
+/** Mark todo done + peer DONE: to configured reportTo + cancel todo CB.
+ * Remaining open TASKS are inbox DIGEST-bulk'd to the same seat (peer-bulk format).
+ */
 export function checkSeatTodo(
   loaded: LoadedProfile,
   target: SeatTarget,
@@ -130,6 +138,39 @@ export function checkSeatTodo(
     reportVia = e instanceof Error ? e.message : String(e);
   }
 
+  const remaining = listOpenTasks(loaded, target);
+  let remainingBulkVia: string | undefined;
+  if (remaining.length > 0) {
+    const { batch, rest } = takePeerBulkBatch(remaining, PEER_BULK_MAX);
+    const digest = formatPeerBulkDigest({
+      seat: seatLabel,
+      items: batch.map((t) => ({
+        from: "tasks",
+        body: `OPEN TASK: ${t}`,
+      })),
+      more: rest.length,
+    });
+    try {
+      // Deliver via inbox peer queue (same debounce/backlog path as DIGEST mail).
+      const bulkTarget = seatLabel;
+      const sent = enqueuePrompt(loaded, bulkTarget, digest, {
+        manager: false,
+        prefix: "",
+        armCheckback: false,
+      });
+      remainingBulkVia = sent.via ?? "queued";
+      setFocusNow(loaded, target, batch[0]!);
+    } catch (e) {
+      remainingBulkVia = e instanceof Error ? e.message : String(e);
+    }
+  } else {
+    try {
+      setFocusMark(loaded, target, "OPEN");
+    } catch {
+      /* best-effort */
+    }
+  }
+
   return {
     seatLabel,
     match: openText,
@@ -137,5 +178,7 @@ export function checkSeatTodo(
     reported,
     reportVia,
     cbCancelled,
+    remainingOpen: remaining.length,
+    remainingBulkVia,
   };
 }

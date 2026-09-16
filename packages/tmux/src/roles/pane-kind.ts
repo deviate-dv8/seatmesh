@@ -2,6 +2,8 @@ import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import { composerFromCapture } from "@seat-mesh/providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
+import { seatAgentEntry } from "../agents/agents-state.js";
+import { resolveOpenCodeHarnessType } from "../agents/oc-proxy-live.js";
 
 export type PaneSurfaceKind = "agent" | "terminal" | "unknown";
 
@@ -77,28 +79,40 @@ export function inspectPaneKind(
   }
 
   const prov = registry.detect(snap);
-  const providerId = prov?.id ?? "unknown";
-  const composer = composerFromCapture(snap, providerId);
+  const detectId = prov?.id ?? "unknown";
   const role = snap.options.mesh_role || row.role || "?";
   const slot = snap.options.mesh_slot || row.slot || "-";
   const mini = snap.options.mesh_mini || row.mini || "";
   const seat = seatLabel(role, slot === "-" ? "" : slot, mini);
+  const saved = seatAgentEntry(loaded, seat);
+  const providerId = resolveOpenCodeHarnessType({
+    detectId: detectId === "unknown" ? "empty" : detectId,
+    savedType: saved?.type,
+    resumeCmd: saved?.resume_cmd,
+    snap,
+  });
+  const reportProvider = providerId === "empty" ? detectId : providerId;
+  const composer = composerFromCapture(snap, detectId === "unknown" ? "empty" : detectId);
   const cmd = snap.currentCommand || "?";
   const phase = composer.phase;
-  const kind = classifyPaneSurface({ providerId, phase, cmd });
+  const kind = classifyPaneSurface({
+    providerId: reportProvider === "oc-proxy" ? "opencode" : reportProvider,
+    phase,
+    cmd,
+  });
 
   const verdict =
     kind === "agent"
-      ? `AGENT — ${seat} is a live agent (${providerId}, ${phase})`
+      ? `AGENT — ${seat} is a live agent (${reportProvider}, ${phase})`
       : kind === "terminal"
         ? `TERMINAL — ${seat} is a plain shell (${cmd}, ${phase})`
-        : `UNKNOWN — ${seat} provider=${providerId} cmd=${cmd} phase=${phase}`;
+        : `UNKNOWN — ${seat} provider=${reportProvider} cmd=${cmd} phase=${phase}`;
 
   return {
     seat,
     paneId,
     kind,
-    provider: providerId,
+    provider: reportProvider,
     phase,
     cmd,
     verdict,

@@ -9,10 +9,10 @@ import {
 
 describe("cli-hints default profile omit", () => {
   it("agent cmds omit --profile .sm", () => {
-    expect(SEATMESH_DEFAULT).toBe("seatmesh");
-    expect(seatmeshCmd("whoami")).toBe("seatmesh agent whoami");
-    expect(seatmeshCmd("")).toBe("seatmesh agent");
-    expect(seatmeshCmdTop("inbox restart")).toBe("seatmesh inbox restart");
+    expect(SEATMESH_DEFAULT).toBe("sm");
+    expect(seatmeshCmd("whoami")).toBe("sm agent whoami");
+    expect(seatmeshCmd("")).toBe("sm agent");
+    expect(seatmeshCmdTop("inbox restart")).toBe("sm inbox restart");
   });
 
   it("normalizeSmProfileDir accepts sm- / .sm- / bare", () => {
@@ -24,7 +24,7 @@ describe("cli-hints default profile omit", () => {
 
   it("seatmeshProfileCmd for multi-config", () => {
     expect(seatmeshProfileCmd("cpe", "agent whoami")).toBe(
-      "seatmesh --profile .sm-cpe agent whoami",
+      "sm --profile .sm-cpe agent whoami",
     );
   });
 });

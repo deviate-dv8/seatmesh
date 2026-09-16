@@ -65,7 +65,6 @@ import {
   listInbox,
   resolveInbox,
   secretaryLaunch,
-  secretaryRestart,
   secretaryDispatch,
   secretaryCollect,
   secretaryMeshWatch,
@@ -80,6 +79,7 @@ import {
   printSmokeResults,
   launchSession,
   printLaunchResults,
+  defaultHarnessTypeForSeat,
   enqueuePrompt,
   injectPromptDirect,
   printPeerVerify,
@@ -100,6 +100,7 @@ import {
   runFlush,
   printFlushResults,
   runSwitch,
+  runPaneResume,
   runSeatSwap,
   runSet,
   runTag,
@@ -162,6 +163,7 @@ import { coordCommand } from "./commands/coord-cli.js";
 function parseArgs(argv: string[]) {
   const profileFlag: string[] = [];
   const rest: string[] = [];
+  let agentsHelp = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--profile" || a === "-p") {
@@ -170,9 +172,13 @@ function parseArgs(argv: string[]) {
       profileFlag.push(v);
       continue;
     }
+    if (a === "--agents" || a === "--agent-help") {
+      agentsHelp = true;
+      continue;
+    }
     rest.push(a);
   }
-  return { profile: profileFlag[0], rest };
+  return { profile: profileFlag[0], rest, agentsHelp };
 }
 
 /** Profile yaml + mesh-agents.json layout overrides (yaml is fallback only). */
@@ -180,32 +186,74 @@ function meshLoaded(profileArg?: string) {
   return applyMeshState(loadProfile(profileArg));
 }
 
+/** Operator-facing help — human/session verbs only (default `seatmesh help`). */
+function usageHuman(loaded?: ReturnType<typeof loadProfile>): void {
+  const prof = loaded ? `profile=${loaded.profile.name}` : "";
+  console.log(`seatmesh${prof ? ` (${prof})` : ""} — operator CLI (human surface)
+
+  Docs: README.md + docs/QUICKSTART.md · full agent+human list: seatmesh --agents help
+
+Setup
+  start | run | init | install | update | version
+  session attach|up|down|status|sync|init <sm-name>
+  sessions [list|attach|forget|register]
+
+Put an agent on a pane
+  help human          ← cheat sheet (aliases: put-agent | panes)
+  switch <target> <opencode|oc-proxy|claude|agent|kiro|empty>
+  launch <target|all>
+  kind <target>
+
+Work / status
+  todo give <target> "…" | todo <target> "…" | assign <target> "…"
+  todo list [target] | todo check <target> "…"
+  target add|list|done|triage
+  report | verify | test | save|auto | inbox […] | labels
+
+Session shape
+  reload [--layout] | layout […] | realign | ops list|clear
+
+Agent panes use the gateway (not listed here by default):
+  seatmesh agent …          · seatmesh agent help
+  seatmesh --agents help    · show human + agent + shared verbs
+
+  --profile <dir|yaml>   optional; default walk-up .sm/
+`);
+}
+
+/** Full help — human + agent + shared (`seatmesh --agents help`). */
 function usage(loaded?: ReturnType<typeof loadProfile>): void {
   const prof = loaded ? `profile=${loaded.profile.name}` : "";
   console.log(`seatmesh${prof ? ` (${prof})` : ""} — profile-driven tmux multi-agent CLI
 
   Docs: README.md + docs/ONE-PATH.md + docs/QUICKSTART.md
   Cold start: bin/seatmesh auto-runs npm install + build when dist is stale
+  Default operator help (human-only): seatmesh help   ·  this list: seatmesh --agents help
 
 Setup (run once per project, by a human)
   start               ONE command: init if needed + create-or-attach session (fresh or existing)
+  run                 logs-window left pane: status line → interactive $SHELL (npx seatmesh run)
   init [--force] [--seats-root PATH] [--name NAME]   create .sm/ dotdir only
   session init <sm-name> [--force] [--name NAME]   create .sm-<name>/ (multi-config)
   sessions [list|attach|forget|register] [--json]   global registry + TUI picker (all meshes)
+  install [--bin DIR] [--force]       symlink tracked bin/sm + seatmesh → ~/.local/bin
   update [--dry-run] [--migrate] [--no-restart-inbox]
-                                        refresh _vendor (file-by-file) + role-pack migrate + paths.json
+                                        1) npm i -g seatmesh@latest  2) refresh .sm/_vendor
+  config check | config upgrade         validate yaml · how to bump CLI (npm i -g)
+  web status|open|url | open-web        operator hub :3190 (parity with packages/web)
   roles status|migrate [--to VER]|steps   locked role-pack up/down (1.1.x)
   version [--json] [--check-registry]   CLI vs npm latest vs profile .seatmesh-version
 
 Put an agent on a pane (human — most common)
   help human          ← full cheat sheet (aliases: put-agent | panes)
-  switch <target> <opencode|claude|agent|kiro>   empty shell → agent CLI
+  switch <target> <opencode|oc-proxy|claude|agent|kiro>   empty shell → agent CLI
   switch <target> empty                          agent → plain shell
   launch <target|all>                            resume configured CLI (no type pick)
+  pane resume [target]                           autodetect session id → resume/relaunch
   kind <target>                                  agent vs terminal?
-  Examples: switch slot-1 opencode · switch here claude · npx seatmesh switch mini-1 opencode
+  Examples: switch slot-1 opencode · switch secretary oc-proxy · pane resume here
 
-Give a seat a todo (human or base agent — no contracts)
+Give a seat a todo (human or base agent — contracts optional)
   todo give <target> "…"     ← FOCUS+TASK+inject+CB≥20m  (preferred)
   todo <target> "…"          ← same shorthand
   assign <target> "…"        ← same engine
@@ -233,10 +281,11 @@ Agent runtime (pane — always via gateway)
   agent                     scoped can/cannot for this pane
   agent <cmd> …             run <cmd> if allowed; else UNAUTHORIZED
   agent context [roles|init]  registered read_first/files; init scaffolds .sm
-  agent apply|preflight …   contract apply
+  agent contract [status|on|off|open]   simple locks (prefer over apply)
+  agent apply|preflight …   legacy multi-clause DSL
 
   Shared/operator (outside agent — humans + session ops)
-  session | update | init | report | test | layout | save | inbox restart | target …
+  run | session | update | init | report | test | layout | save | inbox restart | target …
 
   Examples: switch slot-1 opencode | agent whoami | agent help peer | agent hub | agent kind slot-1
   Discover: help human  # put agent on pane · help <cmd> · agent help <cmd> · <cmd> --help
@@ -244,30 +293,33 @@ Agent runtime (pane — always via gateway)
   Operator EOD: target add "finish s13 tickets" [--deadline eod|6h] · target list · target done <id> · target triage <id>
 
   --profile <dir|yaml>   optional; default walk-up .sm/; multi-config: --profile .sm-<name>
+  --agents               with help: show this full human+agent surface (default help is human-only)
 `);
 }
 
-function printPlainUsage(profileArg?: string): void {
+function printPlainUsage(profileArg?: string, agentsHelp = false): void {
+  const print = agentsHelp ? usage : usageHuman;
   if (profileArg) {
     try {
-      usage(meshLoaded(profileArg));
+      print(meshLoaded(profileArg));
       return;
     } catch {
       /* fall through — plain help without profile load */
     }
   }
-  usage();
+  print();
 }
 
 async function main(): Promise<void> {
-  const { profile: profileArg, rest } = parseArgs(process.argv.slice(2));
+  const { profile: profileArg, rest, agentsHelp } = parseArgs(process.argv.slice(2));
   const [cmd, sub, ...tail] = rest;
 
   // Bare `npx seatmesh` / help: logo+version once per terminal; later invocations plain usage.
   // `help <cmd>` → per-command usage (agents: `agent help <cmd>`).
+  // Default help = human-only; `--agents help` = full human+agent surface.
   const helpCmd = cmd === "-h" || cmd === "--help" || cmd === "help";
   const blankCmd = !cmd || (cmd.startsWith("-") && !helpCmd);
-  if (helpCmd && cmd === "help" && sub) {
+  if (helpCmd && cmd === "help" && sub && sub !== "--agents") {
     const { printCmdHelp } = await import("./commands/help-text.js");
     if (!printCmdHelp(sub)) process.exit(2);
     return;
@@ -289,9 +341,9 @@ async function main(): Promise<void> {
       }
       console.log("");
     }
-    printPlainUsage(profileArg);
+    printPlainUsage(profileArg, agentsHelp);
     const { printGlobalHelpHint } = await import("./commands/help-text.js");
-    printGlobalHelpHint();
+    printGlobalHelpHint(agentsHelp);
     return;
   }
 
@@ -368,6 +420,23 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "install") {
+    const { runInstall, defaultInstallBinDir } = await import("./setup/install.js");
+    let binDir = defaultInstallBinDir();
+    const force = rest.includes("--force");
+    for (let i = 0; i < rest.length; i++) {
+      if (rest[i] === "--bin" && rest[i + 1]) {
+        binDir = rest[++i]!;
+      }
+    }
+    const r = runInstall({ binDir, force });
+    console.log(
+      `OK: install ${r.created ? "linked" : "already linked"} ${r.link} -> ${r.target}`,
+    );
+    console.log(`  bin dir: ${r.binDir} (ensure it is on PATH)`);
+    return;
+  }
+
   if (cmd === "update") {
     const { runUpdate } = await import("./setup/update.js");
     const {
@@ -382,9 +451,24 @@ async function main(): Promise<void> {
     const noRestartInbox = rest.includes("--no-restart-inbox");
     const installed = readInstalledCliVersion();
     const npmLatest = resolveLatestRegistryVersion(true);
+
+    // Lead with CLI upgrade — most users think "update" means bump the package.
+    console.log("seatmesh update — two steps");
+    console.log("  1) CLI package (do this first if you want npm latest):");
+    console.log("       npm install -g seatmesh@latest");
+    console.log("       # or: npx seatmesh@latest update");
+    console.log("  2) This command: refresh .sm/_vendor + config merge from the CLI you ran");
+    console.log("     (see also: seatmesh config upgrade)");
+    console.log("");
     console.log(formatInstallStatusLine(installed, npmLatest));
+    if (npmLatest && semverLess(installed, npmLatest)) {
+      console.error(
+        `  WARN: CLI ${installed} < npm ${npmLatest} — step 1 first, then re-run update`,
+      );
+    }
+
     const r = runUpdate({ profileArg, dryRun, migrate });
-    console.log(`OK: update dryRun=${dryRun} migrate=${migrate}`);
+    console.log(`OK: profile update dryRun=${dryRun} migrate=${migrate}`);
     console.log(`  CLI running: ${r.packageVersion}`);
     if (r.previousVersion != null) {
       console.log(
@@ -394,11 +478,6 @@ async function main(): Promise<void> {
       console.log(`  profile .seatmesh-version: (none yet)`);
     }
     if (npmLatest) console.log(`  npm latest: ${npmLatest}`);
-    if (npmLatest && semverLess(installed, npmLatest)) {
-      console.error(
-        `  WARN: CLI ${installed} < npm ${npmLatest} — upgrade: npm install -g seatmesh@latest  or  npx seatmesh@latest update`,
-      );
-    }
     console.log(`  paths: ${r.pathsManifest}`);
     for (const line of r.refreshed) console.log(`  refreshed: ${line}`);
     for (const line of r.skipped) console.log(`  skipped (unchanged): ${line}`);
@@ -420,7 +499,7 @@ async function main(): Promise<void> {
     }
     if (isNpxEphemeralInstall()) {
       console.log(
-        "  note: npx cache CLI — profile vendor updated only; npm package is re-fetched each npx run",
+        "  note: npx cache CLI — profile vendor updated only; use npm i -g seatmesh@latest to pin a global bin",
       );
     }
     if (!dryRun && !noRestartInbox) {
@@ -494,6 +573,23 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === "run") {
+    // Logs window left pane: one-liner status, then plain interactive shell.
+    const loaded = meshLoaded(profileArg);
+    const port = meshInboxPort(loaded);
+    console.log(
+      `seatmesh run · session=${loaded.sessionName} · workspace=${loaded.workspace} · inbox=:${port}`,
+    );
+    console.log(`tips: seatmesh agent · seatmesh report · seatmesh inbox · seatmesh help`);
+    const shell = process.env.SHELL || "/bin/bash";
+    const r = spawnSync(shell, ["-l"], {
+      cwd: loaded.workspace,
+      stdio: "inherit",
+      env: process.env,
+    });
+    process.exit(typeof r.status === "number" ? r.status : 1);
+  }
+
   if (cmd === "init") {
     const force = rest.includes("--force");
     const seatsIdx = rest.indexOf("--seats-root");
@@ -529,7 +625,7 @@ async function main(): Promise<void> {
           `UNAUTHORIZED: sessions ${action} is operator-only — run without agent: seatmesh sessions ${action} …`,
         );
         console.error("hint: seatmesh agent sessions   # list other meshes");
-        console.error('hint: seatmesh agent remote pia secretary "…"  # cross-mesh peer');
+        console.error('hint: seatmesh agent peer @pia:secretary "…"  # cross-mesh');
         process.exit(2);
       }
       const loaded = meshLoaded(profileArg);
@@ -684,6 +780,42 @@ async function main(): Promise<void> {
       "usage: session attach|up|down|status|sync|check|repair|init <sm-name>",
     );
     process.exit(2);
+  }
+
+  if (cmd === "config") {
+    const { runConfigCheck, printConfigHelp, printConfigUpgradeGuide } = await import(
+      "./commands/config-cli.js"
+    );
+    const json = rest.includes("--json") || sub === "--json" || tail.includes("--json");
+    if (!sub || sub === "help" || sub === "-h" || sub === "--help") {
+      printConfigHelp();
+      return;
+    }
+    if (sub === "check") {
+      process.exit(runConfigCheck(profileArg, { json }));
+    }
+    if (sub === "upgrade" || sub === "up") {
+      printConfigUpgradeGuide();
+      return;
+    }
+    console.error("usage: config check [--json] | config upgrade");
+    process.exit(2);
+  }
+
+  if (cmd === "tp") {
+    const loaded = meshLoaded(profileArg);
+    const { runTpCommand } = await import("./commands/tp-cli.js");
+    await runTpCommand(loaded, sub, tail);
+    return;
+  }
+
+  if (cmd === "web" || cmd === "open-web") {
+    const loaded = meshLoaded(profileArg);
+    const { runWebCommand, runWebOpen } = await import("./commands/web-cli.js");
+    if (cmd === "open-web") {
+      process.exit(runWebOpen(sub));
+    }
+    process.exit(await runWebCommand(loaded, sub, tail));
   }
 
   if (cmd === "verify") {
@@ -1280,6 +1412,7 @@ async function main(): Promise<void> {
         "claude",
         "kiro",
         "opencode",
+        "oc-proxy",
         "cursor-agent",
         "oc",
         "cursor",
@@ -1316,7 +1449,10 @@ async function main(): Promise<void> {
         saveMeshSession(loaded, reg);
         return;
       }
-      secretaryRestart(loaded, reg, typeArg, fresh);
+      runSwitch(loaded, reg, "secretary", typeArg ?? defaultHarnessTypeForSeat(loaded, "secretary"), {
+        fresh,
+        reason: fresh ? "restart-fresh" : "restart",
+      });
       saveMeshSession(loaded, reg);
       return;
     }
@@ -1416,6 +1552,43 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     return;
+  }
+
+  if (cmd === "pane") {
+    const loaded = meshLoaded(profileArg);
+    const reg = createRegistryForProfile(loaded.profile);
+    const action = sub ?? "help";
+    if (action === "help" || action === "-h" || action === "--help") {
+      console.log(`pane — pane helpers (operator)
+
+  pane resume [target]     autodetect session id on pane → resume / relaunch
+  Targets: here (default) | secretary | manager | slot-N | mini-N
+
+  Live OpenCode: pastes resume [ses_…]
+  Shell / dead OC: relaunches oc-proxy|opencode|claude with that session`);
+      return;
+    }
+    if (action === "resume") {
+      requireCoordRole(loaded, "pane resume");
+      const target = tail.find((t) => !t.startsWith("-")) ?? "here";
+      try {
+        const r = runPaneResume(loaded, reg, target);
+        if (!r.ok) {
+          console.error(`FAIL: pane resume ${r.target} pane=${r.paneId}: ${r.detail}`);
+          process.exit(1);
+        }
+        console.log(
+          `OK: pane resume ${r.mode} ${r.target} pane=${r.paneId} session=${r.sessionId} ${r.harnessType} — ${r.detail}`,
+        );
+        if (r.mode === "relaunch") saveMeshSession(loaded, reg);
+      } catch (e) {
+        console.error((e as Error).message);
+        process.exit(1);
+      }
+      return;
+    }
+    console.error(`usage: pane resume [target]\n  unknown: pane ${action}`);
+    process.exit(2);
   }
 
   if (cmd === "ppa") {
@@ -1587,6 +1760,9 @@ async function main(): Promise<void> {
     });
     console.log(
       `SENT: prompt -> ${targetLabel} pane=${paneId} token=${token ?? "-"} via=${via ?? "pane-row"}`,
+    );
+    console.log(
+      'hint: prefer `todo give` (work) or `ask`/`msg`/`peer` (comms) over bare `prompt`',
     );
     return;
   }
@@ -1868,6 +2044,10 @@ async function main(): Promise<void> {
     }
 
     if (sub && AGENT_META.has(sub)) {
+      if (sub === "forum" || sub === "golf") {
+        console.log("agent forum/golf — see docs/cli/forum.md (not bundled in this build)");
+        return;
+      }
       if (sub === "apply") {
         const { bundle, opts } = parseAgentApplyArgs(tail);
         applyAgentContractBundle(loaded, reg, bundle, opts);
@@ -2153,6 +2333,17 @@ async function main(): Promise<void> {
         : cmd === "contract"
           ? buildContractLockCommands(getLoaded)
           : buildChatCommands(getLoaded);
+    // contract with no sub → status (simple agent path)
+    if (!sub && cmd === "contract") {
+      try {
+        await branch.parseAsync(["status"], { from: "user" });
+      } catch (e) {
+        const err = e as { code?: string };
+        if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+        throw e;
+      }
+      return;
+    }
     if (!sub) {
       branch.outputHelp();
       return;
@@ -2284,7 +2475,7 @@ async function main(): Promise<void> {
   }
 
   console.error(`unknown command: ${cmd}`);
-  usage();
+  console.error("hint: seatmesh help · seatmesh help human · seatmesh --agents help");
   process.exit(2);
 }
 

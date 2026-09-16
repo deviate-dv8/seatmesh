@@ -1,29 +1,27 @@
 import { spawnSync } from "node:child_process";
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
-import { portsForSlot } from "@seat-mesh/core";
-import { buildLaunchCmd } from "./agents-state.js";
+import { normalizeAgentKind, portsForSlot } from "@seat-mesh/core";
+import { resolveSeatLaunchCmd } from "./agent-launch.js";
 import { withPaneInputEnabled } from "../inject/inject.js";
-import { pasteLaunchCmd } from "./launch.js";
+import { pasteHarnessLaunchCmd, pasteLaunchCmd } from "./launch.js";
 import { isOpenCodeLaunch, verifyHarnessAfterPaste } from "./launch-verify.js";
+import { isOpenCodeHarnessType, stopOpenCodeCli } from "./oc-stop.js";
+import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
+import { seatAgentEntry } from "./agents-state.js";
+import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { injectAfterLaunch } from "../seats/cold-start-inject.js";
 import { invalidatePaneContext } from "../seats/cold-start-state.js";
-import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { selectPaneUnfocused } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 import { isSecretaryKind, seatKindFromId } from "@seat-mesh/core";
-import { resolveSecretaryLaunchCmd } from "../roles/secretary.js";
 import { enqueueColdStart } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
 
-const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "empty"]);
+const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "oc-proxy", "empty"]);
 
 function normalizeType(t: string): string {
-  const x = t.trim().toLowerCase();
-  if (x === "cursor-agent" || x === "cursor") return "agent";
-  if (x === "oc") return "opencode";
-  if (x === "cc") return "claude";
-  return x;
+  return normalizeAgentKind(t);
 }
 
 function providerIdToHarnessType(id: string): string {
@@ -72,7 +70,7 @@ export function runSwitch(
   const session = loaded.sessionName;
   const newType = normalizeType(newTypeRaw);
   if (!CLI_TYPES.has(newType)) {
-    throw new Error(`bad type: ${newTypeRaw} (want agent|kiro|claude|opencode|empty)`);
+    throw new Error(`bad type: ${newTypeRaw} (want agent|kiro|claude|opencode|oc-proxy|oc|empty)`);
   }
 
   if (target === "here" || target === "self") {
@@ -88,6 +86,8 @@ export function runSwitch(
       target = `slot-${resolvedHere.row.slot}`;
     } else if (resolvedHere.row.mini) {
       target = `mini-${resolvedHere.row.mini}`;
+    } else if (role) {
+      target = role;
     } else {
       throw new Error(
         `switch here: unsupported role ${role || "?"} — pass secretary|manager|slot-N|mini-N`,
@@ -105,15 +105,33 @@ export function runSwitch(
   const { paneId, row } = resolved;
   const snapBefore = capturePaneSnapshot(paneId);
   const oldProv = snapBefore ? registry.detect(snapBefore) : null;
-  const oldType = oldProv ? providerIdToHarnessType(oldProv.id) : "empty";
+  const savedBefore = seatAgentEntry(loaded, target);
+  const oldType = resolveOpenCodeHarnessType({
+    detectId: oldProv?.id ?? "empty",
+    savedType: savedBefore?.type,
+    resumeCmd: savedBefore?.resume_cmd,
+    snap: snapBefore,
+  });
   const oldDet = oldProv && snapBefore ? oldProv.detect(snapBefore) : null;
   const fresh = opts.fresh ?? true;
 
   let keepRid: string | null = null;
   if (opts.resumeId) {
     keepRid = opts.resumeId;
-  } else if (!fresh && newType !== "empty" && (newType === oldType || oldType === "empty")) {
-    keepRid = oldDet?.resumeId ?? null;
+  } else if (
+    !fresh &&
+    newType !== "empty" &&
+    (liveHarnessSatisfiesWanted(oldType, newType, snapBefore, {
+      savedType: savedBefore?.type,
+      resumeCmd: savedBefore?.resume_cmd,
+    }) ||
+      oldType === "empty")
+  ) {
+    keepRid =
+      oldDet?.resumeId ??
+      savedBefore?.resume_id ??
+      snapBefore?.options?.mesh_oc_session ??
+      null;
   }
 
   const slot = row.slot || (row.role === "manager" ? "manager" : "?");
@@ -132,6 +150,10 @@ export function runSwitch(
   selectPaneUnfocused(["-e", "-t", paneId]);
 
   withPaneInputEnabled(paneId, () => {
+    if (isOpenCodeHarnessType(oldType)) {
+      stopOpenCodeCli(paneId, capturePaneSnapshot);
+      return;
+    }
     if (oldType === "kiro") {
       tmux(["send-keys", "-t", paneId, "Escape"]);
       sleepMs(300);
@@ -157,20 +179,16 @@ export function runSwitch(
   const isSecretaryPane =
     row.role === "secretary" ||
     isSecretaryKind(row.role, loaded.profile.layout?.base.kinds);
-  const typeChanged = oldType !== newType && oldType !== "empty";
-  const cmd = isSecretaryPane
-    ? resolveSecretaryLaunchCmd(loaded, newType, paneId, fresh || typeChanged || !keepRid)
-    : buildLaunchCmd(newType, loaded.workspace, keepRid);
+  const cmd = resolveSeatLaunchCmd(loaded, row, paneId, newType, keepRid, fresh, oldType);
   if (!cmd) throw new Error(`no launch command for type ${newType}`);
-  pasteLaunchCmd(paneId, cmd);
+  const paste = () => pasteHarnessLaunchCmd(loaded, paneId, newType, cmd);
+  paste();
   if (newType === "kiro") {
     const ok = acceptKiroTrustDialog(paneId);
     if (!ok) console.error("WARN: kiro trust dialog not seen — pane may still be starting");
     sleepMs(800);
   }
-  const verified = verifyHarnessAfterPaste(loaded, registry, paneId, newType, cmd, () =>
-    pasteLaunchCmd(paneId, cmd),
-  );
+  const verified = verifyHarnessAfterPaste(loaded, registry, paneId, newType, cmd, paste);
   if (!verified.ok) {
     if (isOpenCodeLaunch(newType, cmd) || newType === "agent" || newType === "claude") {
       throw new Error(`switch ${target}: ${verified.reason}`);
@@ -191,9 +209,7 @@ export function runSwitch(
               ? row.role
               : row.slot
                 ? `slot-${row.slot}`
-                : target === "self" || target === "here"
-                  ? "here"
-                  : target;
+                : target;
 
   invalidatePaneContext(loaded, paneId, targetLabel);
   const brief = injectAfterLaunch(loaded, registry, targetLabel, paneId);

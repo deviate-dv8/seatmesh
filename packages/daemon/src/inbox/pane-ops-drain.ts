@@ -11,11 +11,37 @@ export interface PaneOpsDrainCtx {
   setBusy: (v: boolean) => void;
 }
 
+const STALE_RUNNING_MS = 10 * 60 * 1000;
+
+/** Daemon restart mid-op leaves rows stuck in `running` — reclaim so queue can drain. */
+export function reclaimStaleRunningPaneOps(
+  store: QueueStore,
+  log: (line: string) => void,
+  staleMs = STALE_RUNNING_MS,
+): number {
+  let n = 0;
+  for (const row of store.readPaneOps()) {
+    if (row.status !== "running") continue;
+    const started = Date.parse(row.at);
+    if (!Number.isFinite(started) || Date.now() - started < staleMs) continue;
+    row.status = "failed";
+    row.error = "stale running (reclaimed on drain)";
+    row.finishedAt = new Date().toISOString();
+    store.updatePaneOp(row);
+    log(`PANE-OP reclaim stale ${row.id.slice(0, 8)} ${row.kind}`);
+    n++;
+  }
+  return n;
+}
+
 export function drainPaneOpsOnce(ctx: PaneOpsDrainCtx): boolean {
   if (ctx.isBusy()) return false;
 
+  reclaimStaleRunningPaneOps(ctx.store, ctx.log);
   const rows = ctx.store.readPaneOps();
-  const row = rows.find((r) => r.status === "pending");
+  const row =
+    rows.find((r) => r.status === "pending" && r.kind === "secretary-restart") ??
+    rows.find((r) => r.status === "pending");
   if (!row) return false;
 
   ctx.setBusy(true);

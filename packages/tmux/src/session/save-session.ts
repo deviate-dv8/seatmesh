@@ -2,6 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   MeshAgentsSchema,
+  buildKindLaunchCmd,
+  runnersFromProfile,
+  type AgentRunnerEntry,
   type CliType,
   type LoadedProfile,
   type ManagerSlot,
@@ -20,9 +23,12 @@ import {
 } from "@seat-mesh/core";
 import type { ProviderRegistry } from "@seat-mesh/core";
 import {
+  cmdlines,
   extractOpenCodeSession,
+  matchAny,
   normalizeOpenCodeSessionId,
 } from "@seat-mesh/providers";
+import { cliForBaseColumn } from "./base-layout.js";
 import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
 import {
   loadMeshAgentsAt,
@@ -63,10 +69,53 @@ interface PreservedSlot {
   resumeCmd?: string | null;
 }
 
+export function isOpenCodeCpeResumeCmd(cmd: string | null | undefined): boolean {
+  return Boolean(cmd && /opencode-cpe\.sh/i.test(cmd));
+}
+
+/** Refresh `--session` on a CPE wrapper without dropping the script path. */
+export function injectOpenCodeSessionIntoCmd(
+  cmd: string,
+  resumeId: string | null | undefined,
+): string {
+  const sid = normalizeOpenCodeSessionId(resumeId ?? undefined);
+  let out = cmd.replace(/\s--session\s+\S+/g, "").trimEnd();
+  if (sid) out = `${out} --session ${sid}`;
+  return out;
+}
+
+function isOpenCodeFamily(type: CliType | undefined): boolean {
+  return type === "opencode" || type === "oc-proxy";
+}
+
+function isOcProxyKind(type: CliType | undefined, preserved?: PreservedSlot): boolean {
+  if (type === "oc-proxy") return true;
+  if (preserved?.type === "oc-proxy") return true;
+  if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) return true;
+  return false;
+}
+
+function buildSavedResumeCmd(
+  type: CliType,
+  workspace: string,
+  resumeId: string | null,
+  runners: Record<string, AgentRunnerEntry>,
+  preserved?: PreservedSlot,
+): string | null {
+  if (type === "empty") return null;
+  if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) {
+    return injectOpenCodeSessionIntoCmd(preserved.resumeCmd, resumeId);
+  }
+  const custom = buildKindLaunchCmd(type, workspace, resumeId, runners);
+  if (custom != null) return custom;
+  return buildAgentLaunchCmd(type, workspace, resumeId);
+}
+
 function finalizePaneState(
   workspace: string,
   live: { type: CliType; resumeId: string | null },
-  preserved?: PreservedSlot,
+  preserved: PreservedSlot | undefined,
+  runners: Record<string, AgentRunnerEntry>,
 ): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
   let type = live.type;
   let resumeId = live.resumeId;
@@ -74,7 +123,7 @@ function finalizePaneState(
   let preservedId =
     preserved?.resumeId ??
     (preserved?.resumeCmd ? extractOpenCodeSession(preserved.resumeCmd) : undefined);
-  if (type === "opencode" || preserved?.type === "opencode") {
+  if (isOpenCodeFamily(type) || isOpenCodeFamily(preserved?.type)) {
     preservedId = normalizeOpenCodeSessionId(preservedId);
     if (resumeId) resumeId = normalizeOpenCodeSessionId(resumeId) ?? null;
   }
@@ -86,9 +135,11 @@ function finalizePaneState(
     if (!resumeId) resumeId = preservedId;
   }
 
-  const harnessType = type === "agent" ? "agent" : type;
-  const resumeCmd =
-    type === "empty" ? null : buildAgentLaunchCmd(harnessType, workspace, resumeId);
+  if (isOcProxyKind(type, preserved)) {
+    type = "oc-proxy";
+  }
+
+  const resumeCmd = buildSavedResumeCmd(type, workspace, resumeId, runners, preserved);
   return { type, resumeId, resumeCmd };
 }
 
@@ -101,28 +152,53 @@ function stampOpenCodeSessionOnPane(paneId: string, resumeId: string | null): vo
   tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", sid]);
 }
 
+function detectPaneType(
+  snap: NonNullable<ReturnType<typeof capturePaneSnapshot>>,
+  provType: CliType,
+  preserved?: PreservedSlot,
+): CliType {
+  if (matchAny(cmdlines(snap), [/opencode-cpe\.sh/i])) return "oc-proxy";
+  if (preserved?.type === "oc-proxy" || isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
+    return "oc-proxy";
+  }
+  if (matchAny(cmdlines(snap), [/opencode/i])) return "opencode";
+  return provType;
+}
+
 function detectPane(
   paneId: string,
   registry: ProviderRegistry,
   workspace: string,
+  runners: Record<string, AgentRunnerEntry>,
   preserved?: PreservedSlot,
 ): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
   const snap = capturePaneSnapshot(paneId);
   if (!snap) {
-    const out = finalizePaneState(workspace, { type: "empty", resumeId: null }, preserved);
+    const out = finalizePaneState(
+      workspace,
+      { type: "empty", resumeId: null },
+      preserved,
+      runners,
+    );
     if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
     return out;
   }
   const prov = registry.detect(snap);
   if (!prov) {
-    const out = finalizePaneState(workspace, { type: "empty", resumeId: null }, preserved);
+    const out = finalizePaneState(
+      workspace,
+      { type: "empty", resumeId: null },
+      preserved,
+      runners,
+    );
     if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
     return out;
   }
   const det = prov.detect(snap);
-  const type = cliTypeFromProvider(prov.id);
+  const baseType = cliTypeFromProvider(prov.id);
+  const type = detectPaneType(snap, baseType, preserved);
   const resumeId = det?.resumeId ?? null;
-  const out = finalizePaneState(workspace, { type, resumeId }, preserved);
+  const out = finalizePaneState(workspace, { type, resumeId }, preserved, runners);
   if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
   return out;
 }
@@ -137,6 +213,17 @@ export function applyMeshState(loaded: LoadedProfile): LoadedProfile {
 }
 
 /** Patch mesh-agents.json `layout` (extendable — e.g. base.managerStack). */
+function meshConventionsFromProfile(loaded: LoadedProfile): MeshAgents["conventions"] {
+  const layout = loaded.profile.layout;
+  const secCol = layout ? primarySecretaryColumn(layout) : "secretary";
+  const secCli = (cliForBaseColumn(loaded, secCol) || "opencode") as CliType;
+  return {
+    secretaryDefaultCli: secCli,
+    miniDefaultCli: "opencode",
+    launchSkipsEmpty: true,
+  };
+}
+
 export function persistSavedLayout(
   loaded: LoadedProfile,
   layoutPatch: SavedLayout,
@@ -150,11 +237,7 @@ export function persistSavedLayout(
     workers: [],
     minis: [],
     layout: undefined,
-    conventions: {
-      secretaryDefaultCli: "opencode" as const,
-      miniDefaultCli: "opencode" as const,
-      launchSkipsEmpty: true,
-    },
+    conventions: meshConventionsFromProfile(loaded),
   };
   const next = MeshAgentsSchema.parse({
     ...base,
@@ -189,6 +272,7 @@ export function scrapeMeshAgents(
 
   const miniState = loadMinisState(loaded);
   const existing = loadMeshAgentsForProfile(loaded);
+  const runners = runnersFromProfile(loaded.profile);
   const workerMeta = listMeshWorkers(session, layout.workers.window);
   const miniMeta = listMeshMinis(session, layout.minis.window);
 
@@ -197,7 +281,7 @@ export function scrapeMeshAgents(
     const paneId = workerMeta.find((w) => Number(w.slot) === slot)?.paneId;
     if (!paneId) continue;
     const prev = existing?.workers.find((w) => w.slot === slot);
-    const det = detectPane(paneId, registry, loaded.workspace, prev);
+    const det = detectPane(paneId, registry, loaded.workspace, runners, prev);
     workers.push({
       type: det.type,
       slot,
@@ -214,7 +298,7 @@ export function scrapeMeshAgents(
     const paneId = miniMeta.find((m) => Number(m.mini) === n)?.paneId;
     if (!paneId) continue;
     const prev = existing?.minis.find((m) => m.mini === n);
-    const det = detectPane(paneId, registry, loaded.workspace, prev);
+    const det = detectPane(paneId, registry, loaded.workspace, runners, prev);
     const row = miniState.minis[String(n)];
     minis.push({
       type: det.type,
@@ -232,7 +316,7 @@ export function scrapeMeshAgents(
   const secPane = meshSecretaryPane(session, layout.base.window);
   const manager = mgrPane
     ? (() => {
-        const det = detectPane(mgrPane, registry, loaded.workspace, existing?.manager);
+        const det = detectPane(mgrPane, registry, loaded.workspace, runners, existing?.manager);
         return {
           type: det.type,
           name: "manager",
@@ -253,7 +337,7 @@ export function scrapeMeshAgents(
       delete coords[id];
       continue;
     }
-    const det = detectPane(pane, registry, loaded.workspace, existing?.coords?.[id]);
+    const det = detectPane(pane, registry, loaded.workspace, runners, existing?.coords?.[id]);
     coords[id] = {
       type: det.type,
       name: id,
@@ -268,14 +352,22 @@ export function scrapeMeshAgents(
       tmux(["display-message", "-t", secPane, "-p", "#{@mesh_oc_session}"]).out,
     );
     let preserved: PreservedSlot | undefined = existing?.secretary;
-    if (!paneSid) {
-      preserved = { ...preserved, type: "opencode", resumeId: null, resumeCmd: null };
-    } else {
-      preserved = { ...preserved, type: "opencode", resumeId: paneSid };
+    const profileSecCli =
+      loaded.profile.layout?.base.cli?.secretary?.trim().toLowerCase() ?? "opencode";
+    const secDefaultType: CliType =
+      profileSecCli === "oc-proxy" || profileSecCli === "ocproxy" ? "oc-proxy" : "opencode";
+    if (!paneSid && !isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
+      preserved = { ...preserved, type: secDefaultType, resumeId: null, resumeCmd: null };
+    } else if (paneSid) {
+      preserved = {
+        ...preserved,
+        type: isOpenCodeCpeResumeCmd(preserved?.resumeCmd) ? "oc-proxy" : secDefaultType,
+        resumeId: paneSid,
+      };
     }
-    const det = detectPane(secPane, registry, loaded.workspace, preserved);
+    const det = detectPane(secPane, registry, loaded.workspace, runners, preserved);
     secretary = {
-      type: det.type === "empty" ? "opencode" : det.type,
+      type: det.type === "empty" ? secDefaultType : det.type,
       wanted: true,
       resumeId: det.resumeId,
       resumeCmd: det.resumeCmd,
@@ -316,11 +408,7 @@ export function scrapeMeshAgents(
         leads: minisLayout.leads,
       },
     },
-    conventions: existing?.conventions ?? {
-      secretaryDefaultCli: "opencode",
-      miniDefaultCli: "opencode",
-      launchSkipsEmpty: true,
-    },
+    conventions: existing?.conventions ?? meshConventionsFromProfile(loaded),
     updatedAt: new Date().toISOString(),
   });
 }

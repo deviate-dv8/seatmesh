@@ -1,19 +1,21 @@
 import type { CliType, LoadedProfile, MeshAgents, ProviderRegistry } from "@seat-mesh/core";
 import { MeshAgentsSchema, isManagerKind, portsForSlot } from "@seat-mesh/core";
-import { buildAgentLaunchCmd } from "./agent-builder.js";
+import { buildProfileLaunchCmd } from "./agent-launch.js";
 import { loadMeshAgentsForProfile, meshAgentsJsonPath } from "./agents-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget, type PaneRow } from "../lib/resolve-pane.js";
 import { saveMeshAgentsFile } from "../session/save-session.js";
 import { extractResumeIdAuto } from "./resume-extract.js";
 
-const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "empty"]);
+const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "oc-proxy", "empty"]);
 
 function normalizeType(t: string): CliType {
   const x = t.trim().toLowerCase();
   if (x === "cursor-agent") return "agent";
+  if (x === "oc") return "opencode";
+  if (x === "ocproxy" || x === "oc-proxy" || x === "oc_proxy") return "oc-proxy";
   if (!CLI_TYPES.has(x)) {
-    throw new Error(`bad type: ${t} (want agent|kiro|claude|opencode|empty)`);
+    throw new Error(`bad type: ${t} (want agent|kiro|claude|opencode|oc-proxy|oc|empty)`);
   }
   return x as CliType;
 }
@@ -53,13 +55,12 @@ export function ensureMeshAgentsRecord(loaded: LoadedProfile): MeshAgents {
 }
 
 function finalizeSlot(
-  workspace: string,
+  loaded: LoadedProfile,
   type: CliType,
   resumeId: string | null,
 ): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
   const rid = type === "empty" ? null : resumeId;
-  const resumeCmd =
-    type === "empty" ? null : buildAgentLaunchCmd(type, workspace, rid);
+  const resumeCmd = type === "empty" ? null : buildProfileLaunchCmd(type, loaded, rid);
   return { type, resumeId: rid, resumeCmd };
 }
 
@@ -114,7 +115,7 @@ export function patchMeshAgentsForPane(
   loaded: LoadedProfile,
   patch: { type: CliType; resumeId: string | null },
 ): MeshAgents {
-  const finalized = finalizeSlot(loaded.workspace, patch.type, patch.resumeId);
+  const finalized = finalizeSlot(loaded, patch.type, patch.resumeId);
   const next = {
     ...mesh,
     session: loaded.sessionName,

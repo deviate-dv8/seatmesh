@@ -177,6 +177,21 @@ export function checkTask(loaded: LoadedProfile, target: SeatTarget, matchText: 
   return openText;
 }
 
+/** Open `- [ ]` lines from TASKS.md (order preserved). Empty if none. */
+export function listOpenTasks(loaded: LoadedProfile, target: SeatTarget): string[] {
+  const dir = seatDirFor(loaded, target);
+  if (!dir) return [];
+  const p = path.join(dir, "TASKS.md");
+  if (!fs.existsSync(p)) return [];
+  const out: string[] = [];
+  for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith("- [ ]")) continue;
+    out.push(t.replace(/^- \[ \]\s*/, "").trim());
+  }
+  return out.filter(Boolean);
+}
+
 /** Append a timestamped bullet to REMINDER.md. Throws if REMINDER.md is missing. */
 export function appendReminder(loaded: LoadedProfile, target: SeatTarget, text: string): void {
   const p = requireSeatFile(loaded, target, "REMINDER.md");

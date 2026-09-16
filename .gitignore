@@ -20,3 +20,7 @@ coverage/
 # OS / editor
 .DS_Store
 *.log
+
+# Local scripts / infra (not part of the distributed package)
+scripts/
+docker-compose.*.yml

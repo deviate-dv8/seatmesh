@@ -13,7 +13,7 @@ import {
   miniStateForN,
   resolveLaunchCmd,
 } from "../agents/agents-state.js";
-import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
+import { buildProfileLaunchCmd } from "../agents/agent-launch.js";
 import { launchSession, tryLaunchPane } from "../agents/launch.js";
 import { resolveMiniPaneId } from "../session/window-panes.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
@@ -137,8 +137,8 @@ function ensureMiniCli(
       resume_cmd: saved?.resumeCmd ?? null,
     };
     const cmd =
-      resolveLaunchCmd(entry, loaded.workspace) ??
-      buildAgentLaunchCmd(type, loaded.workspace, entry.resume_id);
+      resolveLaunchCmd(entry, loaded.workspace, loaded) ??
+      buildProfileLaunchCmd(type, loaded, entry.resume_id);
     if (!cmd) throw new Error(`no launch cmd for mini type ${type}`);
     const launched = tryLaunchPane(loaded, paneId, `mini-${n}`, cmd, false, type);
     if (launched.status !== "launched") {

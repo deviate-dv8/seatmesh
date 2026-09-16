@@ -2,6 +2,38 @@ import { spawnSync } from "node:child_process";
 import { loadProfile, resolveDaemonPort, type LoadedProfile } from "@seat-mesh/core";
 import type { ResumeWaveMeta } from "./oc-resume.js";
 
+/**
+ * Direct host egress IP using the wired LAN interface (eno1) — NOT the CPE USB adapter.
+ * Used for eth-fallback detection: if gost egresses via eno1 it's the same as this IP.
+ * Returns null when eno1 is down/missing (no carrier) — callers treat null as "can't tell,
+ * don't flag as eth fallback".
+ */
+export function syncDirectIp(workspace: string): string | null {
+  // Try eno1 explicitly so we don't accidentally use the CPE USB adapter (enx*) which
+  // shares the same WAN IP as the carrier probe and would cause false-positive isViaEth.
+  const r = spawnSync(
+    "bash",
+    [
+      "-c",
+      // --interface eno1: fails fast if eno1 is down → empty output → null returned.
+      `env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy ` +
+        `curl --interface eno1 -4 -sS -m 12 https://api.ipify.org 2>/dev/null || true`,
+    ],
+    { cwd: workspace, encoding: "utf8", timeout: 20_000 },
+  );
+  const ip = (r.stdout || "").trim();
+  return ip.length >= 7 ? ip : null;
+}
+
+/**
+ * via == eth means gost steers egress through the host wired LAN (eno1) instead of the CPE —
+ * not a real carrier rotation, so the caller must treat it as no carrier (ignore eth).
+ * Returns false when eth is null (eno1 down/absent — CPE USB is not "eth fallback").
+ */
+export function isViaEth(via: string | null, eth: string | null): boolean {
+  return Boolean(via && eth && via === eth);
+}
+
 /** Blocking ipify via local gost — use after wait-ip / smart-restart before resume wave. */
 export function syncCarrierIpProbe(workspace: string, proxyPort: number): string | null {
   const r = spawnSync(
@@ -15,7 +47,8 @@ export function syncCarrierIpProbe(workspace: string, proxyPort: number): string
     { cwd: workspace, encoding: "utf8", timeout: 35_000 },
   );
   const ip = (r.stdout || "").trim();
-  return ip.length >= 7 ? ip : null;
+  if (ip.length < 7) return null;
+  return isViaEth(ip, syncDirectIp(workspace)) ? null : ip;
 }
 
 export interface RemoteOcResumeBody {

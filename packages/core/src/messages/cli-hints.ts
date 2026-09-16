@@ -1,10 +1,11 @@
 /** User-facing CLI strings — no workspace wrappers with operator names. */
 
-export const SEATMESH_BIN = "seatmesh";
+/** User-facing CLI name (installed bin: `sm`; npm also ships `seatmesh`). */
+export const SEATMESH_BIN = "sm";
 
 /**
  * Default agent/operator prefix. Profile walks up to `.sm/` — no flag needed.
- * Multi-config: `seatmesh --profile .sm-<name> …` (see {@link seatmeshProfileCmd}).
+ * Multi-config: `sm --profile .sm-<name> …` (see {@link seatmeshProfileCmd}).
  */
 export const SEATMESH_DEFAULT = SEATMESH_BIN;
 
@@ -36,7 +37,7 @@ export function normalizeSmProfileDir(name: string): string {
   return `.sm-${bare}`;
 }
 
-/** Explicit multi-config prefix: `seatmesh --profile .sm-cpe`. */
+/** Explicit multi-config prefix: `sm --profile .sm-cpe`. */
 export function seatmeshProfileCmd(profileDir: string, sub = ""): string {
   const dir = profileDir.startsWith(".") ? profileDir : normalizeSmProfileDir(profileDir);
   const base = `${SEATMESH_BIN} --profile ${dir}`;
@@ -46,8 +47,8 @@ export function seatmeshProfileCmd(profileDir: string, sub = ""): string {
 
 /**
  * Agent inject / card line — always through the gateway:
- * `seatmesh agent <sub>`
- * Bare card: `seatmesh agent`
+ * `sm agent <sub>`
+ * Bare card: `sm agent`
  * Multi-config: {@link seatmeshProfileCmd}.
  */
 export function seatmeshCmd(sub: string): string {
@@ -75,7 +76,7 @@ export function seatmeshInboxRestart(): string {
 }
 
 export function seatmeshWithProfile(cmd: string): string {
-  return `${cmd}  (multi-config: seatmesh --profile .sm-<name> …)`;
+  return `${cmd}  (multi-config: sm --profile .sm-<name> …)`;
 }
 
 export function seatmeshInboxDown(port: number): string {

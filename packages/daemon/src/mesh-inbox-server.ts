@@ -4,11 +4,14 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { createTpPtyPool, resolveTpJobByNeedle } from "./inbox/terminal-pool-pty.js";
+import { enqueueTpJob, kickTerminalPool, tpRunningCount, type TerminalPoolDrainCtx } from "./inbox/terminal-pool-drain.js";
 import { fileURLToPath } from "node:url";
 import {
   loadProfile,
   meshRuntimePaths,
   resolveAckRedirectDefaults,
+  resolveAutoScrapeIntervalMs,
   resolveDaemonPort,
   resolveUxConfig,
 } from "@seat-mesh/core";
@@ -48,8 +51,14 @@ import {
   resumeAllOpenCodePanes,
   type ResumeWaveMeta,
 } from "./connectivity/oc-resume.js";
-import { broadcastOcResumeToRemotes } from "./connectivity/oc-resume-broadcast.js";
+import { relaunchOcProxyAfterReset } from "./connectivity/oc-relaunch.js";
+import { broadcastOcResumeToRemotes, syncCarrierIpProbe } from "./connectivity/oc-resume-broadcast.js";
 import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
+import {
+  forceOcLimitV2SuccessForTest,
+  requestOcLimitV2Reboot,
+  startOcLimitV2Episode,
+} from "./connectivity/oc-limit-v2.js";
 import {
   armCcLimitRetryCheckback,
   armCcLimitRetryForAllClaudePanes,
@@ -71,8 +80,10 @@ import {
   drainPaneOpsOnce,
   enqueuePaneOp,
   queueAheadCount,
+  reclaimStaleRunningPaneOps,
   type PaneOpsDrainCtx,
 } from "./inbox/pane-ops-drain.js";
+import { secretaryPaneStatus } from "./recovery/secretary-auto-restart.js";
 import type { NotifyActRegisterAction, PaneOpKind } from "@seat-mesh/core";
 import {
   createNotifyActRegistry,
@@ -131,7 +142,7 @@ async function main(): Promise<void> {
   const session = resolveLiveTmuxSession(loaded);
   const port = resolveDaemonPort(profile, loaded.workspace);
   const pollMs = profile.daemon?.pollMs ?? 4000;
-  const autoScrapeMs = profile.state.autoScrapeIntervalMs ?? 600_000;
+  const autoScrapeMs = resolveAutoScrapeIntervalMs(profile);
   let lastAutoScrapeAt = 0;
   const workspace = loaded.workspace;
   const rt = meshRuntimePaths(loaded);
@@ -146,8 +157,14 @@ async function main(): Promise<void> {
   }
 
   const store = createQueueStore(loaded, log);
+  reclaimStaleRunningPaneOps(store, log, 0);
   const actRegistry = createNotifyActRegistry();
   const registry = createRegistryForProfile(profile);
+
+  // Terminal-pool PTY pool — concurrency from mesh.config.yaml daemon.terminalPool.concurrency
+  const tpConcurrency = (profile as { daemon?: { terminalPool?: { concurrency?: number } } }).daemon?.terminalPool?.concurrency ?? 2;
+  const ptyPool = createTpPtyPool(loaded, tpConcurrency);
+  log(`tp-pool init workers=${tpConcurrency}`);
   const uxResolved = profile.ux !== undefined ? resolveUxConfig(profile.ux) : null;
   const connectivity = newConnectivityRecoveryState();
   const ocLimited = connectivity.ocLimited;
@@ -159,6 +176,8 @@ async function main(): Promise<void> {
     workerPanes: 0,
     miniPanes: 0,
     secretaryPane: null as string | null,
+    secretaryStatus: null as string | null,
+    secretaryRestarting: false,
     updatedAt: 0,
   };
   /** Cached queue counts — /health must not parse JSONL on every curl (event-loop wedge). */
@@ -172,10 +191,15 @@ async function main(): Promise<void> {
   };
 
   function refreshHealthSnap(): void {
+    const secretaryPane = meshSecretaryPane(session, baseWindow);
+    const secretaryStatus = secretaryPaneStatus(secretaryPane);
     healthSnap = {
       workerPanes: listMeshWorkers(session, workersWindow).length,
       miniPanes: listMeshMinis(session, minisWindow).length,
-      secretaryPane: meshSecretaryPane(session, baseWindow),
+      secretaryPane,
+      secretaryStatus,
+      secretaryRestarting:
+        secretaryStatus === "restarting" || secretaryStatus === "restart-fail",
       updatedAt: Date.now(),
     };
   }
@@ -286,6 +310,7 @@ async function main(): Promise<void> {
 
   async function runDrain(): Promise<void> {
     await orchestratorDrainTickAsync(orchCtx);
+    kickTerminalPool(tpDrainCtx);
   }
 
   let drainCoalesce = false;
@@ -293,6 +318,16 @@ async function main(): Promise<void> {
   function scheduleDrain(): void {
     runDrainCoalesced();
   }
+
+  const tpDrainCtx: TerminalPoolDrainCtx = {
+    loaded,
+    store,
+    log,
+    appendPeer: (row) => { store.appendPeer(row); scheduleDrain(); },
+    scheduleDrain,
+    maxConcurrent: tpConcurrency,
+    ptyPool,
+  };
 
   /** Without BullMQ, coalesce burst enqueues (room-fanout) so /health stays responsive. */
   function runDrainCoalesced(onDone?: () => void): void {
@@ -318,6 +353,27 @@ async function main(): Promise<void> {
     meta?: ResumeWaveMeta,
     opts?: { skipBroadcast?: boolean },
   ): void {
+    // oc-reset kills CPE OC — relaunch from mesh-agents + CONTINUE (not Esc/resume keys).
+    if (reason === "oc-reset") {
+      const { sent, total, sentPaneIds } = relaunchOcProxyAfterReset(
+        loaded,
+        registry,
+        session,
+        baseWindow,
+        workersWindow,
+        minisWindow,
+        log,
+      );
+      log(`OC-RELAUNCH wave (${reason}) sent=${sent}/${total}`);
+      notifyResumeWave(workspace, reason, sent, total, meta);
+      if (sent > 0) {
+        armResumeAckWave(sentPaneIds, reason);
+      }
+      if (!opts?.skipBroadcast) {
+        broadcastOcResumeToRemotes(loaded, reason, meta, log);
+      }
+      return;
+    }
     const panes = listMeshMonitorPanes(
       session,
       baseWindow,
@@ -446,6 +502,8 @@ async function main(): Promise<void> {
           workerPanes: healthSnap.workerPanes,
           miniPanes: healthSnap.miniPanes,
           secretaryPane: healthSnap.secretaryPane,
+          secretaryStatus: healthSnap.secretaryStatus,
+          secretaryRestarting: healthSnap.secretaryRestarting,
           ocLimitActive: ocLimited.size,
           proxyDownActive: connectivity.proxyDownActive,
           connectivityRecovery: connectivity.recoveryRunning,
@@ -1061,6 +1119,100 @@ async function main(): Promise<void> {
         return json(res, 200, { ok: true, reason, meta });
       }
 
+      // OC Restart V2 stuck toast — Reboot button (GET so notify-send curl works).
+      if (
+        (req.method === "GET" || req.method === "POST") &&
+        url.pathname === "/connectivity/oc-reboot"
+      ) {
+        const r = requestOcLimitV2Reboot(log);
+        log(`OC-V2 reboot button ok=${r.ok} reason=${r.reason ?? "-"}`);
+        return json(res, r.ok ? 200 : 409, r);
+      }
+      if (
+        req.method === "POST" &&
+        url.pathname === "/connectivity/oc-force-atomics"
+      ) {
+        const ok = forceOcLimitV2SuccessForTest(log);
+        log(`OC-V2 force-atomics ok=${ok}`);
+        return json(res, ok ? 200 : 409, { ok });
+      }
+
+      // ── Terminal Pool ────────────────────────────────────────────────────────
+      if (req.method === "GET" && url.pathname === "/tp/workers") {
+        const snaps = ptyPool.snapshots();
+        return json(res, 200, { ok: true, workers: snaps, running: tpRunningCount(tpDrainCtx) });
+      }
+      if (req.method === "POST" && url.pathname === "/tp/enqueue") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as {
+          cmd?: string; cwd?: string; summary?: string;
+          interactive?: boolean; seat?: string; pane?: string;
+        };
+        if (!body.cmd?.trim()) return json(res, 400, { error: "cmd required" });
+        const row = enqueueTpJob(store, {
+          requesterSeat: body.seat ?? "operator",
+          requesterPane: body.pane ?? "%0",
+          cmd: body.cmd,
+          cwd: body.cwd,
+          summary: body.summary,
+          interactive: body.interactive !== false,
+        });
+        kickTerminalPool(tpDrainCtx);
+        log(`TP enqueue ${row.id.slice(0, 8)} seat=${row.requesterSeat} cmd=${row.cmd.slice(0, 60)}`);
+        return json(res, 200, { ok: true, jobId: row.id });
+      }
+      if (req.method === "GET" && url.pathname.startsWith("/tp/job/")) {
+        const needle = url.pathname.slice("/tp/job/".length);
+        const row = resolveTpJobByNeedle(store, needle);
+        if (!row) return json(res, 404, { error: "not found" });
+        return json(res, 200, { ok: true, job: row });
+      }
+      if (req.method === "POST" && url.pathname.startsWith("/tp/cancel/")) {
+        const needle = url.pathname.slice("/tp/cancel/".length);
+        const row = resolveTpJobByNeedle(store, needle);
+        if (!row) return json(res, 404, { error: "not found" });
+        if (row.status === "running") {
+          const w = ptyPool.findWorkerForJob(row.id);
+          w?.job && (row.status = "failed");
+        }
+        row.status = "failed";
+        row.error = "cancelled by operator";
+        row.finishedAt = new Date().toISOString();
+        store.updateTpJob(row);
+        return json(res, 200, { ok: true });
+      }
+
+      // Manual / test: start OC Restart V2 episode (notify 1 → reboot → wait IP → atomics).
+      if (req.method === "POST" && url.pathname === "/connectivity/oc-restart-v2") {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw || "{}") as { skipReboot?: boolean; fromIp?: string | null };
+        const proxyPort = loaded.profile.connectivity?.proxyPort ?? 18887;
+        const fromIp =
+          body.fromIp ?? syncCarrierIpProbe(workspace, proxyPort) ?? null;
+        try {
+          fs.unlinkSync("/tmp/seatmesh-oc-limit-recovery.last");
+        } catch {
+          /* */
+        }
+        connectivity.rateLimitRecoveryStarted = false;
+        connectivity.recoveryRunning = false;
+        const started = startOcLimitV2Episode({
+          loaded,
+          registry,
+          workspace,
+          session,
+          baseWindow,
+          workersWindow,
+          minisWindow,
+          proxyPort,
+          fromIp,
+          state: connectivity,
+          log,
+          skipReboot: body.skipReboot === true,
+        });
+        return json(res, started ? 200 : 409, { ok: started });
+      }
+
       if (req.method === "POST" && url.pathname === "/to-master") {
         const raw = await readBody(req);
         const body = JSON.parse(raw || "{}") as {
@@ -1107,6 +1259,9 @@ async function main(): Promise<void> {
     console.error(`mesh-inbox: listen failed ${err.message}`);
     process.exit(1);
   });
+
+  // Attach WebSocket upgrade handler for /ws/tp interactive attach
+  ptyPool.attachWebSocket(server, log);
 
   server.listen(port, "127.0.0.1", () => {
     if (process.env.MESH_INBOX_SUPERVISED !== "1") {

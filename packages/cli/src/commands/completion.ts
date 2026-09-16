@@ -24,6 +24,8 @@ const COMMON_TARGETS = [
 const SUBS: Record<string, string[]> = {
   help: [], // filled dynamically with top-level words
   completion: ["bash", "zsh", "fish", "reply", "install"],
+  config: ["check", "upgrade"],
+  web: ["status", "open", "url", "help"],
   session: ["attach", "up", "down", "status", "sync", "check", "repair", "init"],
   sessions: ["list", "attach", "forget", "register", "pick"],
   layout: ["column"],
@@ -66,6 +68,7 @@ const SUBS: Record<string, string[]> = {
   prompt: ["--manager", ...COMMON_TARGETS],
   remind: ["all", "1", "2", "3", "slot-1", "slot-2", "slot-3"],
   launch: ["all", "manager", "secretary", ...COMMON_TARGETS],
+  pane: ["resume"],
   flush: ["all", "manager", ...COMMON_TARGETS],
   continue: ["all", "1", "2", "3"],
   switch: [...COMMON_TARGETS],
@@ -125,6 +128,9 @@ const DEEPER: Record<string, Record<string, string[]>> = {
   switch: Object.fromEntries(COMMON_TARGETS.map((t) => [t, CLI_TYPES])),
   handoff: Object.fromEntries(COMMON_TARGETS.map((t) => [t, CLI_TYPES])),
   set: Object.fromEntries(COMMON_TARGETS.map((t) => [t, CLI_TYPES])),
+  pane: {
+    resume: COMMON_TARGETS.filter((t) => t !== "all"),
+  },
   limit: {
     idle: ["--all", "--pane"],
   },
@@ -352,8 +358,8 @@ _seatmesh() {
   opts=("\${(f)out}")
   _describe 'seatmesh' opts || compadd -a opts
 }
+compdef _seatmesh sm
 compdef _seatmesh seatmesh
-# Best-effort: alias sm='npx seatmesh' then: compdef _seatmesh sm
 `;
 }
 
@@ -370,6 +376,7 @@ function __seatmesh_complete
   set -x COMP_CWORD (math $cword - 1)
   seatmesh completion reply -- $words
 end
+complete -c sm -f -a '(__seatmesh_complete)'
 complete -c seatmesh -f -a '(__seatmesh_complete)'
 `;
 }
@@ -387,13 +394,12 @@ Enable (pick your shell):
   # fish
   seatmesh completion fish > ~/.config/fish/completions/seatmesh.fish
 
-Then: seatmesh <TAB>   → verbs
-      seatmesh agent <TAB>
-      seatmesh switch slot-1 <TAB>
+Then: sm <TAB>   → verbs
+      sm agent <TAB>
+      sm switch slot-1 <TAB>
 
-npx tip: completion binds to the \`seatmesh\` binary name.
-  Prefer: npm i -g seatmesh   OR   alias seatmesh='npx seatmesh'
-  Then tab on \`seatmesh\`, not on \`npx\` alone.
+Install: sm install  (symlinks sm + seatmesh to ~/.local/bin)
+  Legacy npm bin name \`seatmesh\` still works; prefer \`sm\`.
 `);
 }
 

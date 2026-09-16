@@ -185,6 +185,13 @@ export function runSeatCommand(loaded: LoadedProfile, args: string[]): void {
           : `reported=false reason=${r.reportVia ?? "unknown"}`,
       );
       console.log(`cb_cancelled=${r.cbCancelled}`);
+      if (r.remainingOpen > 0) {
+        console.log(
+          `remaining_open=${r.remainingOpen} bulk=${r.remainingBulkVia ?? "none"}`,
+        );
+      } else {
+        console.log(`remaining_open=0 focus=OPEN`);
+      }
       return;
     }
     usage();

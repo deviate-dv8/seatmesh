@@ -938,12 +938,15 @@ todo give <target> "<text>"     ← GIVE work (preferred)
 ## update
 
 ```text
-update [--dry-run] [--migrate] [--no-restart-inbox]
-  Refresh _vendor + AGENTS.md; merge humanCoTyped/logs; seed seats/_shared;
+1) npm install -g seatmesh@latest     # bump CLI first
+2) seatmesh update [--dry-run] [--migrate] [--no-restart-inbox]
+  Refresh _vendor + AGENTS.md; merge new mesh.config keys; seed seats/_shared;
   role-pack migrate; paths.json. --migrate also legacy tasks/ → .sm/
 ```
 
-- Run: `seatmesh update --help`
+`update` alone does not upgrade npm — see `seatmesh config upgrade`.
+
+- Run: `seatmesh update --help` · `seatmesh config upgrade`
 - Agent: `seatmesh agent help update`
 - File: [cli/update.md](cli/update.md)
 

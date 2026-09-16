@@ -11,6 +11,7 @@ import {
   openAcksForSeat,
   type PaneOpRow,
   trimAsk,
+  type TpJobRow,
 } from "@seat-mesh/core";
 import {
   dedupeJsonlRowsById,
@@ -616,6 +617,36 @@ export class SqliteStore {
     if (deduped.length === raw.length) return 0;
     this.writePeer(deduped);
     return raw.length - deduped.length;
+  }
+
+  // Terminal-pool: stored as flat JSONL alongside the sqlite DB (not in sqlite schema).
+  private get tpJobsPath(): string {
+    return path.join(this.stateDir, "TP_JOBS.jsonl");
+  }
+
+  private readTpJobsRaw(): TpJobRow[] {
+    try {
+      const text = fs.readFileSync(this.tpJobsPath, "utf8");
+      return text
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as TpJobRow);
+    } catch {
+      return [];
+    }
+  }
+
+  readTpJobs(): TpJobRow[] {
+    return this.readTpJobsRaw();
+  }
+
+  appendTpJob(row: TpJobRow): void {
+    fs.appendFileSync(this.tpJobsPath, JSON.stringify(row) + "\n", { encoding: "utf8", flag: "a" });
+  }
+
+  updateTpJob(row: TpJobRow): void {
+    const rows = this.readTpJobsRaw().map((r) => (r.id === row.id ? row : r));
+    fs.writeFileSync(this.tpJobsPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
   }
 }
 

@@ -4,7 +4,8 @@ export type PaneOpKind =
   | "relayout"
   | "mini-spawn"
   | "mini-spawn-all"
-  | "secretary-dispatch";
+  | "secretary-dispatch"
+  | "secretary-restart";
 
 export type PaneOpStatus = "pending" | "running" | "done" | "failed";
 

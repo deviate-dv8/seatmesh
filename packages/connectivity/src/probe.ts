@@ -16,6 +16,30 @@ export async function proxyListenOkAsync(port: number): Promise<boolean> {
   });
 }
 
+export async function fetchDirectIp(): Promise<string | null> {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const k of ["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy", "ALL_PROXY", "all_proxy"]) {
+    delete env[k];
+  }
+  const r = spawnSync(
+    "curl",
+    [
+      "-4",
+      "-sS",
+      "-m",
+      "12",
+      "https://api.ipify.org",
+    ],
+    {
+      encoding: "utf8",
+      env,
+    },
+  );
+  if (r.status !== 0) return null;
+  const ip = (r.stdout ?? "").trim();
+  return ip || null;
+}
+
 export async function fetchCarrierIp(proxyPort: number): Promise<string | null> {
   const proxy = `http://127.0.0.1:${proxyPort}`;
   const r = spawnSync(
@@ -33,7 +57,11 @@ export async function fetchCarrierIp(proxyPort: number): Promise<string | null> 
   );
   if (r.status !== 0) return null;
   const ip = (r.stdout ?? "").trim();
-  return ip || null;
+  if (!ip) return null;
+  // via == eth means the proxy fell back to the host egress — not the CPE carrier.
+  const eth = await fetchDirectIp();
+  if (eth && eth === ip) return null;
+  return ip;
 }
 
 export async function snapshotConnectivity(

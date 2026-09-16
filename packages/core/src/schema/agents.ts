@@ -20,6 +20,7 @@ export const CliTypeSchema = z.enum([
   "claude",
   "kiro",
   "opencode",
+  "oc-proxy",
   "empty",
 ]);
 

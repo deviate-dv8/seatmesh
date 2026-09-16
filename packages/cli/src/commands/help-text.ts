@@ -29,31 +29,35 @@ const ALIASES: Record<string, string> = {
   "put-agent": "human",
   panes: "human",
   operator: "human",
+  "open-web": "web",
 };
 
 /** Canonical verb → multi-line usage (first line is summary). */
 const HELP: Record<string, string> = {
   help: `help [cmd]
-  Show this index, or usage for one command.
-  Humans first: seatmesh help human   ← put an agent on a pane
-  Agents: seatmesh agent help [cmd]
-  Card:   seatmesh agent`,
+  Operator default = human surface only (agent verbs hidden).
+  Full list: seatmesh --agents help
+  One verb:  seatmesh help <cmd> · seatmesh agent help <cmd>
+  Put agent: seatmesh help human`,
 
   human: `human — put an agent CLI on a pane (operator)
 
   Empty terminal → agent:
-    switch <target> <opencode|claude|agent|kiro>
+    switch <target> <opencode|oc-proxy|claude|agent|kiro>
     Examples:
       seatmesh switch slot-1 opencode
-      seatmesh switch secretary claude
+      seatmesh switch secretary oc-proxy --keep-resume
       seatmesh switch here agent          # this pane (Cursor)
-      npx seatmesh switch mini-1 opencode
+      seatmesh switch mini-1 oc-proxy --keep-resume
 
   Back to plain shell:
     switch <target> empty
 
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
+
+  Resume known session on a pane (autodetect ses_* / resume id):
+    pane resume [here|secretary|slot-N|…]
 
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
@@ -64,11 +68,12 @@ const HELP: Record<string, string> = {
     assign <target> "do the thing"        # same engine
 
   Targets: manager | secretary | slot-N | mini-N | here
+  Operator help: seatmesh help (human) · seatmesh --agents help (full)
   Aliases for this topic: help put-agent | help panes | help operator`,
 
   completion: `completion bash|zsh|fish|reply|install
   Shell tab completion. Enable: eval "$(seatmesh completion zsh)"
-  Then: seatmesh <TAB>. Prefer global bin or alias seatmesh='npx seatmesh'.`,
+  Then: sm <TAB>. Prefer global bin: sm install  (legacy: seatmesh).`,
 
   agent: `agent
   Print can/cannot for THIS pane (gateway card).
@@ -220,6 +225,12 @@ const HELP: Record<string, string> = {
   To choose opencode/claude/agent on an empty pane: switch (help human)
   Examples: launch slot-1 · launch all · launch manager secretary`,
 
+  pane: `pane resume [target]
+  Autodetect original session id on the pane and resume it.
+  Sources: live cmdline → @mesh_oc_session → scrollback → mesh-agents.
+  Live OpenCode: paste resume [ses_…]. Else relaunch oc-proxy/opencode/claude with that id.
+  Default target: here. Examples: pane resume · pane resume secretary`,
+
   flush: `flush <slot|all|manager|mini-N>
   Rescue stuck composer Enter`,
 
@@ -249,8 +260,21 @@ const HELP: Record<string, string> = {
   CC-LIMIT banner → idle (CBs stay armed)`,
 
   update: `update [--dry-run] [--migrate] [--no-restart-inbox]
-  Refresh _vendor + AGENTS.md; merge humanCoTyped/logs; seed seats/_shared;
-  role-pack migrate; paths.json. --migrate also legacy tasks/ → .sm/`,
+  TWO STEPS — bump the CLI first, then refresh this mesh profile:
+    1) npm install -g seatmesh@latest     # or: npx seatmesh@latest …
+    2) seatmesh update                    # sync .sm/_vendor from that CLI
+  Step 2 alone does NOT upgrade npm. Guide: seatmesh config upgrade
+  Also: merge new mesh.config keys; seed seats/_shared; role-pack; paths.json.
+  --migrate: legacy tasks/ → .sm/runtime`,
+
+  config: `config check [--json] | config upgrade
+  check: validate mesh.config.yaml + paths
+  upgrade: how to get latest seatmesh CLI (npm i -g seatmesh@latest) then update`,
+
+  web: `web status [--json] | web open [path] | web url [path]
+  Operator hub (packages/web :3190) parity — status/daemons/restart tips + open browser.
+  Alias: open-web → web open. Env: SEATMESH_WEB_URL. Start hub: npm run web
+  Map: docs/patterns/cli-web-parity.md`,
 
   init: `init [--force] [--seats-root PATH] [--name NAME]
   Create project .sm/ (human). Prefer: start`,
@@ -373,10 +397,15 @@ export function wantsCmdHelp(argv: string[]): boolean {
   return args.some((a) => a === "-h" || a === "--help");
 }
 
-export function printGlobalHelpHint(): void {
+export function printGlobalHelpHint(agentsHelp = false): void {
   console.log("hint: seatmesh help human  # put an agent CLI on a pane");
-  console.log("hint: seatmesh help | seatmesh help <cmd> | seatmesh agent help <cmd>");
-  console.log("hint: seatmesh completion install  # tab: seatmesh <TAB>");
+  if (agentsHelp) {
+    console.log("hint: seatmesh --agents help  # full human+agent list (this mode)");
+  } else {
+    console.log("hint: seatmesh help = human-only · seatmesh --agents help = full list");
+  }
+  console.log("hint: seatmesh help <cmd> | seatmesh agent help <cmd>");
+  console.log("hint: seatmesh completion install  # tab: seatmesh <TAB> / sm <TAB>");
   console.log("docs: docs/COMMANDS.md · docs/cli/<verb>.md · docs/ONE-PATH.md · .sm/AGENTS.md");
 }
 

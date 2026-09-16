@@ -181,46 +181,46 @@ esac
 }
 
 /**
- * Linux: Info / Yes / No as action buttons — open/curl only on click (never auto).
+ * Linux: one or more curl/open action buttons (e.g. OC Restart stuck → Reboot).
  */
-export function spawnLinuxYesNoActionToast(input: {
+export function spawnLinuxActionButtonsToast(input: {
   title: string;
   body: string;
-  infoUrl: string;
-  yesUrl: string;
-  noUrl: string;
+  actions: Array<{ id: string; label: string; kind: "open" | "curl"; url: string }>;
 }): boolean {
   if (!notifySendAvailable()) return false;
-  const body = input.body.trim() || "Choose Yes or No.";
+  const body = input.body.trim() || "(seatmesh)";
+  const actions = input.actions
+    .map((a) => ({
+      id: a.id.trim() || "act",
+      label: a.label.trim() || "Go",
+      kind: a.kind,
+      url: a.url.trim(),
+    }))
+    .filter((a) => a.url);
+  if (!actions.length) return false;
 
-  if (
-    spawnLinuxActionToastViaDbus({
-      title: input.title,
-      body,
-      actions: [
-        { id: "info", label: "Info", kind: "open", url: input.infoUrl.trim() },
-        { id: "yes", label: "Yes", kind: "curl", url: input.yesUrl.trim() },
-        { id: "no", label: "No", kind: "curl", url: input.noUrl.trim() },
-      ],
-    })
-  ) {
+  if (spawnLinuxActionToastViaDbus({ title: input.title, body, actions })) {
     return true;
   }
 
+  // Fallback: notify-send -A for every action (Plasma often ignores; D-Bus path preferred).
+  const aFlags = actions.map((a) => `-A "${a.id}=${a.label.replace(/"/g, "")}"`).join(" ");
+  const caseArms = actions
+    .map((a) => {
+      if (a.kind === "open") {
+        return `  ${a.id})
+    if command -v xdg-open >/dev/null; then xdg-open "${a.url.replace(/"/g, "")}" >/dev/null 2>&1 || true
+    elif command -v gio >/dev/null; then gio open "${a.url.replace(/"/g, "")}" >/dev/null 2>&1 || true; fi ;;`;
+      }
+      return `  ${a.id}) curl -fsS -o /dev/null "${a.url.replace(/"/g, "")}" 2>/dev/null || wget -q -O /dev/null "${a.url.replace(/"/g, "")}" 2>/dev/null || true ;;`;
+    })
+    .join("\n");
   const script = `
-action=$(notify-send -a seatmesh -u critical -t 0 \\
-  -A "info=Info" -A "yes=Yes" -A "no=No" -- "$SM_TITLE" "$SM_BODY" 2>/dev/null || true)
+action=$(notify-send -a seatmesh -u critical -t 0 ${aFlags} -- "$SM_TITLE" "$SM_BODY" 2>/dev/null || true)
 action=$(printf '%s' "$action" | tr '[:upper:]' '[:lower:]' | tr -d '\\r')
 case "$action" in
-  info)
-    if command -v xdg-open >/dev/null; then
-      xdg-open "$SM_INFO" >/dev/null 2>&1 || true
-    elif command -v gio >/dev/null; then
-      gio open "$SM_INFO" >/dev/null 2>&1 || true
-    fi
-    ;;
-  yes) curl -fsS -o /dev/null "$SM_YES" 2>/dev/null || wget -q -O /dev/null "$SM_YES" 2>/dev/null || true ;;
-  no) curl -fsS -o /dev/null "$SM_NO" 2>/dev/null || wget -q -O /dev/null "$SM_NO" 2>/dev/null || true ;;
+${caseArms}
 esac
 `.trim();
   try {
@@ -231,15 +231,33 @@ esac
         ...process.env,
         SM_TITLE: input.title.slice(0, 120),
         SM_BODY: body.slice(0, 800),
-        SM_INFO: input.infoUrl.trim(),
-        SM_YES: input.yesUrl.trim(),
-        SM_NO: input.noUrl.trim(),
       },
     }).unref();
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * Linux: Info / Yes / No as action buttons — open/curl only on click (never auto).
+ */
+export function spawnLinuxYesNoActionToast(input: {
+  title: string;
+  body: string;
+  infoUrl: string;
+  yesUrl: string;
+  noUrl: string;
+}): boolean {
+  return spawnLinuxActionButtonsToast({
+    title: input.title,
+    body: input.body.trim() || "Choose Yes or No.",
+    actions: [
+      { id: "info", label: "Info", kind: "open", url: input.infoUrl.trim() },
+      { id: "yes", label: "Yes", kind: "curl", url: input.yesUrl.trim() },
+      { id: "no", label: "No", kind: "curl", url: input.noUrl.trim() },
+    ],
+  });
 }
 
 type LinuxToastAction = {

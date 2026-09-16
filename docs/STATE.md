@@ -84,7 +84,7 @@ YAML defaults live in `layout.base.coordSync`; JSON conventions override.
 ## Types
 
 - Keys use **camelCase** (`resumeId`, not `resume_id`).
-- `type`: `agent | claude | kiro | opencode | empty`.
+- `type`: `agent | claude | kiro | opencode | oc-proxy | empty` (`oc-proxy` = CPE wrapper; save detects `opencode-cpe.sh`).
 - `layout.minis` in this file can override profile yaml (`grid`, `max`, `leads`).
 
 ## Read path

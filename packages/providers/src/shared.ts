@@ -521,7 +521,13 @@ export function defaultComposerReady(
 /** OpenCode splash must show composer prompt before paste. */
 export function opencodeComposerReady(pane: PaneSnapshot): boolean {
   const tail = pane.captureTail ?? "";
-  if (/esc exit shell mode/i.test(tail) || /● Tip Run \/connect/i.test(tail)) {
+  if (/esc exit shell mode/i.test(tail)) {
+    return false;
+  }
+  const atComposer =
+    /ctrl\+p commands/i.test(tail) || OC_COMPOSER_RE.test(tail);
+  // Connect tip can stay visible below a live composer — only block boot splash.
+  if (!atComposer && /● Tip Run \/connect/i.test(tail)) {
     return false;
   }
   const state = composerFromCapture(pane, "opencode");

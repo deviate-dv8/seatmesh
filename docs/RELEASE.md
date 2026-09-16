@@ -2,6 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-16** | `seatmesh@1.2.0` | oc-proxy CliType + runners; `sm pane resume`; OC-LIMIT `scripts/oc-reset.sh` + daemon relaunch; todo-check remaining TASKS DIGEST bulk; `sm web status\|open\|url`; `config upgrade` (npm i -g first); human help + patterns modular `docs/patterns/` |
 | **2026-09-15** | `seatmesh@1.1.5` | Notify Info/Yes/No native buttons; local Info cards GFM+Mermaid (zoom/pan/expand); session check/repair; CB workspace scope; policy config; agent help/COMMANDS |
 | **2026-09-15** | `seatmesh@1.1.4` | Early-adopter UX: `start` idempotent create-or-attach; `session down`; manager terminal welcome (whoami/switch); `sessions` documented |
 | **2026-09-15** | `seatmesh@1.1.3` | Cursor/Claude respawn prove: agent --trust; composer-ready verify+retry (OC parity); fresh whoami on success expected |
@@ -25,5 +26,9 @@ Installed CLI compares to `npm view seatmesh version` (6h cache). When outdated,
 Skip check: `SEATMESH_SKIP_VERSION_CHECK=1`.
 
 Publish: `bash scripts/publish-npm.sh` from repo root (after `npm login`).
+
+**GitHub Releases:** yes — notes in `docs/releases/vX.Y.Z.md` + row in this file.
+Create/update: `bash scripts/gh-release.sh 1.2.0` (needs `gh auth login`).
+Optional: `bash scripts/gh-release.sh 1.2.0 --publish` (npm then release).
 
 Inbox blips (2026-09-13 prove): daemon `/health` flaps and `checkback ack` 404 while inbox is up (cancel still works). Drain can wedge on `peer_unsent` if coord holds are not backlogged. Not a ship blocker after `seatmesh@1.0.0`; cancel orphan checkbacks instead of retrying ack.

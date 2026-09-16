@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AgentsConfigSchema } from "../agents/runners.js";
 import { LayoutSchema } from "./layout.js";
 import { UxSchema } from "./ux.js";
 
@@ -40,6 +41,8 @@ const ConnectivityHooksSchema = z
     up: z.string().optional(),
     rotate: z.string().optional(),
     smartRestart: z.string().optional(),
+    /** One-shot OC-LIMIT: proxy restart → wait new IP → kill CPE OC (scripts/oc-reset.sh). */
+    reset: z.string().optional(),
   })
   .optional();
 
@@ -98,9 +101,16 @@ export const MeshProfileSchema = z.object({
     .optional(),
   paths: PathsScopeSchema,
   storage: StorageSchema,
+  /**
+   * Detect/inject provider ids (and aliases). Open strings — `oc-proxy` maps to the
+   * opencode provider; unknown ids (e.g. kimi) are kept for future registration and
+   * do not fail schema parse.
+   */
   providers: z
-    .array(z.enum(["cursor-agent", "kiro", "claude", "opencode", "empty"]))
+    .array(z.string().min(1))
     .default(["cursor-agent", "kiro", "claude", "opencode", "empty"]),
+  /** Agent kind → runner script (e.g. opencode → scripts/opencode-cpe.sh). */
+  agents: AgentsConfigSchema.optional(),
   seats: z.object({
     root: z.string().default("seats"),
     templates: z.array(z.string()).default(["FOCUS", "TASKS", "REMINDER"]),
@@ -131,12 +141,18 @@ export const MeshProfileSchema = z.object({
       portRange: z.number().int().min(1).max(500).default(90),
       /** Start mesh inbox daemon with session/reload (engine — not manual inbox start). */
       autoStart: z.boolean().default(true),
+      /** Periodic save of mesh-agents.json from live tmux (default on). */
+      autoScrape: z.boolean().default(true),
+      /** Override scrape interval ms; falls back to state.autoScrapeIntervalMs. 0 = off. */
+      autoScrapeIntervalMs: z.number().int().min(0).optional(),
       /** Supervisor: crash restart + reload when dist/mesh-inbox-server.js changes after build. */
       watch: z.boolean().default(true),
       restartDelayMs: z.number().int().default(1500),
       hmrPollMs: z.number().int().default(2000),
       pollMs: z.number().int().default(4000),
       idleSettleSec: z.number().int().default(5),
+      injectDebounceMs: z.number().int().min(0).default(2500),
+      injectDebounceMaxMs: z.number().int().min(0).default(8000),
       /** TEMP: do not hold PEER/INBOX on composer typing (still hold busy/settle). */
       skipTypingGate: z.boolean().default(false),
       managerPromptPrefix: z

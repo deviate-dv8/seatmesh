@@ -3,10 +3,17 @@ import path from "node:path";
 import {
   MeshAgentsSchema,
   buildResolvedPaths,
+  runnersFromProfile,
+  seatKindFromId,
   type LoadedProfile,
   type MeshAgents,
 } from "@seat-mesh/core";
-import { buildAgentLaunchCmd } from "./agent-builder.js";
+import type { PaneRow } from "../lib/resolve-pane.js";
+import { buildLaunchCmdWithRunners } from "./agent-launch.js";
+import {
+  injectOpenCodeSessionIntoCmd,
+  isOpenCodeCpeResumeCmd,
+} from "../session/save-session.js";
 
 /** Absolute path to mesh-agents.json (respects profile paths.scope). */
 export function meshAgentsJsonPath(loaded: LoadedProfile): string {
@@ -78,24 +85,116 @@ export function miniStateForN(mesh: MeshAgents, n: number) {
   return mesh.minis.find((m) => m.mini === n);
 }
 
-/** @deprecated use buildAgentLaunchCmd from agent-builder.ts */
+export function meshSlotToPaneState(
+  slot: {
+    type: string;
+    resumeId?: string | null;
+    resumeCmd?: string | null;
+    name?: string;
+  },
+  role?: string,
+): PaneAgentState {
+  return {
+    type: slot.type,
+    resume_id: slot.resumeId ?? null,
+    resume_cmd: slot.resumeCmd ?? null,
+    name: slot.name,
+    role,
+  };
+}
+
+/** Seat label for mesh state lookup (`manager`, `secretary-2`, `mini-3`, `slot-1`). */
+export function seatIdFromPaneRow(row: PaneRow): string {
+  if (row.mini && /^\d+$/.test(row.mini)) return `mini-${row.mini}`;
+  if (row.role === "worker" && row.slot && /^\d+$/.test(row.slot)) return `slot-${row.slot}`;
+  if (row.role) return row.role;
+  if (row.slot && /^\d+$/.test(row.slot)) return `slot-${row.slot}`;
+  return "";
+}
+
+/** Saved harness entry for any seat id — manager, secretary, coord, worker, mini. */
+export function seatAgentEntry(
+  loaded: LoadedProfile,
+  seatId: string,
+  state?: AgentsStateFile,
+  mesh?: MeshAgents | null,
+): PaneAgentState | null {
+  const st = state ?? loadLaunchState(loaded);
+  const kinds = loaded.profile.layout?.base.kinds;
+  const kind = seatKindFromId(seatId, kinds);
+
+  const meshState = (): MeshAgents | null =>
+    mesh === undefined ? loadMeshAgentsForProfile(loaded) : mesh;
+
+  if (kind === "secretary") {
+    const s = st.secretary;
+    if (!s) return null;
+    return {
+      type: s.type ?? "opencode",
+      resume_id: s.resume_id ?? null,
+      resume_cmd: s.resume_cmd ?? null,
+      role: seatId,
+    };
+  }
+
+  if (kind === "manager") {
+    if (seatId === "manager" || seatId === "master") {
+      if (!st.manager) return null;
+      return { ...st.manager, role: "manager" };
+    }
+    const legacy = st.coords?.[seatId];
+    if (legacy) return { ...legacy, role: seatId };
+    const coord = meshState()?.coords?.[seatId];
+    if (coord) return meshSlotToPaneState(coord, seatId);
+    return null;
+  }
+
+  if (kind === "mini") {
+    const n = Number(seatId.replace(/^mini-/, ""));
+    const m = meshState();
+    if (!n || !m) return null;
+    const mini = miniStateForN(m, n);
+    if (!mini) return null;
+    return meshSlotToPaneState(mini, seatId);
+  }
+
+  if (kind === "worker") {
+    const slot = Number(seatId.replace(/^slot-/, ""));
+    if (!slot) return null;
+    return workerStateForSlot(st, slot) ?? null;
+  }
+
+  return null;
+}
+
+/** @deprecated use buildProfileLaunchCmd / buildLaunchCmdWithRunners */
 export function buildLaunchCmd(
   type: string,
   workspace: string,
   resumeId?: string | null,
+  loaded?: LoadedProfile,
 ): string | null {
-  return buildAgentLaunchCmd(type, workspace, resumeId);
+  const runners = loaded ? runnersFromProfile(loaded.profile) : {};
+  return buildLaunchCmdWithRunners(type, workspace, resumeId, runners);
 }
 
 export function resolveLaunchCmd(
   entry: PaneAgentState,
   workspace: string,
+  loaded?: LoadedProfile,
 ): string | null {
-  if (entry.resume_id) {
-    return buildLaunchCmd(entry.type, workspace, entry.resume_id);
+  const runners = loaded ? runnersFromProfile(loaded.profile) : {};
+  const resumeId = entry.resume_id ?? null;
+  if (entry.resume_cmd) {
+    if (isOpenCodeCpeResumeCmd(entry.resume_cmd)) {
+      return injectOpenCodeSessionIntoCmd(entry.resume_cmd, resumeId);
+    }
+    if (entry.type === "oc-proxy" && !isOpenCodeCpeResumeCmd(entry.resume_cmd)) {
+      return buildLaunchCmdWithRunners(entry.type, workspace, resumeId, runners);
+    }
+    return entry.resume_cmd;
   }
-  if (entry.resume_cmd) return entry.resume_cmd;
-  return buildLaunchCmd(entry.type, workspace, null);
+  return buildLaunchCmdWithRunners(entry.type, workspace, resumeId, runners);
 }
 
 // ---------------------------------------------------------------------------

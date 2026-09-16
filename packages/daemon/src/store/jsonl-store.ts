@@ -10,6 +10,7 @@ import {
   openAcksForSeat,
   type PaneOpRow,
   trimAsk,
+  type TpJobRow,
 } from "@seat-mesh/core";
 import * as targetJsonl from "./target-jsonl.js";
 export type { TargetRow } from "./target-jsonl.js";
@@ -109,6 +110,23 @@ export class JsonlStore {
     readonly log: (line: string) => void = () => {},
   ) {
     fs.mkdirSync(stateDir, { recursive: true });
+  }
+
+  get tpJobsPath(): string {
+    return path.join(this.stateDir, "TP_JOBS.jsonl");
+  }
+
+  readTpJobs(): TpJobRow[] {
+    return this.readJsonl<TpJobRow>(this.tpJobsPath);
+  }
+
+  appendTpJob(row: TpJobRow): void {
+    fs.appendFileSync(this.tpJobsPath, JSON.stringify(row) + "\n", { encoding: "utf8", flag: "a" });
+  }
+
+  updateTpJob(row: TpJobRow): void {
+    const rows = this.readTpJobs().map((r) => (r.id === row.id ? row : r));
+    fs.writeFileSync(this.tpJobsPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf8");
   }
 
   get checkbackPath(): string {

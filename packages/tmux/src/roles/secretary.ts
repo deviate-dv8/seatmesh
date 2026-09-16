@@ -15,22 +15,10 @@ import {
   type LoadedProfile,
   type ProviderRegistry,
 } from "@seat-mesh/core";
-import {
-  createRegistryForProfile,
-  waitForCli,
-  waitForComposerReady,
-} from "@seat-mesh/providers";
-import { guessSecretaryOpenCodeSession } from "@seat-mesh/providers";
-import { buildAgentLaunchCmd } from "../agents/agent-builder.js";
-import { pasteLaunchCmd } from "../agents/launch.js";
-import { cliForBaseColumn } from "../session/base-layout.js";
-import {
-  loadLaunchState,
-  loadMeshAgentsForProfile,
-  meshAgentsJsonPath,
-  resolveLaunchCmd,
-} from "../agents/agents-state.js";
-import { saveMeshAgentsFile } from "../session/save-session.js";
+import { createRegistryForProfile } from "@seat-mesh/providers";
+import { launchSession } from "../agents/launch.js";
+import { runSwitch } from "../agents/switch.js";
+import { defaultHarnessTypeForSeat } from "../agents/agent-launch.js";
 import { enqueuePeer, ensureMeshInbox, inboxHealth, meshInboxPort } from "../comms/inbox-bridge.js";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { resolveLiveTmuxSession } from "../lib/live-session.js";
@@ -38,11 +26,8 @@ import type { MiniCampaignDigest } from "./minis.js";
 import { submitPaneOp } from "../ops/pane-ops-client.js";
 import { buildMiniCampaignDigest, miniPrompt, miniSpawnAll } from "./minis.js";
 import { injectPromptDirect, enqueuePrompt } from "../inject/prompt.js";
-import { enqueueColdStart, injectAfterLaunch } from "../seats/cold-start-inject.js";
-import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { selectPaneUnfocused, withActivePanePreserved } from "../lib/select-pane.js";
 import { tmux } from "../lib/tmux-run.js";
-import { applyMeshBorderFormat } from "../session/borders.js";
 import { runSuperviseTick } from "../supervise/supervise-tick.js";
 
 const MESH_WATCH_ID = "mesh-watch-secretary";
@@ -113,85 +98,7 @@ function stampSecretaryMeta(paneId: string): void {
   selectPaneUnfocused(["-t", paneId, "-T", "secretary"]);
 }
 
-function ensureSecretaryBanners(loaded: LoadedProfile, paneId: string): void {
-  const layout = loaded.profile.layout;
-  if (!layout) return;
-  const session = loaded.sessionName;
-  applyMeshBorderFormat(session, layout.base.window);
-  stampSecretaryMeta(paneId);
-}
-
-function clearSecretaryResumeOnDisk(loaded: LoadedProfile): void {
-  const mesh = loadMeshAgentsForProfile(loaded);
-  if (!mesh?.secretary) return;
-  saveMeshAgentsFile(meshAgentsJsonPath(loaded), {
-    ...mesh,
-    secretary: { ...mesh.secretary, resumeId: null, resumeCmd: null },
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-function claudeResumeId(id: string | null | undefined): string | null {
-  if (!id?.trim()) return null;
-  if (/^ses_/i.test(id.trim())) return null;
-  if (/^[0-9a-f-]{36}$/i.test(id.trim())) return id.trim();
-  return null;
-}
-
-/** Launch one-liner for secretary (claude --permission-mode auto, OC resume hygiene). */
-export function resolveSecretaryLaunchCmd(
-  loaded: LoadedProfile,
-  typ: string,
-  paneId?: string,
-  fresh = false,
-): string | null {
-  const state = loadLaunchState(loaded);
-  const harnessType = typ === "cursor-agent" ? "agent" : typ;
-  const savedType = state.secretary?.type;
-  const typeChanged = Boolean(savedType && savedType !== harnessType);
-  let resumeId: string | null = null;
-  let resumeCmd: string | null = null;
-  if (!fresh && !typeChanged) {
-    resumeId = state.secretary?.resume_id ?? null;
-    resumeCmd = state.secretary?.resume_cmd ?? null;
-    if (harnessType === "claude") {
-      resumeId = claudeResumeId(resumeId);
-      if (resumeCmd && /ses_|opencode-cpe/i.test(resumeCmd)) {
-        resumeCmd = null;
-        resumeId = null;
-      }
-    }
-    if (!resumeId && paneId && harnessType === "opencode") {
-      const stored = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_oc_session}"]).out;
-      if (stored) resumeId = stored;
-    }
-    if (!resumeId && harnessType === "opencode") {
-      resumeId = guessSecretaryOpenCodeSession(loaded.workspace) ?? null;
-    }
-  } else if (paneId) {
-    tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", ""]);
-    if (typeChanged || fresh) {
-      clearSecretaryResumeOnDisk(loaded);
-    }
-  }
-  const secEntry = {
-    type: harnessType,
-    resume_id: resumeId,
-    resume_cmd: fresh || typeChanged ? null : resumeCmd,
-  };
-  const cmd =
-    resolveLaunchCmd(secEntry, loaded.workspace) ??
-    buildAgentLaunchCmd(harnessType, loaded.workspace, resumeId);
-  if (cmd && paneId && resumeId) {
-    tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", resumeId]);
-  }
-  return cmd;
-}
-
-/**
- * Hard-reload secretary: respawn-pane -k -> fresh shell -> CLI -> POV inject.
- * Mirrors harness run_secretary_restart (bypasses pane-op queue).
- */
+/** @deprecated use runSwitch(loaded, reg, "secretary", type, { fresh }) */
 export function secretaryRestart(
   loaded: LoadedProfile,
   registry?: ProviderRegistry,
@@ -199,138 +106,24 @@ export function secretaryRestart(
   fresh = false,
 ): void {
   const reg = registry ?? createRegistryForProfile(loaded.profile);
-  const session = loaded.sessionName;
-  const workspace = loaded.workspace;
-  const layout = loaded.profile.layout;
-  if (!layout) throw new Error("profile missing layout");
-
-  const resolved = resolvePaneTarget("secretary", loaded);
-  if ("error" in resolved) {
-    throw new Error(`${resolved.error} - run: seatmesh --profile .sm agent secretary start`);
-  }
-  const paneId = resolved.paneId;
-
-  const state = loadLaunchState(loaded);
-  let typ =
-    typArg ??
-    cliForBaseColumn(loaded, "secretary") ??
-    state.secretary?.type ??
-    state.conventions?.secretary_default_cli ??
-    "opencode";
+  let typ = typArg ?? defaultHarnessTypeForSeat(loaded, "secretary");
   if (typ === "cursor-agent") typ = "agent";
   if (typ === "empty") {
     throw new Error("refused: secretary restart empty - use secretary stop");
   }
-
-  const cmd = resolveSecretaryLaunchCmd(loaded, typ, paneId, fresh);
-  if (!cmd) throw new Error(`no launch cmd for secretary type ${typ}`);
-
-  withActivePanePreserved(paneId, () => {
-    tmux(["select-pane", "-e", "-t", paneId]);
+  runSwitch(loaded, reg, "secretary", typ, {
+    fresh,
+    reason: fresh ? "restart-fresh" : "restart",
   });
-
-  const respawn = tmux(["respawn-pane", "-k", "-c", workspace, "-t", paneId]);
-  if (!respawn.ok) {
-    console.error("WARN: respawn-pane failed; falling back to Escape/C-c quit");
-    tmux(["send-keys", "-t", paneId, "Escape"]);
-    sleepMs(200);
-    tmux(["send-keys", "-t", paneId, "Escape"]);
-    sleepMs(200);
-    tmux(["send-keys", "-t", paneId, "C-c"]);
-    sleepMs(300);
-    tmux(["send-keys", "-t", paneId, "C-c"]);
-    sleepMs(300);
-    tmux(["send-keys", "-t", paneId, "clear", "Enter"]);
-    sleepMs(200);
-  } else {
-    sleepMs(800);
-  }
-
-  ensureSecretaryBanners(loaded, paneId);
-  tmux(["set-option", "-p", "-t", paneId, "@mesh_status", "restarting"]);
-  withActivePanePreserved(paneId, () => {
-    tmux(["select-pane", "-e", "-t", paneId]);
-  });
-
-  withActivePanePreserved(paneId, () => pasteLaunchCmd(paneId, cmd));
-
-  const cliWait =
-    typ === "claude" || typ === "agent"
-      ? { maxTries: 80, pollMs: 500, requireComposerReady: true as const }
-      : typ === "opencode" || typ === "oc"
-        ? { maxTries: 70, pollMs: 500, requireComposerReady: true as const }
-        : { maxTries: 50, pollMs: 400 };
-  const live = waitForCli(reg, paneId, capturePaneSnapshot, cliWait);
-  if (!live) {
-    tmux(["set-option", "-p", "-t", paneId, "@mesh_status", "restart-fail"]);
-    throw new Error(`secretary restart failed: no live CLI on ${paneId}`);
-  }
-
-  const providerId = live.providerId;
-  if (!waitForComposerReady(reg, paneId, capturePaneSnapshot, providerId)) {
-    const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
-    if (/esc exit shell mode/i.test(tail)) {
-      tmux(["send-keys", "-t", paneId, "Escape"]);
-      sleepMs(400);
-    }
-    if (!waitForComposerReady(reg, paneId, capturePaneSnapshot, providerId)) {
-      console.error(
-        "WARN: composer not ready on",
-        paneId,
-        `(${providerId}) - POV inject may fail`,
-      );
-    }
-  }
-  sleepMs(500);
-
-  const pov = injectAfterLaunch(loaded, reg, "secretary", paneId);
-  if (pov.ok) {
-    console.log(`OK: secretary POV ${pov.detail}`);
-  } else {
-    console.error(`WARN: secretary POV: ${pov.detail}`);
-    try {
-      const enq = enqueueColdStart(loaded, "secretary");
-      if (!enq.skipped) {
-        console.log(
-          "OK: secretary cold-start queued — inbox will inject FRESH SUMMON/whoami when composer idle",
-        );
-      }
-    } catch (e) {
-      console.error(`WARN: secretary cold-start enqueue: ${(e as Error).message}`);
-    }
-  }
-
-  tmux(["set-option", "-p", "-t", paneId, "@mesh_status", ""]);
-  // Do NOT lock pane input here — the operator must still be able to type into
-  // secretary directly after a restart (operator-reported: was left stuck locked).
-
-  const harnessSaved = typ === "cursor-agent" ? "agent" : typ;
-  const mesh = loadMeshAgentsForProfile(loaded);
-  if (mesh?.secretary) {
-    saveMeshAgentsFile(meshAgentsJsonPath(loaded), {
-      ...mesh,
-      secretary: {
-        ...mesh.secretary,
-        type: harnessSaved as "agent" | "claude" | "kiro" | "opencode" | "empty",
-        wanted: mesh.secretary.wanted ?? true,
-        resumeId: harnessSaved === "claude" ? null : mesh.secretary.resumeId,
-        resumeCmd: cmd,
-      },
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  console.log(`OK: restarted secretary pane=${paneId} (${providerId}): respawn + POV`);
 }
 
 export function secretaryLaunch(loaded: LoadedProfile): void {
-  const reg = createRegistryForProfile(loaded.profile);
   submitPaneOp(
     loaded,
     "launch",
     { targets: ["secretary"] },
     "secretary start",
-    () => secretaryRestart(loaded, reg),
+    () => launchSession(loaded, { targets: ["secretary"] }),
   );
 }
 

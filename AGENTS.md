@@ -1,7 +1,7 @@
 # Agent brief
 
 Mesh CLI defaults live in `.sm/AGENTS.md` (engine-owned).
-Every pane: `seatmesh agent` · `seatmesh agent whoami`.
+Every pane: `sm agent` · `sm agent whoami`.
 
 # Seatmesh CLI (default for every agent)
 
@@ -10,8 +10,8 @@ Every pane: `seatmesh agent` · `seatmesh agent whoami`.
 ## Every turn
 
 ```bash
-seatmesh agent whoami
-seatmesh agent          # can / cannot for THIS pane
+sm agent whoami
+sm agent          # can / cannot for THIS pane
 ```
 
 Default config is workspace `.sm/` (walk-up). No `--profile` needed.
@@ -22,13 +22,13 @@ Default config is workspace `.sm/` (walk-up). No `--profile` needed.
 
 ```bash
 # Eyes + link
-seatmesh agent notify "<session>" "<check>" --url "<link>"
+sm agent notify "<session>" "<check>" --url "<link>"
 
 # Info only (markdown card, no Yes/No)
-seatmesh agent notify info "<title>" --body "## Why…"
+sm agent notify info "<title>" --body "## Why…"
 
 # Decision: Info · Yes · No on one card
-seatmesh agent notify yesno "<title>" "<blurb>" --body "## Stakes…" \
+sm agent notify yesno "<title>" "<blurb>" --body "## Stakes…" \
   [--md file] [--image path] [--target secretary] [--yes-msg "…"] [--no-msg "…"]
 ```
 
@@ -63,7 +63,30 @@ Lead-only extras (manager/secretary) appear on your `agent` card — spawn/assig
 
 Humans and session ops only — not the pane default path:
 
-`session` · `session init <sm-name>` · `update` · `init` · `report` · `layout` · `save` · `inbox restart` · `target`
+`session` · `session init <sm-name>` · `update` · `init` · `report` · `layout` · `save` · `inbox restart` · `target` · `switch` · `launch`
+
+## OpenCode via CPE (`oc-proxy`)
+
+Type **`oc-proxy`** (not `oc` — bare opencode). Operator:
+
+```bash
+sm switch <target> oc-proxy --keep-resume
+sm launch minis    # after miniDefaultCli: oc-proxy in mesh-agents.json
+```
+
+**Two different config keys:**
+
+| Key | Allowed values | Purpose |
+|-----|----------------|---------|
+| `providers:` | **open strings** — `opencode`, `oc-proxy`, `claude`, `agent`, `kimi`, … | Which detect/inject families to enable. `oc-proxy` → uses the **opencode** provider under the hood. Unknown names are allowed (schema); inject works once a matching provider module exists. |
+| `layout.base.cli.<seat>` | includes `oc-proxy` | Which CliType that seat launches |
+| `agents.runners.oc-proxy` | path to `scripts/opencode-cpe.sh` | How `oc-proxy` is launched (CPE wrapper) |
+
+Also need CPE proxy up: `./scripts/cpe-proxy-up.sh` (listens `127.0.0.1:18887`).
+
+Prove it's real CPE: pane process parent runs `opencode-cpe.sh` / welcome script, and `HTTPS_PROXY=http://127.0.0.1:18887` is set. Bare `opencode --auto` = **not** oc-proxy.
+
+Stuck: Esc×3 → `sm agent whoami`. See `.sm/docs/cli/oc-proxy.md` on each mesh.
 
 ## Hard rules
 

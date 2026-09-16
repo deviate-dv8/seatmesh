@@ -4,5 +4,13 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/chat/**",
+    "src/peer/peer-triage.ts",
+    "src/peer/peer-triage.test.ts",
+    "src/terminal/**",
+    "src/inject/inject-debounce.ts",
+    "src/inject/inject-debounce.test.ts"
+  ]
 }

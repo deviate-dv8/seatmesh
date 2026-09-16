@@ -10,7 +10,7 @@ import { extractOpenCodeSession, normalizeOpenCodeSessionId, waitForCli } from "
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { syncOpenCodePaneSession } from "./oc-session-sync.js";
-import { buildAgentLaunchCmd } from "./agent-builder.js";
+import { buildProfileLaunchCmd } from "./agent-launch.js";
 import {
   isOpenCodeLaunch,
   registryForProfile,
@@ -19,8 +19,8 @@ import {
 import {
   loadLaunchState,
   loadMeshAgentsForProfile,
-  miniStateForN,
   resolveLaunchCmd,
+  seatAgentEntry,
   workerStateForSlot,
 } from "./agents-state.js";
 import { resolveLiveTmuxSession } from "../lib/live-session.js";
@@ -36,6 +36,9 @@ import { baseColumns, cliForBaseColumn } from "../session/base-layout.js";
 import { listWindowPaneIds, resolveMiniPaneId } from "../session/window-panes.js";
 import { injectAfterLaunch } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
+import { isOpenCodeHarnessType, prepareOpenCodeForPaste, stopOpenCodeCli } from "./oc-stop.js";
+import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
+import { pasteWelcomeScript } from "../session/welcome-paste.js";
 export interface LaunchResult {
   paneId: string;
   label: string;
@@ -56,6 +59,10 @@ function providerIdToHarnessType(id: string): string {
 
 /** Stop a live CLI before pasting a different type (claude -> opencode, etc.). */
 function stopLiveCli(paneId: string, oldType: string): void {
+  if (isOpenCodeHarnessType(oldType)) {
+    stopOpenCodeCli(paneId, capturePaneSnapshot);
+    return;
+  }
   if (oldType === "kiro") {
     tmux(["send-keys", "-t", paneId, "Escape"]);
     sleepMs(300);
@@ -75,6 +82,25 @@ function resolveMiniHarnessType(savedType: string | undefined, miniCli: string):
   return base === "cursor-agent" ? "agent" : base;
 }
 
+/** One launch-cmd path for manager / secretary / coord / mini / worker. */
+function launchCmdForSeat(
+  loaded: LoadedProfile,
+  seatId: string,
+  harnessType: string,
+  state = loadLaunchState(loaded),
+): string | null {
+  const saved = seatAgentEntry(loaded, seatId, state);
+  const entry = {
+    type: harnessType,
+    resume_id: saved?.resume_id ?? null,
+    resume_cmd: saved?.resume_cmd ?? null,
+  };
+  return (
+    resolveLaunchCmd(entry, loaded.workspace, loaded) ??
+    buildProfileLaunchCmd(harnessType, loaded, entry.resume_id)
+  );
+}
+
 
 function stampOpenCodeSession(paneId: string, cmd: string): void {
   const sid = normalizeOpenCodeSessionId(extractOpenCodeSession(cmd));
@@ -84,17 +110,38 @@ function stampOpenCodeSession(paneId: string, cmd: string): void {
 }
 
 /** Paste a launch one-liner into the pane (no OC verify — use tryLaunch for that). */
-export function pasteLaunchCmd(paneId: string, cmd: string): void {
+export function pasteLaunchCmd(paneId: string, cmd: string, harnessType?: string): void {
   stampOpenCodeSession(paneId, cmd);
-  tmux(["send-keys", "-t", paneId, "C-c"]);
-  sleepMs(180);
-  tmux(["send-keys", "-t", paneId, "C-c"]);
-  sleepMs(180);
+  if (isOpenCodeLaunch(harnessType ?? "", cmd)) {
+    prepareOpenCodeForPaste(paneId, capturePaneSnapshot);
+  } else {
+    tmux(["send-keys", "-t", paneId, "C-c"]);
+    sleepMs(180);
+    tmux(["send-keys", "-t", paneId, "C-c"]);
+    sleepMs(180);
+  }
   tmux(["send-keys", "-t", paneId, "clear", "Enter"]);
   sleepMs(250);
   tmux(["send-keys", "-t", paneId, "-l", cmd]);
   sleepMs(80);
   tmux(["send-keys", "-t", paneId, "Enter"]);
+}
+
+/** Paste harness launch — Esc×3 for live OC; welcome script for long oc-proxy one-liners. */
+export function pasteHarnessLaunchCmd(
+  loaded: LoadedProfile,
+  paneId: string,
+  harnessType: string,
+  cmd: string,
+): void {
+  if (isOpenCodeLaunch(harnessType, cmd) && cmd.includes("opencode-cpe.sh")) {
+    pasteWelcomeScript(loaded, paneId, cmd, {
+      tag: `oc-${paneId.replace(/[^a-zA-Z0-9]/g, "_")}`,
+    });
+    stampOpenCodeSession(paneId, cmd);
+    return;
+  }
+  pasteLaunchCmd(paneId, cmd, harnessType);
 }
 
 /** @deprecated alias — prefer pasteLaunchCmd + tryLaunch (OC verify is not optional). */
@@ -122,10 +169,18 @@ export function tryLaunchPane(
     const registry = registryForProfile(loaded);
     const snap = capturePaneSnapshot(paneId);
     const liveProv = snap ? registry.detect(snap) : null;
-    const liveType = liveProv ? providerIdToHarnessType(liveProv.id) : "empty";
-    if (liveType !== "empty" && liveType === type) {
-      // Fast path: pane already runs the same harness type. Ask the provider
-      // whether it is actually live+ready instead of trusting a type match.
+    const detectId = liveProv?.id ?? "empty";
+    const saved = seatAgentEntry(loaded, label);
+    // CPE child detects as opencode — use mesh-agents / snap, never the *new* launch cmd.
+    const liveType = resolveOpenCodeHarnessType({
+      detectId,
+      savedType: saved?.type,
+      resumeCmd: saved?.resume_cmd,
+      snap,
+    });
+    const satisfyOpts = { savedType: saved?.type, resumeCmd: saved?.resume_cmd };
+    if (liveType !== "empty" && liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
+      // Fast path: pane already runs the wanted harness (incl. CPE OC for oc-proxy).
       const live = waitForCli(registry, paneId, capturePaneSnapshot, {
         maxTries: 4,
         pollMs: 250,
@@ -147,14 +202,15 @@ export function tryLaunchPane(
       console.log(`relaunch ${label}: ${type} present but not ready, re-pasting`);
     }
     withPaneInputEnabled(paneId, () => {
-      if (liveType !== "empty" && liveType !== type) {
-        stopLiveCli(paneId, liveType);
+      if (liveType !== "empty" && !liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
+        stopLiveCli(paneId, liveType === "oc-proxy" ? "opencode" : liveType);
       }
-      pasteLaunchCmd(paneId, cmd);
     });
+    // oc-proxy / long CPE one-liners need welcome-script paste (not raw send-keys).
+    pasteHarnessLaunchCmd(loaded, paneId, type, cmd);
 
     const verified = verifyHarnessAfterPaste(loaded, registry, paneId, type, cmd, () =>
-      withPaneInputEnabled(paneId, () => pasteLaunchCmd(paneId, cmd)),
+      pasteHarnessLaunchCmd(loaded, paneId, type, cmd),
     );
     if (!verified.ok) {
       return {
@@ -219,7 +275,7 @@ export function launchSession(
   if (want.has("manager") || want.has("master")) {
     const pane = meshManagerPane(session, layout.base.window) ?? basePanes[0];
     if (pane && state.manager) {
-      const cmd = resolveLaunchCmd(state.manager, active.workspace);
+      const cmd = launchCmdForSeat(active, "manager", state.manager.type, state);
       results.push(
         tryLaunchPane(active, pane, "manager", cmd, skipEmpty, state.manager.type),
       );
@@ -238,15 +294,7 @@ export function launchSession(
     if (!pane) continue;
     const profileCli = cliForBaseColumn(loaded, id);
     const harnessType = profileCli === "cursor-agent" ? "agent" : profileCli;
-    const saved = meshForCoord?.coords?.[id];
-    const entry = {
-      type: harnessType,
-      resume_id: saved?.type === harnessType ? (saved.resumeId ?? null) : null,
-      resume_cmd: saved?.type === harnessType ? (saved.resumeCmd ?? null) : null,
-    };
-    const cmd =
-      resolveLaunchCmd({ ...entry, type: harnessType }, loaded.workspace) ??
-      buildAgentLaunchCmd(harnessType, loaded.workspace, entry.resume_id);
+    const cmd = launchCmdForSeat(loaded, id, harnessType, state);
     results.push(tryLaunchPane(loaded, pane, id, cmd, skipEmpty, harnessType));
   }
 
@@ -268,14 +316,7 @@ export function launchSession(
         });
       } else {
         const harnessType = secType === "cursor-agent" ? "agent" : secType;
-        const secEntry = {
-          type: harnessType,
-          resume_id: state.secretary?.resume_id ?? null,
-          resume_cmd: state.secretary?.resume_cmd ?? null,
-        };
-        const cmd =
-          resolveLaunchCmd(secEntry, loaded.workspace) ??
-          buildAgentLaunchCmd(harnessType, loaded.workspace, secEntry.resume_id);
+        const cmd = launchCmdForSeat(loaded, "secretary", harnessType, state);
         results.push(tryLaunchPane(loaded, pane, "secretary", cmd, skipEmpty, harnessType));
       }
     }
@@ -295,16 +336,9 @@ export function launchSession(
       if (!wantAll && !want.has("minis") && !want.has(key) && !want.has(String(n))) continue;
       const pane = resolveMiniPaneId(session, layout.minis.window, n);
       if (!pane) continue;
-      const saved = mesh ? miniStateForN(mesh, n) : undefined;
+      const saved = mesh ? seatAgentEntry(loaded, key, state, mesh) : null;
       const harnessType = resolveMiniHarnessType(saved?.type, miniCli);
-      const entry = {
-        type: harnessType,
-        resume_id: saved?.resumeId ?? null,
-        resume_cmd: saved?.resumeCmd ?? null,
-      };
-      const cmd =
-        resolveLaunchCmd(entry, loaded.workspace) ??
-        buildAgentLaunchCmd(harnessType, loaded.workspace, entry.resume_id);
+      const cmd = launchCmdForSeat(loaded, key, harnessType, state);
       results.push(tryLaunchPane(loaded, pane, key, cmd, false, harnessType));
     }
   }
@@ -339,7 +373,7 @@ export function launchSession(
       });
       continue;
     }
-    const cmd = resolveLaunchCmd(entry, loaded.workspace);
+    const cmd = resolveLaunchCmd(entry, loaded.workspace, loaded);
     results.push(tryLaunchPane(loaded, pane, `slot-${slot}`, cmd, skipEmpty, entry.type));
   }
 

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="seatmesh">
+  <!-- Inverted ?, 4 horizontal light-green bands (primary / Open Sessions). -->
+  <defs>
+    <clipPath id="t">
+      <polygon points="4,4 60,4 32,60"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#t)">
+    <rect x="0" y="0" width="64" height="16" fill="#86efac"/>
+    <rect x="0" y="16" width="64" height="16" fill="#4ade80"/>
+    <rect x="0" y="32" width="64" height="16" fill="#22c55e"/>
+    <rect x="0" y="48" width="64" height="16" fill="#16a34a"/>
+  </g>
+</svg>

@@ -68,6 +68,8 @@ export interface MeshRuntimePaths {
   miniDone: string;
   miniManifest: string;
   gateQueue: string;
+  /** Directory for terminal-pool job stdout/stderr logs. */
+  tpJobsDir: string;
 }
 
 export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
@@ -95,6 +97,7 @@ export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
     miniDone: path.join(dataRoot, "MINI-DONE.md"),
     miniManifest: path.join(dataRoot, "mini-manifest.json"),
     gateQueue: path.join(dataRoot, "GATE-QUEUE.md"),
+    tpJobsDir: path.join(daemonDir, "tp-jobs"),
   };
 }
 
@@ -109,6 +112,7 @@ export interface ResolvedConnectivityHooks {
   up?: string;
   rotate?: string;
   smartRestart?: string;
+  reset?: string;
 }
 
 /** Resolve hook scripts to absolute paths (profile hooks only — no driver branches). */
@@ -124,7 +128,13 @@ export function resolveConnectivityHooks(
     return fs.existsSync(abs) ? abs : abs;
   };
   const hooks = conn.hooks;
-  if (!hooks?.up && !hooks?.rotate && !hooks?.smartRestart && !hooks?.status) {
+  if (
+    !hooks?.up &&
+    !hooks?.rotate &&
+    !hooks?.smartRestart &&
+    !hooks?.status &&
+    !hooks?.reset
+  ) {
     return null;
   }
   return {
@@ -132,5 +142,6 @@ export function resolveConnectivityHooks(
     up: rel(hooks.up),
     rotate: rel(hooks.rotate),
     smartRestart: rel(hooks.smartRestart),
+    reset: rel(hooks.reset),
   };
 }

@@ -12,6 +12,7 @@ export const MESH_INBOX_INTENTS = [
   "limit-retry",
   "status",
   "ack-remind",
+  "triage-context",
 ] as const;
 
 export type MeshInboxIntent = (typeof MESH_INBOX_INTENTS)[number];

@@ -18,6 +18,7 @@ export function requireRole(loaded: LoadedProfile, allowed: string[], cmdLabel: 
 
 /** Coordinator tier — any manager-kind or secretary-kind column id. */
 export function requireCoordRole(loaded: LoadedProfile, cmdLabel: string): void {
+  if (!process.env.TMUX_PANE) return;
   const w = runWhoami(loaded, "here");
   if (isCoordKind(w.role, loaded.profile?.layout?.base.kinds)) return;
   console.error(

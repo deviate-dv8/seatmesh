@@ -13,6 +13,8 @@ import {
   seatHubFingerprint,
   shouldSkipColdStartEnqueue,
 } from "./cold-start-state.js";
+import { cancelOpenCodeGeneration } from "../agents/oc-stop.js";
+import { tmux } from "../lib/tmux-run.js";
 
 const PREFIX = "[mesh-cold-start] ";
 
@@ -116,8 +118,10 @@ function sleepMs(ms: number): void {
 
 function briefVisible(paneId: string, target?: string): boolean {
   const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
-  if (target === "secretary") return /FRESH SUMMON|You are SECRETARY/i.test(tail);
-  return /FRESH SUMMON|run \.\/sm\.sh whoami|mesh-cold-start/i.test(tail);
+  if (target === "secretary") return /FRESH SUMMON|You are SECRETARY|mesh-cold-start/i.test(tail);
+  return /FRESH SUMMON|sm agent whoami|seatmesh agent whoami|run \.\/sm\.sh whoami|mesh-cold-start/i.test(
+    tail,
+  );
 }
 
 /**
@@ -179,11 +183,28 @@ export function injectAfterLaunch(
     live.providerId,
     { maxTries: 40, pollMs: 400 },
   );
+  // OpenCode long pastes can leave Shell mode — Esc until composer accepts inject.
+  if (live.providerId === "opencode") {
+    for (let s = 0; s < 3; s++) {
+      const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
+      if (!/esc exit shell mode/i.test(tail)) break;
+      tmux(["send-keys", "-t", paneId, "Escape"]);
+      sleepMs(280);
+    }
+    cancelOpenCodeGeneration(paneId, 1);
+    sleepMs(200);
+  }
   let ui = false;
   for (let i = 0; i < 50; i++) {
     if (launchUiReady(registry, paneId, live.providerId)) {
       ui = true;
       break;
+    }
+    if (live.providerId === "opencode") {
+      const tail = capturePaneSnapshot(paneId)?.captureTail ?? "";
+      if (/esc exit shell mode/i.test(tail)) {
+        tmux(["send-keys", "-t", paneId, "Escape"]);
+      }
     }
     sleepMs(400);
   }

@@ -21,6 +21,7 @@ import {
 const m = (sub: string) => seatmeshCmd(sub);
 import type { WhoamiResult } from "./whoami.js";
 import { hubRetrievalWhoamiLines } from "./hub-lines.js";
+import { seatAgentEntry } from "./agents-state.js";
 
 interface CheckbackRow {
   id: string;
@@ -157,6 +158,33 @@ export function buildWhoamiContextLines(
 
   lines.push("--- context ---");
   lines.push(`agent_id=${agentId}`);
+  // cli= must say oc-proxy when mesh-agents / CPE — agents that see provider=opencode
+  // sometimes switch to bare opencode and kill the CPE session.
+  {
+    const seatKey =
+      mini != null && mini !== ""
+        ? `mini-${mini}`
+        : w.slotLabel
+          ? w.slotLabel.startsWith("slot-") || w.slotLabel === "manager" || w.slotLabel === "secretary"
+            ? w.slotLabel
+            : /^\d+$/.test(w.slotLabel)
+              ? `slot-${w.slotLabel}`
+              : w.role || agentId
+          : w.role || agentId;
+    const entry = seatAgentEntry(loaded, seatKey);
+    const cli =
+      entry?.type === "oc-proxy" ||
+      (entry?.resume_cmd && /opencode-cpe\.sh/i.test(entry.resume_cmd))
+        ? "oc-proxy"
+        : entry?.type || "unknown";
+    lines.push(`cli=${cli}`);
+    if (cli === "oc-proxy") {
+      lines.push(
+        "cli_note=oc-proxy (CPE :18887) — do NOT switch to bare opencode; that kills the proxied session",
+      );
+    }
+    if (entry?.resume_id) lines.push(`oc_session=${entry.resume_id}`);
+  }
   lines.push(`fresh_summon=run ${m("whoami")} first; hub is that dump; later peer is a task`);
   lines.push(...hubRetrievalWhoamiLines());
   if (mini) lines.push(`mini=${mini}`);

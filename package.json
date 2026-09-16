@@ -1,6 +1,6 @@
 {
   "name": "seatmesh",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Typed tmux agent coordination: profiles, role index, inbox daemon, connectivity recovery.",
@@ -16,7 +16,8 @@
     "typecheck": "npm run typecheck -ws --if-present",
     "test": "vitest run",
     "test:ci": "vitest run --exclude '**/sqlite-store.test.ts'",
-    "seatmesh": "node packages/cli/dist/main.js"
+    "seatmesh": "node packages/cli/dist/main.js",
+    "web": "npm run dev -w @seat-mesh/web"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

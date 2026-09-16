@@ -115,11 +115,7 @@ export function sessionUp(loaded: LoadedProfile): void {
   // bash -c) gets a working PATH for node/npm/npx with zero manual export — .bashrc alone
   // can't do this (skipped by non-interactive shells; nvm.sh itself refuses to load when
   // npm_config_prefix is already set, which is common here).
-  const pathFix = path.join(wd, "scripts/ensure-node-path.sh");
-  if (fs.existsSync(pathFix)) {
-    tmux(["set-environment", "-t", session, "-g", "BASH_ENV", pathFix]);
-    tmux(["set-environment", "-t", session, "-g", "ENV", pathFix]);
-  }
+  ensureMeshShellEnv(loaded, session);
 
   if (flags.workers) {
     ensureSessionWindow(session, workers, wd);
@@ -202,12 +198,29 @@ export function sessionDown(
  * Inbox + coord repair + scrape — safe to run detached after attach so the
  * operator is not stuck outside tmux waiting on health/coord sync.
  */
+/** BASH_ENV/ENV: node PATH + in-session `seatmesh` → npx from workspace. */
+function ensureMeshShellEnv(loaded: LoadedProfile, session: string): void {
+  const wd = loaded.workspace;
+  const meshShellEnv = path.join(wd, "scripts/mesh-shell-env.sh");
+  const pathFix = path.join(wd, "scripts/ensure-node-path.sh");
+  const shellEnv = fs.existsSync(meshShellEnv)
+    ? meshShellEnv
+    : fs.existsSync(pathFix)
+      ? pathFix
+      : null;
+  if (shellEnv) {
+    tmux(["set-environment", "-t", session, "-g", "BASH_ENV", shellEnv]);
+    tmux(["set-environment", "-t", session, "-g", "ENV", shellEnv]);
+  }
+}
+
 export function sessionSync(loaded: LoadedProfile): void {
   const session = loaded.sessionName;
   if (!tmuxHasSession(session)) {
     throw new Error(`session '${session}' does not exist — seatmesh session up`);
   }
   ensureSeatFiles(loaded);
+  ensureMeshShellEnv(loaded, session);
   ensureMeshSessionEnv(session, {
     workspaceId: loaded.workspaceId,
     sessionName: loaded.sessionName,

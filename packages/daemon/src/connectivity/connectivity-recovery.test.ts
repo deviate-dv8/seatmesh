@@ -4,8 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import {
   clearOcLimitBannerForPane,
+  markOcLimitRecoveryStarted,
   maybeEndRateLimitEpisode,
   newConnectivityRecoveryState,
+  ocLimitRecoveryCooldownLeftSec,
   shouldActivateProxyDownEpisode,
   shouldChainRotateUntilAfterSmart,
   shouldNotifyProxyDownStuck,
@@ -214,6 +216,31 @@ describe("smartRestartCooldownLeftSec (harness-parity stamp file)", () => {
     fs.writeFileSync(tmpStamp, String(nowSec - 1800));
     try {
       expect(smartRestartCooldownLeftSec(tmpStamp, 1800, nowSec * 1000)).toBe(0);
+    } finally {
+      fs.rmSync(tmpStamp, { force: true });
+    }
+  });
+});
+
+describe("ocLimitRecoveryCooldownLeftSec (cross-mesh once-gate)", () => {
+  const tmpStamp = path.join(os.tmpdir(), `sm-test-oc-limit-recovery-${process.pid}.last`);
+
+  it("blocks sibling meshes / HMR respawns while stamp is fresh", () => {
+    const nowSec = 2_000_000;
+    fs.writeFileSync(tmpStamp, String(nowSec - 10));
+    try {
+      expect(ocLimitRecoveryCooldownLeftSec(tmpStamp, 1800, nowSec * 1000)).toBe(1790);
+    } finally {
+      fs.rmSync(tmpStamp, { force: true });
+    }
+  });
+
+  it("markOcLimitRecoveryStarted writes an epoch stamp", () => {
+    fs.rmSync(tmpStamp, { force: true });
+    markOcLimitRecoveryStarted(tmpStamp, 3_000_000_000);
+    try {
+      expect(fs.readFileSync(tmpStamp, "utf8").trim()).toBe("3000000");
+      expect(ocLimitRecoveryCooldownLeftSec(tmpStamp, 1800, 3_000_000_000)).toBe(1800);
     } finally {
       fs.rmSync(tmpStamp, { force: true });
     }

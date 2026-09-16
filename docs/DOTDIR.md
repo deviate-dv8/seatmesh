@@ -223,6 +223,11 @@ locked:
 
 ## `npx seatmesh update`
 
+**First:** upgrade the published CLI — `npm install -g seatmesh@latest`
+(or run via `npx seatmesh@latest …`). Guide: `seatmesh config upgrade`.
+
+Then `update` refreshes **this** mesh’s `.sm/` from that CLI:
+
 1. Compare package template manifest vs `.sm/.seatmesh-version`.
 2. Copy refreshed `roles/_vendor/*`, `contracts/_vendor/*`.
 3. **Do not** modify `*.extend.yaml`, `contracts/locks/**`, `runtime/**`, `chat-rooms/**`,
@@ -241,10 +246,12 @@ Vendor sync is **file-by-file** under `_vendor/` only (content diff) — never w
 `runtime/`, `seats/`, `chat-rooms/`, or the npx/npm install tree.
 
 ```bash
-npx seatmesh update
-npx seatmesh update --dry-run
-npx seatmesh update --migrate   # also move legacy tasks/seatmesh → .sm/runtime
-npx seatmesh update --no-restart-inbox
+npm install -g seatmesh@latest   # step 1 — bump CLI
+seatmesh config upgrade          # print the same guide
+seatmesh update                  # step 2 — refresh .sm from that CLI
+seatmesh update --dry-run
+seatmesh update --migrate        # also move legacy tasks/seatmesh → .sm/runtime
+seatmesh update --no-restart-inbox
 ```
 
 ---

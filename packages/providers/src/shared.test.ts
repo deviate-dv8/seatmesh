@@ -6,6 +6,7 @@ import {
   coordComposerDraft,
   isDecorativeChromeNeighbor,
   kiroInputDraft,
+  opencodeComposerReady,
   opencodeInputDraft,
   scrapePromptTurnOpenCode,
 } from "./shared.js";
@@ -335,5 +336,32 @@ describe("scrapePromptTurnOpenCode (ChatFile quality)", () => {
     expect(turn!.humanPrompt).toContain("older prompt about peers");
     expect(turn!.agentResponse).toContain("Standing by");
     expect(turn!.humanPrompt).not.toContain("OC-SCRAPE-PROVE");
+  });
+});
+
+describe("opencodeComposerReady", () => {
+  it("is ready when composer and connect tip both appear (CPE boot)", () => {
+    const tail = [
+      "  ┃  Ask anything…",
+      "  ┃  Build auto · Big Pickle OpenCode Zen",
+      "                                                          tab agents  ctrl+p commands",
+      "                   ● Tip Run /connect to add an AI provider and start coding",
+    ].join("\n");
+    const pane = {
+      captureTail: tail,
+      currentCommand: "opencode",
+      options: { processCmdlines: "opencode\0" },
+    } as unknown as Parameters<typeof opencodeComposerReady>[0];
+    expect(opencodeComposerReady(pane)).toBe(true);
+  });
+
+  it("is not ready on connect splash alone (no composer chrome)", () => {
+    const tail = "● Tip Run /connect to add an AI provider and start coding";
+    const pane = {
+      captureTail: tail,
+      currentCommand: "opencode",
+      options: { processCmdlines: "opencode\0" },
+    } as unknown as Parameters<typeof opencodeComposerReady>[0];
+    expect(opencodeComposerReady(pane)).toBe(false);
   });
 });

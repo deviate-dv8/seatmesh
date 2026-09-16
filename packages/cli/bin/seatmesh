@@ -119,6 +119,26 @@ if is_attach_cmd; then
   lazy_attach && exit 0
 fi
 
+in_mesh_context() {
+  [[ -n "${MESH_SESSION:-}" ]] && return 0
+  find_sm_dir >/dev/null 2>&1 && return 0
+  return 1
+}
+
+allow_outside_mesh() {
+  local a0="${ARGS[0]:-}"
+  case "$a0" in
+    ""|help|-h|--help|start|attach|session|sessions|init|version|install|update|completion|migrate-runtime|roles) return 0 ;;
+  esac
+  return 1
+}
+
+if ! in_mesh_context && ! allow_outside_mesh; then
+  echo "seatmesh: no mesh workspace here — cd <project> && npx seatmesh …" >&2
+  echo "hint: seatmesh install  (optional ~/.local/bin link for start/session attach)" >&2
+  exit 1
+fi
+
 # Monorepo cold start
 if [[ -f "$PKG_ROOT/package.json" && -d "$PKG_ROOT/packages/cli" ]]; then
   needs=0

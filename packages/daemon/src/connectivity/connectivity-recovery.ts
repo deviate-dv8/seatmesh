@@ -14,6 +14,7 @@ import {
 import { capturePaneSnapshot, listMeshMonitorPanes } from "@seat-mesh/tmux";
 import { notifyConnectivityStatus, type ResumeWaveMeta } from "./oc-resume.js";
 import { syncCarrierIpProbe } from "./oc-resume-broadcast.js";
+import { ocLimitV2EpisodeActive, startOcLimitV2Episode } from "./oc-limit-v2.js";
 
 const PROXY_UP_COOLDOWN_MS = 60_000;
 /** After an episode clears, ignore stale oc-connect re-arm unless streak re-confirms. */
@@ -34,6 +35,32 @@ const DEFAULT_SMART_RESTART_COOLDOWN_SEC = 1800;
 const SMART_RESTART_COOLDOWN_EXIT_CODE = 2;
 
 /**
+ * Cross-mesh OC-LIMIT recovery stamp. Survives HMR/SIGKILL child restarts so
+ * pia+zsign+seatmesh do not each re-arm notify-send + oc-reset every respawn.
+ * Shared CPE → one stamp for all meshes.
+ */
+const DEFAULT_OC_LIMIT_RECOVERY_STAMP = "/tmp/seatmesh-oc-limit-recovery.last";
+const DEFAULT_OC_LIMIT_RECOVERY_COOLDOWN_SEC = 1800;
+
+/**
+ * Seconds left on a stamp-file cooldown (0 = none / expired).
+ */
+export function stampCooldownLeftSec(
+  stampPath: string,
+  cooldownSec: number,
+  nowMs: number = Date.now(),
+): number {
+  try {
+    const last = Number(fs.readFileSync(stampPath, "utf8").trim()) || 0;
+    if (!last) return 0;
+    const ageSec = Math.floor(nowMs / 1000) - last;
+    return ageSec >= cooldownSec ? 0 : cooldownSec - ageSec;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Seconds left on the Proxy-SMART file cooldown (0 = none / expired).
  * Reads the same stamp file cpe-proxy-smart-restart.sh writes — never the daemon's
  * own state — so the daemon and any harness script agree on cooldown status.
@@ -45,13 +72,29 @@ export function smartRestartCooldownLeftSec(
   ),
   nowMs: number = Date.now(),
 ): number {
+  return stampCooldownLeftSec(stampPath, cooldownSec, nowMs);
+}
+
+/** Seconds left before another OC-LIMIT reset+toast is allowed (cross-mesh). */
+export function ocLimitRecoveryCooldownLeftSec(
+  stampPath: string = process.env.CPE_OC_LIMIT_RECOVERY_STAMP || DEFAULT_OC_LIMIT_RECOVERY_STAMP,
+  cooldownSec: number = Number(
+    process.env.CPE_OC_LIMIT_RECOVERY_COOLDOWN_SEC || DEFAULT_OC_LIMIT_RECOVERY_COOLDOWN_SEC,
+  ),
+  nowMs: number = Date.now(),
+): number {
+  return stampCooldownLeftSec(stampPath, cooldownSec, nowMs);
+}
+
+/** Mark OC-LIMIT recovery as started — blocks sibling meshes / HMR respawns. */
+export function markOcLimitRecoveryStarted(
+  stampPath: string = process.env.CPE_OC_LIMIT_RECOVERY_STAMP || DEFAULT_OC_LIMIT_RECOVERY_STAMP,
+  nowMs: number = Date.now(),
+): void {
   try {
-    const last = Number(fs.readFileSync(stampPath, "utf8").trim()) || 0;
-    if (!last) return 0;
-    const ageSec = Math.floor(nowMs / 1000) - last;
-    return ageSec >= cooldownSec ? 0 : cooldownSec - ageSec;
+    fs.writeFileSync(stampPath, `${Math.floor(nowMs / 1000)}\n`, "utf8");
   } catch {
-    return 0;
+    /* best-effort */
   }
 }
 
@@ -264,7 +307,10 @@ function scheduleIpifyProbe(workspace: string, port: number): void {
     "bash",
     [
       "-c",
-      `HTTPS_PROXY=http://127.0.0.1:${port} HTTP_PROXY=http://127.0.0.1:${port} curl -4 -sS -m 3 https://api.ipify.org 2>/dev/null || true`,
+      `via="$(${curlViaProxy(port)} 2>/dev/null)"; ` +
+        `eth="$(env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy ` +
+        `curl -4 -sS -m 3 https://api.ipify.org 2>/dev/null)"; ` +
+        `printf '%s\n%s\n' "$via" "$eth"`,
     ],
     { cwd: workspace, stdio: ["ignore", "pipe", "ignore"] },
   );
@@ -275,15 +321,24 @@ function scheduleIpifyProbe(workspace: string, port: number): void {
   child.on("close", () => {
     ipifyProbeInFlight = false;
     lastIpifyAt = Date.now();
-    const ip = out.trim();
-    cachedIpifyUp = Boolean(ip);
-    if (ip) lastKnownGoodIp = ip;
+    const [via, eth] = out.trim().split(/\n/, 2);
+    const ip = (via ?? "").trim();
+    const direct = (eth ?? "").trim();
+    // via == eth means gost egresses through the host eth — not the CPE carrier.
+    // Keep the previous known-good IP so rotation detection still sees the change.
+    const valid = Boolean(ip && (!direct || ip !== direct));
+    cachedIpifyUp = valid;
+    if (valid) lastKnownGoodIp = ip;
   });
   child.on("error", () => {
     ipifyProbeInFlight = false;
     lastIpifyAt = Date.now();
     cachedIpifyUp = false;
   });
+}
+
+function curlViaProxy(port: number): string {
+  return `HTTPS_PROXY=http://127.0.0.1:${port} HTTP_PROXY=http://127.0.0.1:${port} curl -4 -sS -m 3 https://api.ipify.org`;
 }
 
 function carrierIpCached(): string | null {
@@ -312,12 +367,21 @@ function runScriptAsync(
     log(`${label}: missing ${scriptPath}`);
     return false;
   }
+  // Capture script stdout/stderr into daemon log (oc-reset was silent with stdio ignore).
   const child = spawn("bash", [scriptPath], {
     cwd: workspace,
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
     detached: false,
     env: { ...process.env, CPE_SKIP_DESKTOP_NOTIFY: "1", ...extraEnv },
   });
+  const pump = (chunk: Buffer) => {
+    for (const line of chunk.toString("utf8").split(/\r?\n/)) {
+      const t = line.trim();
+      if (t) log(`${label}: ${t}`);
+    }
+  };
+  child.stdout?.on("data", pump);
+  child.stderr?.on("data", pump);
   child.on("error", (e) => {
     log(`${label}: spawn error ${(e as Error).message}`);
     onDone(1);
@@ -589,23 +653,26 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
   if (action === "start") {
     const fromIp = carrierIpCached() ?? state.carrierIpAtEpisodeStart ?? lastKnownGoodIp;
     log(`OC-LIMIT rising-edge episode start carrier=${fromIp ?? "?"}`);
-    if (!state.rateLimitRecoveryStarted) {
-      notifyConnectivityStatus(
-        workspace,
-        "OC-LIMIT",
-        `Carrier ${fromIp ?? "?"} rate-limited. One proxy recovery run for this episode (no repeat while banner persists).`,
-        "Wait for resume-sent then complete toasts. Ack is automatic when limit screens clear.",
-        "starting",
+    const stampLeft = ocLimitRecoveryCooldownLeftSec();
+    if (stampLeft > 0) {
+      // HMR/SIGKILL wipe in-memory rateLimitRecoveryStarted; stamp is the real once-gate.
+      state.rateLimitRecoveryStarted = true;
+      log(
+        `OC-LIMIT rising-edge suppressed — shared recovery stamp cooldown ${stampLeft}s (no toast / no re-reset)`,
       );
+    } else if (!state.rateLimitRecoveryStarted) {
       maybeRunOcLimitRecovery(
-        hooks,
-        conn,
+        loaded,
+        registry,
         workspace,
+        session,
+        baseWindow,
+        workersWindow,
+        minisWindow,
         proxyPort,
         fromIp,
         state,
         log,
-        resumeOpenCodePanes,
       );
     } else {
       log("OC-LIMIT episode active — recovery already ran this episode (skip proxy restart)");
@@ -642,119 +709,46 @@ function maybeRunProxyUp(
 }
 
 /**
- * OC-LIMIT (rate-limit) recovery: default wait-ip poll (no CPE reboot loop).
- * Optional Proxy-SMART when policy.smartRestart; chains wait-ip after SMART
- * skip/fail/unchanged IP. Resumes OC panes on real carrier IP change.
- * Mirrors inbox-server.mjs runOcLimitRecoveryAsync.
+ * OC-LIMIT V2: three notifies + atomics (not oc-reset / Proxy-SMART / wait-ip).
+ *   1) OC Restart Initialized
+ *   2) stuck >30m → Reboot button toast
+ *   3) new IP → kill CPE OC + revive oc-proxy + CONTINUE
  */
 function maybeRunOcLimitRecovery(
-  hooks: ReturnType<typeof resolveConnectivityHooks>,
-  conn: NonNullable<import("@seat-mesh/core").MeshProfile["connectivity"]>,
+  loaded: LoadedProfile,
+  registry: ProviderRegistry,
   workspace: string,
+  session: string,
+  baseWindow: string,
+  workersWindow: string,
+  minisWindow: string,
   proxyPort: number,
   fromIp: string | null,
   state: ConnectivityRecoveryState,
   log: (line: string) => void,
-  resumeOpenCodePanes: ConnectivityPollInput["resumeOpenCodePanes"],
 ): void {
-  const waitMaxSec = conn.policy?.waitIpMaxSec ?? 3600;
-  const waitPollSec = conn.policy?.waitIpPollSec ?? 30;
-  const useSmart = conn.policy?.smartRestart === true;
   const now = Date.now();
-  if (state.recoveryRunning) return;
+  if (state.recoveryRunning || ocLimitV2EpisodeActive()) return;
   if (state.rateLimitRecoveryStarted) return;
-  // First OC-LIMIT rising edge: instant wait-ip (no ipify gate). Cooldown only blocks re-runs.
   if (state.lastRotateAt > 0 && now - state.lastRotateAt < ROTATE_COOLDOWN_MS) return;
-
-  state.recoveryRunning = true;
-  state.rateLimitRecoveryStarted = true;
-  state.lastRotateAt = now;
-
-  const finish = (toIp: string | null, reason: string, opts?: { forceResume?: boolean }) => {
-    state.recoveryRunning = false;
-    const ipChanged = Boolean(toIp && fromIp && toIp !== fromIp);
-    if (!ipChanged && !opts?.forceResume) {
-      log(
-        `OC-LIMIT recovery done reason=${reason} ip=${toIp ?? "?"} — skip resume wave (no carrier change)`,
-      );
-      return;
-    }
-    log(
-      `OC-LIMIT recovery done -> resume wave reason=${reason} ${fromIp ?? "?"} -> ${toIp ?? "?"}${opts?.forceResume ? " (forced)" : ""}`,
-    );
-    setImmediate(() => resumeOpenCodePanes(reason, { fromIp, toIp }));
-  };
-
-  const runWaitIp = (reason: string) => {
-    const script = hooks?.rotate;
-    if (!script || !fs.existsSync(script)) {
-      log(`OC-LIMIT recovery: connectivity.hooks.rotate missing (${script ?? "unset"})`);
-      state.recoveryRunning = false;
-      return;
-    }
-    log(
-      `OC-LIMIT -> async ${path.basename(script)} (${reason}) max=${waitMaxSec}s poll=${waitPollSec}s`,
-    );
-    const waitEnv = {
-      CPE_WAIT_MAX_SEC: String(waitMaxSec),
-      CPE_WAIT_POLL_SEC: String(waitPollSec),
-    };
-    const started = runScriptAsync(
-      workspace,
-      script,
-      log,
-      "wait-ip",
-      (code) => {
-        log(`wait-ip exit=${code}`);
-        const toIp = syncCarrierIpProbe(workspace, proxyPort) ?? carrierIpCached();
-        if (toIp) lastKnownGoodIp = toIp;
-        scheduleIpifyProbe(workspace, proxyPort);
-        finish(toIp, "wait-ip", { forceResume: code === 0 });
-      },
-      waitEnv,
-    );
-    if (!started) state.recoveryRunning = false;
-  };
-
-  if (!useSmart) {
-    log("OC-LIMIT -> wait-ip (smartRestart=false, no reboot loop)");
-    runWaitIp("oc-limit");
+  const stampLeft = ocLimitRecoveryCooldownLeftSec();
+  if (stampLeft > 0) {
+    state.rateLimitRecoveryStarted = true;
+    log(`OC-LIMIT V2 skipped — shared stamp cooldown ${stampLeft}s`);
     return;
   }
 
-  const cooldownLeft = smartRestartCooldownLeftSec();
-  if (cooldownLeft > 0) {
-    log(`OC-LIMIT Proxy-SMART cooldown ${cooldownLeft}s -> wait-ip path`);
-    runWaitIp("smart-cooldown");
-    return;
-  }
-
-  const smartScript = hooks?.smartRestart;
-  if (!smartScript || !fs.existsSync(smartScript)) {
-    log(`OC-LIMIT rising-edge but hooks.smartRestart missing -> wait-ip`);
-    runWaitIp("no-smart-script");
-    return;
-  }
-
-  log(`OC-LIMIT rising-edge -> async ${path.basename(smartScript)}`);
-  const started = runScriptAsync(workspace, smartScript, log, "cpe-proxy-smart-restart", (code) => {
-    log(`cpe-proxy-smart-restart exit=${code}`);
-    const ipAfter = syncCarrierIpProbe(workspace, proxyPort) ?? carrierIpCached();
-    if (ipAfter) lastKnownGoodIp = ipAfter;
-    scheduleIpifyProbe(workspace, proxyPort);
-    if (shouldChainRotateUntilAfterSmart({ exitCode: code, ipBefore: fromIp, ipAfter })) {
-      const chainReason = code === SMART_RESTART_COOLDOWN_EXIT_CODE ? "smart-cooldown" : "smart-unchanged";
-      notifyConnectivityStatus(
-        workspace,
-        "OC-LIMIT",
-        `Proxy-SMART did not clear it (${chainReason}). Waiting for new carrier IP (no reboot).`,
-        "Wait for resume-sent then complete toasts.",
-        "escalating",
-      );
-      runWaitIp(chainReason);
-      return;
-    }
-    finish(ipAfter, "proxy-smart-restart");
+  startOcLimitV2Episode({
+    loaded,
+    registry,
+    workspace,
+    session,
+    baseWindow,
+    workersWindow,
+    minisWindow,
+    proxyPort,
+    fromIp,
+    state,
+    log,
   });
-  if (!started) state.recoveryRunning = false;
 }

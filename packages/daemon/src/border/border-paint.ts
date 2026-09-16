@@ -326,6 +326,11 @@ function paintOnePaneBorder(
     resetStickyNegativeStatus(paneId);
   }
 
+  const manualStatus = snap?.options?.mesh_status?.trim();
+  if (manualStatus === "restarting" || manualStatus === "restart-fail") {
+    borderStatus = manualStatus;
+  }
+
   if (coordInbox) {
     inboxN += counts.unsent + (counts.unsent === 0 ? counts.unresolved : 0);
     if (counts.unsent > 0 && st && prov && snap) {

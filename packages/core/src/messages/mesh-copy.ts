@@ -228,6 +228,10 @@ export const ROOM_VERIFY_CONTINUE_HUB =
  * - agent chats "Ignored / won't ack" and the Check re-fires forever
  * - agent never sees cancel because they don't know the cmd
  */
+export const MESH_INBOX_ACTION = {
+  continueVerb: "CONTINUE",
+} as const;
+
 export const CHECKBACK_VERIFY = {
   continueVerb: "CONTINUE",
   noBanter:

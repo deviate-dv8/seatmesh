@@ -1,5 +1,6 @@
 import type { LoadedProfile, PaneOpRow } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
+import { defaultHarnessTypeForSeat } from "../agents/agent-launch.js";
 import { launchSession, printLaunchResults } from "../agents/launch.js";
 import { assertRelayoutSafe, printRelayoutPlan } from "../session/layout-guard.js";
 import {
@@ -86,6 +87,16 @@ export function executePaneOp(loaded: LoadedProfile, row: PaneOpRow): PaneOpExec
         miniSpawnAll(loaded, registry);
         secretaryMeshWatch(loaded, "on", String(row.payload.watchInterval ?? "5m"));
         console.log("OK: secretary dispatched minis + mesh-watch ON");
+        break;
+      }
+      case "secretary-restart": {
+        const typ = row.payload.typ as string | undefined;
+        const fresh = row.payload.fresh !== false;
+        const target = String(row.payload.target ?? "secretary");
+        runSwitch(loaded, registry, target, typ ?? defaultHarnessTypeForSeat(loaded, target), {
+          fresh,
+          reason: "restart",
+        });
         break;
       }
       default:

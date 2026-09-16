@@ -6,9 +6,10 @@ import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { baseColumns, cliForBaseColumn } from "../session/base-layout.js";
 import { saveMeshSession } from "../session/save-session.js";
 import { loadLaunchState, resolveLaunchCmd, type AgentsStateFile, type PaneAgentState } from "./agents-state.js";
-import { buildAgentLaunchCmd } from "./agent-builder.js";
+import { buildProfileLaunchCmd } from "./agent-launch.js";
 import { tryLaunchPane, type LaunchResult } from "./launch.js";
 import { registryForProfile } from "./launch-verify.js";
+import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
 
 export type CoordSyncTrigger = "reload" | "attach";
 
@@ -48,7 +49,7 @@ export function coordSyncEnabledOnAttach(
 /** Scrollback / pane vars hint a live agent when process-tree detect is ambiguous. */
 export function liveAgentUiVisible(snap: PaneSnapshot, profileCli: string): boolean {
   const tail = snap.captureTail;
-  if (profileCli === "opencode") {
+  if (profileCli === "opencode" || profileCli === "oc-proxy") {
     return (
       /ctrl\+p commands|Build auto\s+·|OpenCode\s+\d/i.test(tail) ||
       Boolean(snap.options.mesh_oc_session?.trim())
@@ -112,10 +113,17 @@ export function paneNeedsProfileCliFromSnap(
     if (liveAgentUiVisible(snap, profileCli)) return false;
     return true;
   }
-  const liveType = providerIdToHarnessType(prov.id);
-  if (liveType !== profileCli) return true;
+  const liveType = resolveOpenCodeHarnessType({
+    detectId: prov.id,
+    savedType: profileCli,
+    snap,
+  });
+  // oc-proxy wanted + live CPE / configured oc-proxy with OC UI → no repair.
+  if (liveHarnessSatisfiesWanted(liveType, profileCli, snap, { savedType: profileCli })) {
+    return false;
+  }
   if (liveType === "empty") return true;
-  return false;
+  return liveType !== profileCli;
 }
 
 export function shouldLaunchCoordPane(
@@ -143,16 +151,22 @@ function launchCoordRole(
   const profileCli = profileCliForRole(loaded, state, role);
   const saved = savedCoordEntry(state, role);
   const harnessType = profileCli === "cursor-agent" ? "agent" : profileCli;
+  const keepResume =
+    Boolean(saved) &&
+    (saved!.type === harnessType ||
+      (harnessType === "oc-proxy" &&
+        (saved!.type === "opencode" || Boolean(saved!.resume_cmd?.includes("opencode-cpe")))));
   const entry = {
     type: harnessType,
-    resume_id: saved?.type === harnessType ? (saved.resume_id ?? null) : null,
-    resume_cmd: saved?.type === harnessType ? (saved.resume_cmd ?? null) : null,
+    resume_id: keepResume ? (saved?.resume_id ?? null) : null,
+    resume_cmd: keepResume ? (saved?.resume_cmd ?? null) : null,
   };
   const cmd =
     resolveLaunchCmd(
       { ...saved, ...entry, role, name: role },
       loaded.workspace,
-    ) ?? buildAgentLaunchCmd(harnessType, loaded.workspace, entry.resume_id);
+      loaded,
+    ) ?? buildProfileLaunchCmd(harnessType, loaded, entry.resume_id);
   return tryLaunchPane(loaded, paneId, role, cmd, false, harnessType);
 }
 
