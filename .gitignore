@@ -21,6 +21,12 @@ coverage/
 .DS_Store
 *.log
 
+# Local Cursor / agent workspace (not product source)
+.agent/
+.agents/
+.cursor/
+.mcp.json
+
 # Local scripts / infra (not part of the distributed package)
 scripts/
 docker-compose.*.yml

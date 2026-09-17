@@ -1,11 +1,11 @@
-# Sync opencode-cpe from main — DISABLED
+# Sync oc-proxy from main — DISABLED
 #
-# agent-kinds-json migration: CPE is an open kind that extends opencode on main.
-# Do not keep feeding origin/opencode-cpe. Delete the remote branch when ready:
-#   git push origin --delete opencode-cpe
+# agent-kinds-json migration: CPE lives on main as kind opencode-cpe (extends opencode).
+# Do not keep feeding origin/oc-proxy. Delete the remote branch when ready:
+#   git push origin --delete oc-proxy
 #
 # Re-enable only if you intentionally resurrect that branch.
-name: Sync opencode-cpe from main
+name: Sync oc-proxy from main
 
 on:
   workflow_dispatch:
@@ -29,9 +29,9 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Merge main into opencode-cpe
+      - name: Merge main into oc-proxy
         env:
-          BRANCH: opencode-cpe
+          BRANCH: oc-proxy
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -46,7 +46,7 @@ jobs:
 
           git checkout -B "$BRANCH" "origin/$BRANCH"
           if git merge-base --is-ancestor origin/main HEAD; then
-            echo "opencode-cpe already contains origin/main — nothing to do"
+            echo "oc-proxy already contains origin/main — nothing to do"
             exit 0
           fi
 

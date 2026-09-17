@@ -113,7 +113,8 @@ prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `o
 - [ ] **6.2** `sm kind list|show [id]` — dump resolved kinds (provider ⊎ overlay ⊎ runners) for custom-profile DX
 - [ ] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list)
 - [ ] **6.4** Prune dual-path: retire `isOpenCodeCpeResumeCmd` / `buildCustomKindLaunchCmd` opencode-cpe special-case once prove-only path is sole
-- [ ] **6.5** Rename `opencode-cpe-live.ts` / `opencode-cpe-atomics*` → CPE/kinds names; delete `origin/opencode-cpe` + `tools/shadow-opencode-cpe.sh` when main has kinds
+- [x] **6.5a** Canonical CPE kind **`opencode-cpe`**; `oc-proxy` only as normalize/aliases + thin `scripts/oc-proxy-*.sh` shims
+- [ ] **6.5b** Delete `origin/oc-proxy` + retire `tools/shadow-oc-proxy.sh` / sync workflow when meshes migrated
 - [ ] **6.6** E2E: custom `agents.kinds.my-oc: { extends: opencode, … }` through `switch` + save prove
 - [ ] **6.7** Example mesh doc: add Kimi (launch-only yaml vs full provider) — no fork
 

@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Shadow opencode-cpe-only sources onto the current working tree as UNTRACKED files.
-# Not committed on main, not listed in .gitignore — they show as ?? and keep tsc/report alive.
+# DEPRECATED — CPE sources landed on main as opencode-cpe-*.
+# Kept only to clear leftover shadows / local hook until origin/oc-proxy is deleted.
 #
 # Usage:
-#   tools/shadow-opencode-cpe.sh apply    # materialize from origin/opencode-cpe (default)
-#   tools/shadow-opencode-cpe.sh clear    # remove shadows (needed before: git checkout opencode-cpe)
-#   tools/shadow-opencode-cpe.sh status   # which shadows are present / dirty
-#   tools/shadow-opencode-cpe.sh install  # local post-checkout hook → apply on main
+#   tools/shadow-oc-proxy.sh clear    # remove shadows (needed before: git checkout oc-proxy)
+#   tools/shadow-oc-proxy.sh status   # which shadows are present / dirty
+#   tools/shadow-oc-proxy.sh apply    # no-op note (files already on main)
+#   tools/shadow-oc-proxy.sh install  # local post-checkout hook → clear on main
 #
-# Tip: before switching to opencode-cpe:  tools/shadow-opencode-cpe.sh clear && git checkout opencode-cpe
+# Tip: before switching to oc-proxy:  tools/shadow-oc-proxy.sh clear && git checkout oc-proxy
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-REF="${OC_PROXY_REF:-origin/opencode-cpe}"
-ACTION="${1:-apply}"
+REF="${OC_PROXY_REF:-origin/oc-proxy}"
+ACTION="${1:-status}"
 
-# Added-on-opencode-cpe paths only (skip files already tracked on main, e.g. oc-resume-broadcast.ts).
+# Historical shadow paths (now tracked on main under opencode-cpe names).
 SHADOW_PATHS=(
   packages/daemon/src/connectivity/oc-limit-v2.ts
   packages/daemon/src/connectivity/opencode-cpe-atomics.ts
@@ -39,8 +39,8 @@ SHADOW_PATHS=(
 die() { echo "FAIL: $*" >&2; exit 1; }
 
 ensure_ref() {
-  git rev-parse --verify "$REF" >/dev/null 2>&1 || git fetch origin opencode-cpe 2>/dev/null || true
-  git rev-parse --verify "$REF" >/dev/null 2>&1 || die "missing $REF — run: git fetch origin opencode-cpe"
+  git rev-parse --verify "$REF" >/dev/null 2>&1 || git fetch origin oc-proxy 2>/dev/null || true
+  git rev-parse --verify "$REF" >/dev/null 2>&1 || die "missing $REF — run: git fetch origin oc-proxy"
 }
 
 is_tracked_here() {
@@ -48,56 +48,32 @@ is_tracked_here() {
 }
 
 apply_shadows() {
-  ensure_ref
-  local p n=0 skip=0
-  for p in "${SHADOW_PATHS[@]}"; do
-    if is_tracked_here "$p"; then
-      echo "skip tracked $p"
-      skip=$((skip + 1))
-      continue
-    fi
-    mkdir -p "$(dirname "$p")"
-    git show "$REF:$p" >"$p"
-    # scripts/ is repo-gitignored; chmod still useful
-    [[ "$p" == *.sh ]] && chmod +x "$p" || true
-    echo "shadow $p"
-    n=$((n + 1))
-  done
-  echo "OK: shadowed $n file(s) from $REF (skipped tracked=$skip)"
-  echo "note: untracked on this branch — do not git add (or use opencode-cpe branch)"
+  echo "note: CPE sources are on main (opencode-cpe-*). apply is a no-op."
+  echo "      Use clear if you still have leftover untracked shadows."
+  status_shadows
 }
 
 clear_shadows() {
-  local p n=0
+  local p
   for p in "${SHADOW_PATHS[@]}"; do
-    if is_tracked_here "$p"; then
-      continue
-    fi
-    if [[ -e "$p" || -L "$p" ]]; then
+    if [[ -e "$p" ]] && ! is_tracked_here "$p"; then
       rm -f "$p"
-      echo "clear $p"
-      n=$((n + 1))
+      echo "cleared $p"
     fi
   done
-  echo "OK: cleared $n shadow file(s)"
 }
 
 status_shadows() {
-  ensure_ref
-  local p
+  local p present=0
   for p in "${SHADOW_PATHS[@]}"; do
-    if is_tracked_here "$p"; then
-      printf 'tracked  %s\n' "$p"
-    elif [[ -f "$p" ]]; then
-      if git show "$REF:$p" 2>/dev/null | cmp -s - "$p"; then
-        printf 'shadow   %s (= %s)\n' "$p" "$REF"
-      else
-        printf 'shadow*  %s (differs from %s)\n' "$p" "$REF"
-      fi
-    else
-      printf 'missing  %s\n' "$p"
+    if [[ -e "$p" ]] && ! is_tracked_here "$p"; then
+      echo "shadow ?? $p"
+      present=1
+    elif is_tracked_here "$p"; then
+      echo "tracked  $p"
     fi
   done
+  [[ "$present" -eq 0 ]] && echo "no leftover shadows"
 }
 
 install_hook() {
@@ -105,34 +81,23 @@ install_hook() {
   mkdir -p "$(dirname "$hook")"
   cat >"$hook" <<'HOOK'
 #!/usr/bin/env bash
-# Auto-shadow opencode-cpe sources when landing on main (local hook — not committed).
-prev=$1
-new=$2
-flag=$3
-[[ "$flag" == "1" ]] || exit 0
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-[[ -n "$root" && -x "$root/tools/shadow-opencode-cpe.sh" ]] || exit 0
-case "$branch" in
-  main|master)
-    "$root/tools/shadow-opencode-cpe.sh" apply || true
-    ;;
-esac
+# Auto-clear oc-proxy shadows when landing on main (local hook — not committed).
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[[ -n "$root" && -x "$root/tools/shadow-oc-proxy.sh" ]] || exit 0
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ "$branch" == "main" || "$branch" == "master" ]]; then
+  "$root/tools/shadow-oc-proxy.sh" clear || true
+fi
 HOOK
   chmod +x "$hook"
-  echo "OK: installed $hook (applies shadows after checkout → main)"
-  echo "before checkout opencode-cpe: tools/shadow-opencode-cpe.sh clear"
+  echo "installed $hook"
+  echo "before checkout oc-proxy: tools/shadow-oc-proxy.sh clear"
 }
 
 case "$ACTION" in
-  apply | on) apply_shadows ;;
-  clear | off | rm) clear_shadows ;;
-  status | ls) status_shadows ;;
+  apply) apply_shadows ;;
+  clear) clear_shadows ;;
+  status) status_shadows ;;
   install) install_hook ;;
-  -h | --help | help)
-    sed -n '2,16p' "$0"
-    ;;
-  *)
-    die "unknown action '$ACTION' (apply|clear|status|install)"
-    ;;
+  *) die "usage: $0 apply|clear|status|install" ;;
 esac
