@@ -147,6 +147,7 @@ import { buildLimitCommands } from "./commands/limit-cli.js";
 import { buildRolesCommands } from "./commands/roles-cli.js";
 import { buildNotifyCommand } from "./commands/notify-cli.js";
 import { buildPreviewCommand } from "./commands/preview-cli.js";
+import { runMdsCommand } from "./commands/mds-cli.js";
 import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
 import { buildRoomCommands } from "./commands/room-cli.js";
 import { runInit } from "./setup/init.js";
@@ -227,8 +228,9 @@ function usage(loaded?: ReturnType<typeof loadProfile>): void {
   console.log(`seatmesh${prof ? ` (${prof})` : ""} — profile-driven tmux multi-agent CLI
 
   Docs: README.md + docs/ONE-PATH.md + docs/QUICKSTART.md
-  Cold start: bin/seatmesh auto-runs npm install + build when dist is stale
-  Default operator help (human-only): seatmesh help   ·  this list: seatmesh --agents help
+  Cold start: bin/sm (or bin/seatmesh) auto-runs npm install + build when dist is stale
+  Default operator help (human-only): sm help   ·  this list: sm --agents help
+  Prefer alias \`sm\` (\`sm install\` → ~/.local/bin). \`./sm.sh\` is retired.
 
 Setup (run once per project, by a human)
   start               ONE command: init if needed + create-or-attach session (fresh or existing)
@@ -240,7 +242,7 @@ Setup (run once per project, by a human)
   update [--dry-run] [--migrate] [--no-restart-inbox]
                                         1) npm i -g seatmesh@latest  2) refresh .sm/_vendor
   config check | config upgrade         validate yaml · how to bump CLI (npm i -g)
-  web status|open|url | open-web        operator hub :3190 (parity with packages/web)
+  web up|down|restart|status|open|url   operator hub :3190 (npx seatmesh web up)
   roles status|migrate [--to VER]|steps   locked role-pack up/down (1.1.x)
   version [--json] [--check-registry]   CLI vs npm latest vs profile .seatmesh-version
 
@@ -2458,6 +2460,11 @@ async function main(): Promise<void> {
       throw e;
     }
     return;
+  }
+
+  if (cmd === "mds") {
+    const loaded = meshLoaded(profileArg);
+    process.exit(await runMdsCommand(loaded, rest.slice(1)));
   }
 
   if (cmd === "preview") {

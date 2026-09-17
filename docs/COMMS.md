@@ -114,10 +114,12 @@ lines — only the anchor row (`Yes · No`).
 
 | Step | What |
 |------|------|
-| Register | `POST http://127.0.0.1:<port>/act/register` (TTL default 3600s) |
-| Click | `GET /act/v1/<token>` → HTML result page; token is one-shot |
+| Register | `POST http://127.0.0.1:<daemonPort>/act/register` (TTL default 3600s) — **API stays on daemon** |
+| Info card | Browser → hub `http://127.0.0.1:3190/act/card/<id>?port=<daemonPort>` (daemon HTML `/act/card` 302s here) |
+| Card JSON | `GET http://127.0.0.1:<daemonPort>/act/card/<id>?format=json` (hub fetches this) |
+| Click Yes/No | `GET /act/v1/<token>` on daemon (or hub `/act/v1/<token>?port=` proxy) — one-shot |
 | Side effect | Usually `peer` → enqueue inject to a seat (default **`secretary`**) |
-| Browser UI | `GET /ui` · `GET /ui/demo-yesno` (same URLs as toast; button styling) |
+| Browser UI | Hub `:3190` · daemon `GET /ui` still serves static Targets (legacy) |
 
 **Delivery:** `@seat-mesh/tmux` `sendDesktopToastSync` / `node-notifier` only for library
 toasts (no workspace `notify.sh`). Inbox/CPE recovery toasts stay plain text via
@@ -134,7 +136,9 @@ seatmesh agent notify yesno "Ship CTA?" "Preview http://localhost:5080/"
 
 **Library:** `sendYesNoToast(loaded, title, body, { target?, yesMsg?, noMsg? })` —
 default target = whoami seat, else `manager`. Clicks peer `[operator-decide] YES|NO — title`.
-Opens Info card (`/act/card/…`) in the browser. Toast body uses plain URLs (notify-send safe).
+Opens Info card on the **operator hub** (`http://127.0.0.1:3190/act/card/…?port=<daemon>`).
+Daemon-port `/act/card` URLs 302 to the hub. Toast body uses plain URLs (notify-send safe).
+Yes/No action tokens remain daemon `/act/v1/<token>` (API).
 
 **Action types** (`packages/core/src/chatroom/notify-act.ts`): `peer`, `inbox-resolve`,
 `checkback-ack`, `ping`. Registry + execute: `packages/daemon/src/notify-act.ts` on the

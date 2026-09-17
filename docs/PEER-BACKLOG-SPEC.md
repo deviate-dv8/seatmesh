@@ -17,16 +17,16 @@ Read `tasks/agent-seats/slot-N/PRIORITY.md` (or handout hub doc). Order is alway
 | **3** | **Backlog queue** | Parked prompts/reminds/room when rank-1 was busy. FIFO per pane on idle. |
 | **4** | **FYI / room chatter** | Never preempt rank-1. |
 
-Outbound **`./sm.sh to-master ACK|DONE|BLOCKED|PROVED`** is always allowed — that is how the seat reports, not a new task.
+Outbound **`sm to-master ACK|DONE|BLOCKED|PROVED`** is always allowed — that is how the seat reports, not a new task.
 
 ## Two lanes (do not conflate)
 
 | Lane | Transport | Busy-seat behavior |
 |------|-----------|-------------------|
-| **Outbound status** | Worker `./sm.sh to-master …` | Always allowed. Does not change rank-1. |
+| **Outbound status** | Worker `sm to-master …` | Always allowed. Does not change rank-1. |
 | **Inbound coordination** | `PEER.jsonl` (prompt/remind/to-slot/room) or manager `INBOX.jsonl` | See below |
 
-Agents **can still receive** inbound ACK/status class mail. Receiving ≠ new priority. **Shell ACK only** (`./sm.sh to-master ACK: …`); do not abandon the hub in chat.
+Agents **can still receive** inbound ACK/status class mail. Receiving ≠ new priority. **Shell ACK only** (`sm to-master ACK: …`); do not abandon the hub in chat.
 
 ## Inbound: deliver vs backlog
 
@@ -57,9 +57,9 @@ Normal FIFO from backlog + live queue (prompt before room).
 ## Agent POV (required)
 
 1. **Hub first.** Border `BUSY` + FOCUS hub = rank-1 until DONE/BLOCKED.
-2. **ACK mail is not a new task.** If a line appears while generating: run `./sm.sh to-master ACK: …` if asked, then **continue the hub**.
+2. **ACK mail is not a new task.** If a line appears while generating: run `sm to-master ACK: …` if asked, then **continue the hub**.
 3. **Do not** read backlog prompts until hub DONE and composer idle (daemon promotes then).
-4. **Done signal:** `./sm.sh to-master DONE: <HUB> <evidence>` then Mark OPEN or next hub.
+4. **Done signal:** `sm to-master DONE: <HUB> <evidence>` then Mark OPEN or next hub.
 
 ## Daemon (seatmesh)
 
@@ -72,12 +72,12 @@ Normal FIFO from backlog + live queue (prompt before room).
 
 ```bash
 # Seat busy on hub
-./sm.sh status slot-4 BUSY
-./sm.sh prompt slot-4 "low priority ping"   # -> backlog, not inject
-./sm.sh prompt --manager slot-4 "ACK: ping"  # -> deliver (if ACK-class)
+sm status slot-4 BUSY
+sm prompt slot-4 "low priority ping"   # -> backlog, not inject
+sm prompt --manager slot-4 "ACK: ping"  # -> deliver (if ACK-class)
 
 # After DONE + idle
-./sm.sh status slot-4 OPEN
+sm status slot-4 OPEN
 # backlog promotes on next drain tick
 ```
 

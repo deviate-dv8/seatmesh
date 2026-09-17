@@ -13,8 +13,9 @@ enqueue-only comms so nothing stomps a live composer.
 bash scripts/global-install-seatmesh.sh          # seatmesh@latest from registry
 bash scripts/global-install-seatmesh.sh local    # git checkout packages/cli
 
-seatmesh --help
-seatmesh init
+sm install                 # symlink sm + seatmesh → ~/.local/bin
+sm --help
+sm init
 ```
 
 `better-sqlite3` is **optional** — install succeeds without a C++ toolchain; profiles
@@ -35,16 +36,18 @@ or stale, it runs `npm install` and `npm run build` in the package root, then ex
 the CLI. No manual build step required for normal use.
 
 ```bash
-npx seatmesh
-npx seatmesh init
-npx seatmesh session up
+sm install                 # prefer alias `sm` (seatmesh still works)
+sm init
+sm session up
 
 # Git checkout (development)
-./bin/seatmesh --help
+./bin/sm --help
 
-# Consumer wrapper (example: workspace-root sm.sh)
-./sm.sh session up
+# npx one-shot (no PATH install)
+npx seatmesh session up
 ```
+
+`./sm.sh` is **retired** — use `sm` (after `sm install`). The root wrapper still prints a deprecation and forwards for compatibility.
 
 Point the CLI at your project config with `--profile <dir>` (directory containing
 `.sm/mesh.config.yaml` or `mesh.config.yaml`) or rely on discovery walking up from

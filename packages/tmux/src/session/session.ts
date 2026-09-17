@@ -9,12 +9,12 @@ import { ensureMeshInbox, stopMeshInbox } from "../comms/inbox-bridge.js";
 import { launchSession } from "../agents/launch.js";
 import { ensureMeshSessionEnv, installSessionSaveHooks, spawnDetachedSessionSync } from "./session-env.js";
 import { ensureLogsWindow } from "./logs-window.js";
+import { pasteWelcomeScript } from "./welcome-paste.js";
 import { saveMeshSession } from "./save-session.js";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import { inboxHealth, meshInboxPort, meshInboxStatusLine } from "../comms/inbox-bridge.js";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
 import { meshManagerPane } from "../lib/pane-meta.js";
-import { withPaneInputEnabled } from "../inject/inject.js";
 import { assertRelayoutSafe } from "./layout-guard.js";
 import {
   applyMinisLeadsFromProfile,
@@ -44,10 +44,6 @@ function tmuxBatch(args: string[][]): void {
   }
 }
 
-function sleepMs(ms: number): void {
-  spawnSync("sleep", [String(ms / 1000)]);
-}
-
 /**
  * Fresh manager = plain terminal with whoami/switch hints (early-adopter onboarding).
  * Does not launch an agent CLI — operator switches when ready.
@@ -62,25 +58,12 @@ export function paintManagerWelcome(loaded: LoadedProfile, session: string): voi
       .map((s) => s.trim())
       .find((s) => s.startsWith("%"));
   if (!pane) return;
-  const script = managerPaneWelcomeShell();
-  withPaneInputEnabled(pane, () => {
-    tmux(["send-keys", "-t", pane, "C-c"]);
-    sleepMs(80);
-    tmux(["send-keys", "-t", pane, "clear", "Enter"]);
-    sleepMs(120);
-    // One paste of the echo block (bash -c so newlines survive).
-    const b64 = Buffer.from(script, "utf8").toString("base64");
-    tmux([
-      "send-keys",
-      "-t",
-      pane,
-      "-l",
-      `echo ${JSON.stringify(b64)} | base64 -d | bash`,
-    ]);
-    sleepMs(60);
-    tmux(["send-keys", "-t", pane, "Enter"]);
+  // File-based paste — never raw base64|bash (zsh/tmux truncate → garbled echo on manager).
+  pasteWelcomeScript(loaded, pane, managerPaneWelcomeShell(), {
+    tag: "manager",
+    welcomeOpt: "mesh_manager_welcome",
+    status: "terminal · run whoami / switch here",
   });
-  tmux(["set-option", "-p", "-t", pane, "@mesh_status", "terminal · run whoami / switch here"]);
 }
 
 /** Create seatmesh session: base always; nvim/workers/minis optional on cold start. */

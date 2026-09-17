@@ -44,6 +44,7 @@ export interface ApiDefinition {
   }
   mds: {
     index: typeof routes['mds.index']
+    show: typeof routes['mds.show']
   }
   tools: {
     index: typeof routes['tools.index']

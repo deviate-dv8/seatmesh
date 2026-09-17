@@ -74,6 +74,7 @@ const SHARED_AGENT_VERBS = new Set([
   "meshes",
   "notify",
   "preview",
+  "mds",
   // Universal shorthands + peer (all agents)
   "peer",
   "ask",

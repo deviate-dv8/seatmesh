@@ -83,7 +83,7 @@ roles:
 3. **Duplicate config** — same content copied in `profiles/consumer/` and workspace `.sm/` (drift risk).
 4. **Default profile pick** — `defaultProfilePath()` prefers bundled consumer when `.sm` missing; couples engine default to one consumer.
 
-**Current consumer checkout:** `./sm.sh` uses `.sm/mesh.config.yaml` when present (see root `sm.sh`) — good. The bundled copy is fallback / historical.
+**Current consumer checkout:** `sm` uses `.sm/mesh.config.yaml` when present (walk-up / `--profile .sm`) — good. The bundled copy is fallback / historical.
 
 ---
 

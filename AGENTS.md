@@ -37,7 +37,7 @@ sm agent notify yesno "<title>" "<blurb>" --body "## Stakes…" \
 | **title** | Decision name (toast + card heading) |
 | **blurb** | Short toast line (not the full markdown) |
 | **--body / --md** | Info card content (markdown) |
-| **Info** | Opens browser `/act/card/…` |
+| **Info** | Opens hub `/act/card/…` (`:3190`) |
 | **Yes / No** | One-shot peer to `--target` |
 
 Full table + rules: `.sm/AGENTS.md`.

@@ -34,6 +34,18 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     onRise: "connectivity.proxy-down",
   },
   {
+    id: "oc-credit",
+    for: ["opencode"],
+    priority: 88,
+    when: {
+      scan: { tailLines: 28 },
+      match:
+        "insufficient_user_quota|out of credits|needs\\s*\\$[\\d.]+|orcarouter\\.ai/console/billing|err_credit_gate|Add credits to keep going",
+    },
+    set: { phase: "limit", kind: "oc-credit", border: "OC-CREDIT:oc-credit" },
+    onRise: "none",
+  },
+  {
     id: "oc-limit",
     for: ["opencode"],
     priority: 85,

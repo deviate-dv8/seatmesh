@@ -12,7 +12,7 @@
 
 **Harness reference:** `legacy harness.sh` → `usage()` (~lines 51–187).
 
-**Rules:** `./sm.sh` ≠ harness plugin. Code in `seatmesh/packages/*` only. Do **not** write `tmux-main-agents.json` from sm (read-only seed until `mesh-agents.json` exists).
+**Rules:** `sm` ≠ harness plugin. Code in `seatmesh/packages/*` only. Do **not** write `tmux-main-agents.json` from sm (read-only seed until `mesh-agents.json` exists).
 
 **Status:** `[x]` done · `[~]` partial · `[ ]` not started · `[-]` defer
 
@@ -21,18 +21,18 @@
 ## P0 — broken / unusable
 
 - [x] **0.1** `list-panes -s` bug — labeled whole session as minis → `window-panes.ts`
-- [x] **0.2** 3×2 workers + 4×2 minis layout → equal `select-layout` grid (`layoutWorkers3x2` / `layoutMinis4x2`; `./sm.sh layout` fixes live session)
+- [x] **0.2** 3×2 workers + 4×2 minis layout → equal `select-layout` grid (`layoutWorkers3x2` / `layoutMinis4x2`; `sm layout` fixes live session)
 - [x] **0.3** `@mesh_*` labels + border strip → `labels.ts`, `borders.ts`
 - [x] **0.4** Launch CLIs on session up → `launch.ts` + `agent-builder.ts` (reads harness JSON read-only)
 - [x] **0.4b** Pane env before CLI → `session-env.ts` (NO_COLOR scrub); OC plain launch (CPE scripts optional/config-only)
-- [x] **0.5** `./sm.sh verify`
-- [x] **0.6** `./sm.sh labels`
+- [x] **0.5** `sm verify`
+- [x] **0.6** `sm labels`
 
 ---
 
 ## P1 — daily harness feel
 
-- [x] **1.1** `whoami` — role YAML POV map + `./sm.sh whoami --validate` + init templates
+- [x] **1.1** `whoami` — role YAML POV map + `sm whoami --validate` + init templates
 - [x] **1.2** `manager`
 - [x] **1.3** `prompt` / `prompt --manager` — enqueue PEER.jsonl; daemon inject (handoff/mini spawn still direct)
 - [x] **1.4** `flush` — `flush.ts` (Enter rescue / Esc stuck draft)
@@ -52,7 +52,7 @@
 
 - [~] **2.1** mesh inbox daemon (`mesh-inbox-server.ts` **:3100** — `JsonlStore` + `mesh-orchestrator` + `border-paint`; BullMQ when Redis reachable, poll fallback). Health wedge fixed (2.1e); list/resolve CLI parity still open (see **5.2**)
 - [x] **2.2** `to-master` — enqueue + daemon inject (`deliverToPane`, `INBOX.jsonl` drain)
-- [~] **2.3** peer comms — `./sm.sh to-slot` / `to-mini` enqueue `PEER.jsonl`; room/chat ledger separate
+- [~] **2.3** peer comms — `sm to-slot` / `to-mini` enqueue `PEER.jsonl`; room/chat ledger separate
 - [x] **2.4** `checkback` — `start|list|cancel|reset|ack` (`patience` alias) + auto-start on down via `ensureMeshInbox`
 - [ ] **2.5** `schedule`
 - [ ] **2.6** `dc-feedback`
@@ -65,7 +65,7 @@
 
 - [ ] **3.1** `secretary start|stop|…`
 - [~] **3.2** `mini list|spawn|prompt|done|dispatch-all` + `secretary dispatch` (`minis.ts`)
-- [x] **3.3** minis grid + leads from profile (`layout.minis.grid` / `max` / `leads`, `./sm.sh layout`)
+- [x] **3.3** minis grid + leads from profile (`layout.minis.grid` / `max` / `leads`, `sm layout`)
 - [-] **3.4** `triage` / `board-sync` — optional thin wrapper
 - [x] **3.5** `contexts` / `seats` — `contexts.ts` (FOCUS preview + open TASK/REMINDER counts, `--json`)
 - [ ] **3.6** `nav log|summary`
@@ -107,7 +107,7 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 ## Prove bar (every closed row)
 
 ```bash
-./sm.sh verify
-./sm.sh providers scan
+sm verify
+sm providers scan
 # operator: attach mesh in Ghostty — eyeball borders + CLIs
 ```

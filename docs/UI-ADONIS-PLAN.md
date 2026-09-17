@@ -183,7 +183,7 @@ First viewport = **one composition**: seatmesh wordmark, one line (“operator c
 ## 7. CLI entry (planned)
 
 ```bash
-seatmesh web              # start hub :3190 (or attach if up)
+seatmesh web up           # start hub :3190 (detached; or web down|restart|status)
 seatmesh web --port 3190
 # agents stay on `seatmesh agent …`; hub is operator/shared (like session/report)
 ```
@@ -249,7 +249,7 @@ Workspace wire-up in root `package.json` `workspaces` + build order (web optiona
 2. Wire `SessionRegistry` + `DaemonProbe` (Phase 1)
 3. Do **not** bump version to 1.2.x
 
-**Dev:** `cd packages/web && npm run dev` → http://127.0.0.1:3190 · or `npm run web` from repo root.
+**Dev:** `npx seatmesh web up` → http://127.0.0.1:3190 · or `npm run web` from repo root (foreground).
 
 ---
 

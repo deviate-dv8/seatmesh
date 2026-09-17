@@ -8,7 +8,7 @@ reads and writes this file; it does not mutate unrelated harness state files.
 | **Default path** | `state.meshAgentsJson` in profile (default `mesh-agents.json` under workspace) |
 | **Schema** | `packages/core/src/schema/agents.ts` (`MeshAgentsSchema`) |
 | **Load** | `packages/tmux/src/agents/agents-state.ts` |
-| **Save** | `./sm.sh save` / `auto` scrapes live session |
+| **Save** | `sm save` / `auto` scrapes live session |
 
 ## Slot mapping
 

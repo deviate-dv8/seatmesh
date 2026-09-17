@@ -295,6 +295,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/mds_controller').default['index']>>>
     }
   }
+  'mds.show': {
+    methods: ["GET","HEAD"]
+    pattern: '/mds/:sessionId/*'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue, ParamValue]
+      params: { sessionId: ParamValue; '*': ParamValue[] }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/mds_controller').default['show']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/mds_controller').default['show']>>>
+    }
+  }
   'tools.index': {
     methods: ["GET","HEAD"]
     pattern: '/tools'

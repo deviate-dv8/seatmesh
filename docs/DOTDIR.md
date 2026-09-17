@@ -73,7 +73,7 @@ npx seatmesh agent context
 npx seatmesh session attach
 ```
 
-Workspace `./sm.sh` (when present) wraps `npx seatmesh --profile .sm`.
+Prefer the `sm` alias (`sm install` → `~/.local/bin/sm`). Config discovery walks up for `.sm/`; optional `--profile .sm`. Root `./sm.sh` is retired (deprecation stub only).
 
 ---
 

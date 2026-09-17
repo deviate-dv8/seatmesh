@@ -12,7 +12,7 @@ notify link|url|open "<title>" --url <https> [--check "…"]
     link-only   notify link "Staging" --url http://127.0.0.1:5080
                 → toast Open button → URL (no Info card). Same: notify "…" "…" --url
     Info only   notify info "Brief" --body "## Why\n\n…" [--url https://mdview.io/s/…]
-                → local /act/card. [--url] = Open button on card.
+                → hub /act/card (:3190). [--url] = Open button on card.
                   Bare https:// in body also autolinks. [label](url) works.
                 Mermaid → local Info card renders ```mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
     Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\n…" [--url https://…]

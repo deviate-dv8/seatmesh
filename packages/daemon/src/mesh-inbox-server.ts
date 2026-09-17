@@ -14,6 +14,7 @@ import {
   resolveAutoScrapeIntervalMs,
   resolveDaemonPort,
   resolveUxConfig,
+  hubActCardUrl,
 } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
@@ -52,11 +53,13 @@ import {
   type ResumeWaveMeta,
 } from "./connectivity/oc-resume.js";
 import { relaunchOcProxyAfterReset } from "./connectivity/oc-relaunch.js";
+import { continueOcProxySeats } from "./connectivity/oc-proxy-atomics.js";
 import { broadcastOcResumeToRemotes, syncCarrierIpProbe } from "./connectivity/oc-resume-broadcast.js";
 import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
 import {
   forceOcLimitV2SuccessForTest,
   requestOcLimitV2Reboot,
+  resumeOcLimitV2AfterDaemonRestart,
   startOcLimitV2Episode,
 } from "./connectivity/oc-limit-v2.js";
 import {
@@ -114,6 +117,11 @@ function json(res: http.ServerResponse, code: number, body: unknown): void {
 function html(res: http.ServerResponse, code: number, body: string): void {
   res.writeHead(code, { "Content-Type": "text/html; charset=utf-8" });
   res.end(body);
+}
+
+function redirect(res: http.ServerResponse, location: string, code = 302): void {
+  res.writeHead(code, { Location: location, "Cache-Control": "no-store" });
+  res.end();
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
@@ -430,13 +438,30 @@ async function main(): Promise<void> {
           log(`WARN: CURSOR-LIMIT auto-fallback failed pane=${paneId}`);
         }
       },
+      onOcCreditRise: (paneId) => {
+        // Atomic 4 only — intermittent OrcaRouter credit gate; no CPE reboot / kill-revive.
+        try {
+          const { continued, missed } = continueOcProxySeats(registry, [paneId], log);
+          log(
+            `OC-CREDIT atomic4 CONTINUE pane=${paneId} continued=${continued} missed=${missed.length}`,
+          );
+        } catch (e) {
+          log(`OC-CREDIT atomic4 CONTINUE fail pane=${paneId}: ${(e as Error).message}`);
+        }
+        try {
+          const line = `${new Date().toISOString()}\t${session}\t${paneId}\toc-credit\tatomic4-continue\n`;
+          fs.appendFileSync("/tmp/seatmesh-oc-credit.jsonl", line, "utf8");
+        } catch {
+          /* best-effort record */
+        }
+      },
     });
   }
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://127.0.0.1:${port}`);
     try {
-      // Plain Targets UI (static). Decide cards live at /act/card/:id (dynamic).
+      // Plain Targets UI (static). Decide cards: hub /act/card/:id (daemon JSON + redirect).
       if (req.method === "GET" && (url.pathname === "/ui" || url.pathname === "/ui/" || url.pathname.startsWith("/ui/"))) {
         // Live demo under static path — register fresh Yes/No then render blueish page.
         if (url.pathname === "/ui/demo-yesno" || url.pathname === "/ui/demo-yesno/") {
@@ -1022,8 +1047,9 @@ async function main(): Promise<void> {
           return json(res, 400, { ok: false, error: "actions or card required" });
         }
         const ttlSec = Number(body.ttlSec ?? 3600);
-        const baseUrl = `http://127.0.0.1:${port}`;
-        const links = actions.length ? actRegistry.register(actions, ttlSec, baseUrl) : [];
+        // API links stay on daemon; Info card UI is the operator hub (:3190).
+        const apiBaseUrl = `http://127.0.0.1:${port}`;
+        const links = actions.length ? actRegistry.register(actions, ttlSec, apiBaseUrl) : [];
         const openUrl = String(body.card?.openUrl ?? "").trim();
         if (openUrl && /^https?:\/\//i.test(openUrl)) {
           links.unshift({ label: "Open", url: openUrl, token: "" });
@@ -1038,23 +1064,77 @@ async function main(): Promise<void> {
               links,
             },
             ttlSec,
-            baseUrl,
+            { infoUrl: (id) => hubActCardUrl(id, port) },
           );
           infoUrl = card.infoUrl.trim();
         }
-        log(`NOTIFY-ACT register n=${links.length}${card ? ` card=${card.id}` : ""}`);
+        log(`NOTIFY-ACT register n=${links.length}${card ? ` card=${card.id} info=${infoUrl}` : ""}`);
         return json(res, 200, { ok: true, links, card, infoUrl });
       }
 
       const cardMatch = /^\/act\/card\/([^/]+)$/.exec(url.pathname);
-      if (req.method === "GET" && cardMatch) {
-        const card = actRegistry.getCard(cardMatch[1]!);
+      if ((req.method === "GET" || req.method === "HEAD") && cardMatch) {
+        const cardId = cardMatch[1]!;
+        const card = actRegistry.getCard(cardId);
+        const wantJson =
+          url.searchParams.get("format") === "json" ||
+          (req.headers.accept ?? "").includes("application/json");
+        const wantLocal = url.searchParams.get("local") === "1";
+        const isHead = req.method === "HEAD";
+
         if (!card) {
+          if (wantJson) {
+            if (isHead) {
+              res.writeHead(404, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+              res.end();
+              return;
+            }
+            return json(res, 404, { ok: false, error: "card expired or missing" });
+          }
+          // Browser: still send them to hub (hub shows expired UI).
+          if (!wantLocal) {
+            return redirect(res, hubActCardUrl(cardId, port));
+          }
+          if (isHead) {
+            res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+            res.end();
+            return;
+          }
           return html(
             res,
             404,
             htmlActPage("Card expired", "This decision card expired or was never registered.", false),
           );
+        }
+
+        // JSON API for hub / CLI — not deprecated.
+        if (wantJson) {
+          if (isHead) {
+            res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+            res.end();
+            return;
+          }
+          return json(res, 200, {
+            ok: true,
+            sessionId: session,
+            card: {
+              id: card.id,
+              title: card.title,
+              body: card.body,
+              links: card.links,
+              expiresAt: card.expiresAt,
+            },
+          });
+        }
+
+        // Browser HTML on daemon port is retired → operator hub.
+        if (!wantLocal) {
+          return redirect(res, hubActCardUrl(card.id, port));
+        }
+        if (isHead) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end();
+          return;
         }
         return html(res, 200, htmlDecideCardPage(card, port));
       }
@@ -1285,6 +1365,25 @@ async function main(): Promise<void> {
     console.log(
       `mesh-inbox: listening http://127.0.0.1:${port} session=${session} storage=${rt.storageBackend}`,
     );
+    // Survive SIGKILL/HMR mid OC-V2: reclaim orphan stamp or resume atomics/wait-ip.
+    try {
+      const proxyPort = loaded.profile.connectivity?.proxyPort ?? 18887;
+      resumeOcLimitV2AfterDaemonRestart({
+        loaded,
+        registry,
+        workspace,
+        session,
+        baseWindow,
+        workersWindow,
+        minisWindow,
+        proxyPort,
+        fromIp: syncCarrierIpProbe(workspace, proxyPort),
+        state: connectivity,
+        log,
+      });
+    } catch (e) {
+      log(`OC-V2 resume after restart failed: ${(e as Error).message}`);
+    }
     scheduleHealthSnapRefresh();
     // First scrape ASAP so resume ids land before a quick kill/reattach.
     setTimeout(scheduleAutoScrape, 2_000);

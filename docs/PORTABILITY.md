@@ -51,10 +51,10 @@ Rules:
 One CLI surface; profile picks the implementation.
 
 ```bash
-./sm.sh proxy status
-./sm.sh proxy check
-./sm.sh proxy reset
-./sm.sh proxy rotate
+sm proxy status
+sm proxy check
+sm proxy reset
+sm proxy rotate
 ```
 
 ### Profile shape

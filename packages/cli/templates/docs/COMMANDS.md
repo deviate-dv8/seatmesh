@@ -41,6 +41,7 @@ seatmesh peer --help
 - `meshes` → [`remote`](#remote) · [cli/remote.md](cli/remote.md)
 - `msg` → [`ask`](#ask) · [cli/ask.md](cli/ask.md)
 - `operator` → [`human`](#human) · [cli/human.md](cli/human.md)
+- `open-web` → [`web`](#web) · [cli/web.md](cli/web.md)
 - `panes` → [`human`](#human) · [cli/human.md](cli/human.md)
 - `patience` → [`cb`](#cb) · [cli/cb.md](cli/cb.md)
 - `put-agent` → [`human`](#human) · [cli/human.md](cli/human.md)
@@ -477,6 +478,25 @@ limit idle [--all|--pane %N]
 - Agent: `seatmesh agent help limit`
 - File: [cli/limit.md](cli/limit.md)
 
+## mds
+
+```text
+mds [hosted|agent-self|agent <kind>] …
+  Three markdown galleries (CLI ↔ hub /mds):
+    hosted [list] | host <file.md> [--as slug] | show|url <slug>
+      → .sm/mds/ live files; hub http://127.0.0.1:3190/mds
+    agent-self [list] | show <FOCUS.md|TASKS|_shared/…> [--seat col]
+      → this seat's FOCUS/TASKS/REMINDER + .sm/seats/_shared
+    agent <common|manager|secretary|worker|mini> [show]
+      → locked role POV under .sm/roles/_vendor/docs/
+  Bare mds / mds status = counts. mdview.io share stays: agent preview <file.md>
+  Map: docs/patterns/cli-web-parity.md · docs/cli/mds.md
+```
+
+- Run: `seatmesh mds --help`
+- Agent: `seatmesh agent help mds`
+- File: [cli/mds.md](cli/mds.md)
+
 ## migrate-runtime
 
 ```text
@@ -525,7 +545,7 @@ notify link|url|open "<title>" --url <https> [--check "…"]
     link-only   notify link "Staging" --url http://127.0.0.1:5080
                 → toast Open button → URL (no Info card). Same: notify "…" "…" --url
     Info only   notify info "Brief" --body "## Why\n\n…" [--url https://mdview.io/s/…]
-                → local /act/card. [--url] = Open button on card.
+                → hub /act/card (:3190). [--url] = Open button on card.
                   Bare https:// in body also autolinks. [label](url) works.
                 Mermaid → local Info card renders ```mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
     Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\n…" [--url https://…]
@@ -1059,6 +1079,34 @@ version [--json] [--check-registry]
 - Run: `seatmesh version --help`
 - Agent: `seatmesh agent help version`
 - File: [cli/version.md](cli/version.md)
+
+## web
+
+```text
+web status|up|down|restart|open|url|help
+  Operator hub (packages/web) on http://127.0.0.1:3190 — dashboard / sessions / queues / notify cards.
+  Subcommands:
+    status [--json]     hub up? + pid/log + daemon tips + routes + registry
+    up [--open]         start hub detached (npm run dev in packages/web)
+    down                stop hub (pidfile + :3190 listeners)
+    restart [--open]    down then up
+    open [path]         open hub in browser (alias: open-web)
+    url [path]          print hub URL only
+  npx / global:
+    npx seatmesh web up
+    npx seatmesh web status
+    npx seatmesh web down
+    npx seatmesh web restart --open
+  Needs a seatmesh checkout (@seat-mesh/web is private — not on npm).
+  Resolves packages/web via: cwd walk-up · SEATMESH_WEB_ROOT · SEATMESH_ROOT · CLI monorepo neighbor.
+  Env: SEATMESH_WEB_URL (hub base) · SEATMESH_WEB_ROOT · SEATMESH_ROOT
+  Pid/log: ~/.config/seatmesh/web-<port>.{pid,log}
+  Also: npm run web (repo root). Map: docs/patterns/cli-web-parity.md · docs/cli/web.md
+```
+
+- Run: `seatmesh web --help`
+- Agent: `seatmesh agent help web`
+- File: [cli/web.md](cli/web.md)
 
 ## whoami
 

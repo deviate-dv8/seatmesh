@@ -2,6 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-17** | `seatmesh@1.2.2` | `npx seatmesh web up\|down\|restart\|status`; `agent mds hosted\|agent-self\|agent <kind>`; hub `/mds` live; OC-V2 supervisor health rescue + oc-credit CONTINUE |
 | **2026-09-16** | `seatmesh@1.2.0` | oc-proxy CliType + runners; `sm pane resume`; OC-LIMIT `scripts/oc-reset.sh` + daemon relaunch; todo-check remaining TASKS DIGEST bulk; `sm web status\|open\|url`; `config upgrade` (npm i -g first); human help + patterns modular `docs/patterns/` |
 | **2026-09-15** | `seatmesh@1.1.5` | Notify Info/Yes/No native buttons; local Info cards GFM+Mermaid (zoom/pan/expand); session check/repair; CB workspace scope; policy config; agent help/COMMANDS |
 | **2026-09-15** | `seatmesh@1.1.4` | Early-adopter UX: `start` idempotent create-or-attach; `session down`; manager terminal welcome (whoami/switch); `sessions` documented |

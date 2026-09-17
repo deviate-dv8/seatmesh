@@ -1,6 +1,6 @@
 {
   "name": "seatmesh",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "engines": {
     "node": ">=22"
   },

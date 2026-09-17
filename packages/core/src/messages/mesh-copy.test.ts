@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatSuperviseStatusLine,
   isSuperviseStatusBroadcast,
+  logsPaneWelcomeShell,
   managerPaneWelcomeShell,
   meshInboxSuperviseStatus,
   MESH_INBOX_TAG,
@@ -68,10 +69,19 @@ describe("stripMeshOwnedLines", () => {
   });
 });
 
+describe("logsPaneWelcomeShell", () => {
+  it("prints operator hints for logs left pane", () => {
+    const sh = logsPaneWelcomeShell();
+    expect(sh).toContain("logs (operator shell)");
+    expect(sh).toContain("npx seatmesh help");
+    expect(sh).toContain("npx seatmesh sessions");
+  });
+});
+
 describe("managerPaneWelcomeShell", () => {
   it("prints whoami + switch + start/sessions/down for early adopters", () => {
     const sh = managerPaneWelcomeShell();
-    expect(sh).toContain("seatmesh agent whoami");
+    expect(sh).toMatch(/whoami/);
     expect(sh).toContain("switch here agent");
     expect(sh).toContain("switch here claude");
     expect(sh).toContain("switch here opencode");

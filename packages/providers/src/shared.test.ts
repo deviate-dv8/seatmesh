@@ -164,6 +164,22 @@ describe("agentInputDraft (cursor ghost-text / placeholders)", () => {
     });
   });
 
+  it("orcarouter insufficient_user_quota is oc-credit (not oc-limit / CPE reboot)", () => {
+    const tail =
+      "Error from provider (Console): Upstream request failed: [insufficient_user_quota] " +
+      "You're out of credits — this request needs $0.03. Add credits to keep going: " +
+      "https://www.orcarouter.ai/console/billing?ref=err_credit_gate#add-credits " +
+      "(request id: 202609170451137268947328268d9d6wefAJkAf)\n" +
+      "ctrl+p commands\n";
+    const pane = { captureTail: tail, currentCommand: "opencode" } as Parameters<
+      typeof composerFromCapture
+    >[0];
+    expect(composerFromCapture(pane, "opencode")).toEqual({
+      phase: "limit",
+      limitKind: "oc-credit",
+    });
+  });
+
   it("active generate + follow-up is busy", () => {
     const tail =
       " \u2192 Add a follow-up  ctrl+c to stop\n Working...\n";

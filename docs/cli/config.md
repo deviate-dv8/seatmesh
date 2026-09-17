@@ -1,13 +1,9 @@
 # seatmesh config
 
 ```text
-config check [--json]
-  Validate mesh.config.yaml (YAML + schema + workspace/remotes/paths).
-  Run after editing config — before inbox restart or session up.
-  Agent: seatmesh agent config check
-  Examples:
-    config check
-    config check --json
+config check [--json] | config upgrade
+  check: validate mesh.config.yaml + paths
+  upgrade: how to get latest seatmesh CLI (npm i -g seatmesh@latest) then update
 ```
 
 - CLI: `seatmesh config --help`

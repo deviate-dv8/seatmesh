@@ -9,13 +9,14 @@ type ExtractProps<T> = Omit<
 
 declare module '@adonisjs/inertia/types' {
   export interface InertiaPages {
-    'dashboard': ExtractProps<(typeof import('../../inertia/pages/dashboard.vue'))['default']>
     'act/card': ExtractProps<(typeof import('../../inertia/pages/act/card.vue'))['default']>
-    'errors/not_found': ExtractProps<(typeof import('../../inertia/pages/errors/not_found.vue'))['default']>
-    'errors/server_error': ExtractProps<(typeof import('../../inertia/pages/errors/server_error.vue'))['default']>
     'auth/login': ExtractProps<(typeof import('../../inertia/pages/auth/login.vue'))['default']>
     'auth/signup': ExtractProps<(typeof import('../../inertia/pages/auth/signup.vue'))['default']>
+    'dashboard': ExtractProps<(typeof import('../../inertia/pages/dashboard.vue'))['default']>
+    'errors/not_found': ExtractProps<(typeof import('../../inertia/pages/errors/not_found.vue'))['default']>
+    'errors/server_error': ExtractProps<(typeof import('../../inertia/pages/errors/server_error.vue'))['default']>
     'mds/index': ExtractProps<(typeof import('../../inertia/pages/mds/index.vue'))['default']>
+    'mds/show': ExtractProps<(typeof import('../../inertia/pages/mds/show.vue'))['default']>
     'notifications/index': ExtractProps<(typeof import('../../inertia/pages/notifications/index.vue'))['default']>
     'sessions/config': ExtractProps<(typeof import('../../inertia/pages/sessions/config.vue'))['default']>
     'sessions/index': ExtractProps<(typeof import('../../inertia/pages/sessions/index.vue'))['default']>

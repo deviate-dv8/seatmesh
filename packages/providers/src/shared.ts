@@ -338,6 +338,12 @@ const OC_LIMIT_RE =
   /rate\s*limit|usage\s*limit|quota\s*exceed|hit your.*limit|limit reached|too many requests|\b429\b|free[ -]?tier.*limit|plan limit|zen.*limit|session\s*(expired|limit|ended)|expired\s*session|provider\s*limit|free\s*usage\s*exceed|usage\s*exceeded|subscribe to go/i;
 const OC_CONNECT_RE =
   /cannot\s+connect\s+to\s+api|unable\s+to\s+connect|service\s+unavailable|connection\s+error|ECONNREFUSED|socket\s+connection\s+was\s+closed/i;
+/**
+ * OrcaRouter / OpenCode-as-router credit gate — intermittent upstream, not CPE rate-limit.
+ * Do NOT fold into oc-limit (that arms CPE reboot). Recovery = atomic 4 CONTINUE.
+ */
+const OC_CREDIT_RE =
+  /insufficient_user_quota|out of credits|needs\s*\$[\d.]+|orcarouter\.ai\/console\/billing|err_credit_gate|Add credits to keep going/i;
 const CC_LIMIT_RE =
   /rate limit|usage limit|try again|quota/i;
 /** kiro-cli monthly/quota wall — hold inject (queue) and continue other seats. */
@@ -390,6 +396,11 @@ export function composerFromCapture(
   if (providerId === "opencode") {
     const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-8);
     const bottom = bottomLines.join("\n");
+    const bottom28 = tail.split("\n").slice(-28).join("\n");
+    // Credit gate even if composer chrome still visible (intermittent router blip).
+    if (OC_CREDIT_RE.test(bottom) || OC_CREDIT_RE.test(bottom28)) {
+      return { phase: "limit", limitKind: "oc-credit" };
+    }
     const atComposer =
       /ctrl\+p commands/i.test(bottom) || OC_COMPOSER_RE.test(bottom);
     // Live composer wins over stale limit/connect lines left in scrollback after resume.
@@ -410,7 +421,6 @@ export function composerFromCapture(
     }
     // Prefer the live bottom band (same window as empty/busy) — bottom28 keeps stale connect errors forever.
     const bottom8 = bottom;
-    const bottom28 = tail.split("\n").slice(-28).join("\n");
     if (OC_CONNECT_RE.test(bottom8) && !OC_LIMIT_RE.test(bottom8)) {
       return { phase: "limit", limitKind: "oc-connect" };
     }

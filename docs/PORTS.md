@@ -9,18 +9,18 @@ Agent inbox daemons live in a **dedicated 316xx block** — outside consumer pro
 |---------|---------|------|--------|
 | consumer main FE/BE | `./dc.sh` | `3000` / `3001` | Product — not inbox |
 | Feature slot N FE/BE | `./dc.sh` | `30N0` / `30N1` | Product — not inbox |
-| **Seat-mesh inbox** | `./sm.sh` | **`:31670`** | `mesh-inbox-server.js` |
+| **Seat-mesh inbox** | `sm` | **`:31670`** | `mesh-inbox-server.js` |
 | **Legacy dev inbox** | `./legacy harness` | **`:31699`** | `scripts/inbox-server.mjs` |
 | CPE proxy (local) | scripts | `:18887` | Carrier curl — not inbox |
 
-**Rule:** mesh panes use **`./sm.sh`** + **`:31670`** only. **`dev`** panes use
+**Rule:** mesh panes use **`sm`** + **`:31670`** only. **`dev`** panes use
 **`./legacy harness`** + **`:31699`** only. Never mix ports across sessions.
 
 ## Verify live port
 
 ```bash
-./sm.sh inbox              # inbox: up :31670 session=mesh ...
-./sm.sh profile show       # daemon_port=31670
+sm inbox              # inbox: up :31670 session=mesh ...
+sm profile show       # daemon_port=31670
 curl -sS -m 3 http://127.0.0.1:31670/health | jq '{port, pid, engine}'
 ```
 
@@ -72,7 +72,7 @@ After a port change, clear deprecated listeners:
 # or: ./scripts/clear-inbox-ports.sh
 # Stop harness inbox too: CLEAR_HARNESS=1 ./scripts/clear-inbox-ports.sh
 ss -ltnp | grep -E '31670|31699'
-./sm.sh inbox restart
+sm inbox restart
 ```
 
 Deprecated ports (always safe to clear): **3099**, **3100**, **3167**.

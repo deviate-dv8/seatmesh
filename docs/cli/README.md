@@ -25,6 +25,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `chat` | [chat.md](chat.md) |
 | `cold-start` | [cold-start.md](cold-start.md) |
 | `completion` | [completion.md](completion.md) |
+| `config` | [config.md](config.md) |
 | `contexts` | [contexts.md](contexts.md) |
 | `continue` | [continue.md](continue.md) |
 | `contract` | [contract.md](contract.md) |
@@ -41,11 +42,13 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `launch` | [launch.md](launch.md) |
 | `layout` | [layout.md](layout.md) |
 | `limit` | [limit.md](limit.md) |
+| `mds` | [mds.md](mds.md) |
 | `migrate-runtime` | [migrate-runtime.md](migrate-runtime.md) |
 | `mini` | [mini.md](mini.md) |
 | `night` | [night.md](night.md) |
 | `notify` | [notify.md](notify.md) |
 | `ops` | [ops.md](ops.md) |
+| `pane` | [pane.md](pane.md) |
 | `pane-meta` | [pane-meta.md](pane-meta.md) |
 | `peek` | [peek.md](peek.md) |
 | `peer` | [peer.md](peer.md) |
@@ -87,5 +90,6 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `update` | [update.md](update.md) |
 | `verify` | [verify.md](verify.md) |
 | `version` | [version.md](version.md) |
+| `web` | [web.md](web.md) |
 | `whoami` | [whoami.md](whoami.md) |
 

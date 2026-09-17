@@ -86,7 +86,7 @@ See [PORTABILITY.md](PORTABILITY.md).
 
 ## State
 
-- **`mesh-agents.json`** — mesh-owned CLI type and resume id per slot; `./sm.sh save`
+- **`mesh-agents.json`** — mesh-owned CLI type and resume id per slot; `sm save`
   scrapes live session.
 - **Role index** — YAML under `roles.dir` for cold-start briefings and policy text.
 

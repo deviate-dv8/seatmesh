@@ -82,11 +82,14 @@ export function createNotifyActRegistry() {
   function registerCard(
     input: { title: string; body: string; links: NotifyActLink[] },
     ttlSec: number,
-    baseUrl: string,
+    /**
+     * Browser-facing card URL base (operator hub). Prefer hubActCardUrl via
+     * `infoUrl` override; string form is `${base}/act/card/${id}`.
+     */
+    cardBaseOrInfoUrl: string | { infoUrl: (id: string) => string },
   ): NotifyActCard {
     pruneExpired();
     const ttl = Math.min(Math.max(ttlSec, 60), 86_400);
-    const base = baseUrl.replace(/\/$/, "");
     const id = crypto.randomUUID();
     const expiresAt = Date.now() + ttl * 1000;
     const row: NotifyActCardRow = {
@@ -97,7 +100,10 @@ export function createNotifyActRegistry() {
       expiresAt,
     };
     cards.set(id, row);
-    const infoUrl = `${base}/act/card/${id}`;
+    const infoUrl =
+      typeof cardBaseOrInfoUrl === "string"
+        ? `${cardBaseOrInfoUrl.replace(/\/$/, "")}/act/card/${id}`
+        : cardBaseOrInfoUrl.infoUrl(id);
     return {
       id,
       title: row.title,

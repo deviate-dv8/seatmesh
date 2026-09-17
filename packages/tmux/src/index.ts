@@ -18,6 +18,7 @@ export * from "./roles/minis.js";
 export * from "./agents/agent-builder.js";
 export * from "./agents/agent-launch.js";
 export * from "./agents/launch.js";
+export * from "./agents/launch-verify.js";
 export * from "./agents/coord-cli-sync.js";
 export * from "./session/session-env.js";
 export * from "./session/session-chrome.js";

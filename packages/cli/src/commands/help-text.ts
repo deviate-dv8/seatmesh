@@ -160,7 +160,7 @@ const HELP: Record<string, string> = {
   Pick one shape:
     eyes-only   notify "Deploy?" "Check staging" --url http://…
     Info only   notify info "Brief" --body "## Why\\n\\n…" [--url https://mdview.io/s/…]
-                → local /act/card. [--url] = Open button (clickable).
+                → hub /act/card (:3190). [--url] = Open button (clickable).
                   Bare https:// in body also autolinks. [label](url) works.
                 Mermaid → local Info card renders \`\`\`mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
     Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\\n…" [--url https://…]
@@ -271,10 +271,25 @@ const HELP: Record<string, string> = {
   check: validate mesh.config.yaml + paths
   upgrade: how to get latest seatmesh CLI (npm i -g seatmesh@latest) then update`,
 
-  web: `web status [--json] | web open [path] | web url [path]
-  Operator hub (packages/web :3190) parity — status/daemons/restart tips + open browser.
-  Alias: open-web → web open. Env: SEATMESH_WEB_URL. Start hub: npm run web
-  Map: docs/patterns/cli-web-parity.md`,
+  web: `web status|up|down|restart|open|url|help
+  Operator hub (packages/web) on http://127.0.0.1:3190 — dashboard / sessions / queues / notify cards.
+  Subcommands:
+    status [--json]     hub up? + pid/log + daemon tips + routes + registry
+    up [--open]         start hub detached (npm run dev in packages/web)
+    down                stop hub (pidfile + :3190 listeners)
+    restart [--open]    down then up
+    open [path]         open hub in browser (alias: open-web)
+    url [path]          print hub URL only
+  npx / global:
+    npx seatmesh web up
+    npx seatmesh web status
+    npx seatmesh web down
+    npx seatmesh web restart --open
+  Needs a seatmesh checkout (@seat-mesh/web is private — not on npm).
+  Resolves packages/web via: cwd walk-up · SEATMESH_WEB_ROOT · SEATMESH_ROOT · CLI monorepo neighbor.
+  Env: SEATMESH_WEB_URL (hub base) · SEATMESH_WEB_ROOT · SEATMESH_ROOT
+  Pid/log: ~/.config/seatmesh/web-<port>.{pid,log}
+  Also: npm run web (repo root). Map: docs/patterns/cli-web-parity.md · docs/cli/web.md`,
 
   init: `init [--force] [--seats-root PATH] [--name NAME]
   Create project .sm/ (human). Prefer: start`,
@@ -347,11 +362,23 @@ const HELP: Record<string, string> = {
   preview: `preview <file.md...> [--set 1-30] [--notify]
   Publish markdown to mdview.io (https://mdview.io) — NOT a local binary.
   Renders MD + Mermaid in the browser; prints viewerUrl.
+  Local hub gallery: mds hosted host <file.md> → .sm/mds + /mds URL
   Examples:
     preview ./handout.md --set 7
     preview ./handout.md --set 7 --notify
   Also: notify info|md "<title>" --md <file>  (same publish, toast+card)
   Docs: https://mdview.io/agents · API POST https://mdview.io/api/public/publish`,
+
+  mds: `mds [hosted|agent-self|agent <kind>] …
+  Three markdown galleries (CLI ↔ hub /mds):
+    hosted [list] | host <file.md> [--as slug] | show|url <slug>
+      → .sm/mds/ live files; hub http://127.0.0.1:3190/mds
+    agent-self [list] | show <FOCUS.md|TASKS|_shared/…> [--seat col]
+      → this seat's FOCUS/TASKS/REMINDER + .sm/seats/_shared
+    agent <common|manager|secretary|worker|mini> [show]
+      → locked role POV under .sm/roles/_vendor/docs/
+  Bare mds / mds status = counts. mdview.io share stays: agent preview <file.md>
+  Map: docs/patterns/cli-web-parity.md · docs/cli/mds.md`,
 
   contract: `contract …
   Contract lock apply/on/off`,

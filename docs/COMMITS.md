@@ -4,7 +4,7 @@ This repository is the **portable seatmesh engine**. History is public — keep 
 
 ## Forbidden in title or body
 
-- Consumer names: `zsign`, `zsign-api`, `zsign-app`, `tmux-zsign`, `./sm.sh` as product branding
+- Consumer names: `zsign`, `zsign-api`, `zsign-app`, `tmux-zsign`, `sm` as product branding
 - Machine paths: `/home/...`, `tasks/seat-mesh/`, `Desktop/Work`, `.sm/` consumer trees
 - Operator names in prose
 - Agent trailers: `Co-authored-by`, `Generated with Cursor/Claude`, any tool byline

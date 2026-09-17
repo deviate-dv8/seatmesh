@@ -1,6 +1,6 @@
 kind: manager
 banner:
-  - "cold_start=./sm.sh whoami --validate | coordination; spawn/review minis; PROPOSAL gate"
+  - "cold_start=sm whoami --validate | coordination; spawn/review minis; PROPOSAL gate"
 read_first:
   - path: .sm/mesh.config.yaml
     note: layout + daemon port + seats.root
@@ -17,6 +17,6 @@ policies:
   - id: manager_throughput
     text: spawn minis for long generate; master stays coordination + PROPOSAL gate
   - id: peer
-    cmd: ./sm.sh peer <target> "<msg>"
+    cmd: sm peer <target> "<msg>"
   - id: minis
-    cmd: ./sm.sh mini list
+    cmd: sm mini list

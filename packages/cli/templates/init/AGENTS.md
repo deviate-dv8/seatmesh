@@ -57,7 +57,7 @@ Ship A — matches brand." \
 | Shape | Command | Operator gets |
 |-------|---------|---------------|
 | Eyes | `notify "<session>" "<check>" [--url]` | Toast (+ link) |
-| Info | `notify info\|md "<title>" --md\|--body …` | Toast + `/act/card` markdown |
+| Info | `notify info\|md "<title>" --md\|--body …` | Toast + hub `/act/card` (`:3190`) |
 | Decide | `notify yesno "<title>" "<blurb>" --md\|--body …` | Toast **Info · Yes · No**; Yes/No peer to `--target` |
 
 **yesno:** `<title>` = decision name · `<blurb>` = short toast line · Info content via `--md` / `--body` (not the blurb alone).

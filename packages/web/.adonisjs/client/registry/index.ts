@@ -150,6 +150,12 @@ const routes = {
     tokens: [{"old":"/mds","type":0,"val":"mds","end":""}],
     types: placeholder as Registry['mds.index']['types'],
   },
+  'mds.show': {
+    methods: ["GET","HEAD"],
+    pattern: '/mds/:sessionId/*',
+    tokens: [{"old":"/mds/:sessionId/*","type":0,"val":"mds","end":""},{"old":"/mds/:sessionId/*","type":1,"val":"sessionId","end":""},{"old":"/mds/:sessionId/*","type":2,"val":"*","end":""}],
+    types: placeholder as Registry['mds.show']['types'],
+  },
   'tools.index': {
     methods: ["GET","HEAD"],
     pattern: '/tools',

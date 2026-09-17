@@ -1,7 +1,7 @@
 # SM functions: the convention
 
 **Scope:** every `seatmesh` command ("sm function") an agent types on session
-`mesh` via `./sm.sh`. Governs new functions proposed in
+`mesh` via `sm`. Governs new functions proposed in
 `tasks/seatmesh/brainstorm/slot-N.md` and accepted into the aggregate
 `tasks/seatmesh/docs/SM-FUNCTIONS.md`.
 

@@ -8,7 +8,7 @@
 
 ## Done this session
 
-- **5.8** — `./sm.sh preview <file...> [--set 1-30] [--notify]` wraps `scripts/publish-mdview.sh`; `ok preview <file> <url>`; `preview-mdview.test.ts`
+- **5.8** — `sm preview <file...> [--set 1-30] [--notify]` wraps `scripts/publish-mdview.sh`; `ok preview <file> <url>`; `preview-mdview.test.ts`
 - **5.7** (prior) — `sm notify` @0.1.18
 
 ## Next (one at a time)

@@ -40,6 +40,7 @@ seatmesh peer --help
 - `history` → [`read-history`](#read-history) · [cli/read-history.md](cli/read-history.md)
 - `meshes` → [`remote`](#remote) · [cli/remote.md](cli/remote.md)
 - `msg` → [`ask`](#ask) · [cli/ask.md](cli/ask.md)
+- `open-web` → [`web`](#web) · [cli/web.md](cli/web.md)
 - `operator` → [`human`](#human) · [cli/human.md](cli/human.md)
 - `panes` → [`human`](#human) · [cli/human.md](cli/human.md)
 - `patience` → [`cb`](#cb) · [cli/cb.md](cli/cb.md)
@@ -190,12 +191,24 @@ cold-start [target] [--inject] [--force]
 ```text
 completion bash|zsh|fish|reply|install
   Shell tab completion. Enable: eval "$(seatmesh completion zsh)"
-  Then: seatmesh <TAB>. Prefer global bin or alias seatmesh='npx seatmesh'.
+  Then: sm <TAB>. Prefer global bin: sm install  (legacy: seatmesh).
 ```
 
 - Run: `seatmesh completion --help`
 - Agent: `seatmesh agent help completion`
 - File: [cli/completion.md](cli/completion.md)
+
+## config
+
+```text
+config check [--json] | config upgrade
+  check: validate mesh.config.yaml + paths
+  upgrade: how to get latest seatmesh CLI (npm i -g seatmesh@latest) then update
+```
+
+- Run: `seatmesh config --help`
+- Agent: `seatmesh agent help config`
+- File: [cli/config.md](cli/config.md)
 
 ## contexts
 
@@ -257,10 +270,10 @@ func <id> <args...>
 
 ```text
 help [cmd]
-  Show this index, or usage for one command.
-  Humans first: seatmesh help human   ← put an agent on a pane
-  Agents: seatmesh agent help [cmd]
-  Card:   seatmesh agent
+  Operator default = human surface only (agent verbs hidden).
+  Full list: seatmesh --agents help
+  One verb:  seatmesh help <cmd> · seatmesh agent help <cmd>
+  Put agent: seatmesh help human
 ```
 
 - Run: `seatmesh help --help`
@@ -287,18 +300,21 @@ hub [contexts|todos|acks|cbs|chat|room|shared|sessions]
 human — put an agent CLI on a pane (operator)
 
   Empty terminal → agent:
-    switch <target> <opencode|claude|agent|kiro>
+    switch <target> <opencode|oc-proxy|claude|agent|kiro>
     Examples:
       seatmesh switch slot-1 opencode
-      seatmesh switch secretary claude
+      seatmesh switch secretary oc-proxy --keep-resume
       seatmesh switch here agent          # this pane (Cursor)
-      npx seatmesh switch mini-1 opencode
+      seatmesh switch mini-1 oc-proxy --keep-resume
 
   Back to plain shell:
     switch <target> empty
 
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
+
+  Resume known session on a pane (autodetect ses_* / resume id):
+    pane resume [here|secretary|slot-N|…]
 
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
@@ -309,6 +325,7 @@ human — put an agent CLI on a pane (operator)
     assign <target> "do the thing"        # same engine
 
   Targets: manager | secretary | slot-N | mini-N | here
+  Operator help: seatmesh help (human) · seatmesh --agents help (full)
   Aliases for this topic: help put-agent | help panes | help operator
 ```
 
@@ -409,6 +426,25 @@ limit idle [--all|--pane %N]
 - Agent: `seatmesh agent help limit`
 - File: [cli/limit.md](cli/limit.md)
 
+## mds
+
+```text
+mds [hosted|agent-self|agent <kind>] …
+  Three markdown galleries (CLI ↔ hub /mds):
+    hosted [list] | host <file.md> [--as slug] | show|url <slug>
+      → .sm/mds/ live files; hub http://127.0.0.1:3190/mds
+    agent-self [list] | show <FOCUS.md|TASKS|_shared/…> [--seat col]
+      → this seat's FOCUS/TASKS/REMINDER + .sm/seats/_shared
+    agent <common|manager|secretary|worker|mini> [show]
+      → locked role POV under .sm/roles/_vendor/docs/
+  Bare mds / mds status = counts. mdview.io share stays: agent preview <file.md>
+  Map: docs/patterns/cli-web-parity.md · docs/cli/mds.md
+```
+
+- Run: `seatmesh mds --help`
+- Agent: `seatmesh agent help mds`
+- File: [cli/mds.md](cli/mds.md)
+
 ## migrate-runtime
 
 ```text
@@ -448,18 +484,19 @@ night on|off|status
 ```text
 notify "<session>" "<check>" [--url <link>]
   notify info|md "<title>" --md <file>|--body "…" [--image path] [--url https://…]
-  notify yesno "<title>" "<blurb>" [--md file|--body "…"] [--image path]
+  notify yesno "<title>" "<blurb>" [--md file|--body "…"] [--image path] [--url https://…]
            [--target seat] [--yes-msg "…"] [--no-msg "…"]
   Operator eyes (beta) — prefer over asking chat for a toast.
 
   Pick one shape:
     eyes-only   notify "Deploy?" "Check staging" --url http://…
     Info only   notify info "Brief" --body "## Why\n\n…" [--url https://mdview.io/s/…]
-                → local /act/card. [--url] = Open button (clickable).
+                → hub /act/card (:3190). [--url] = Open button (clickable).
                   Bare https:// in body also autolinks. [label](url) works.
-                Mermaid → use preview (mdview.io), then notify info --url <share>.
-    Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\n…" --target manager
-                → toast with Info · Yes · No on one card.
+                Mermaid → local Info card renders ```mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
+    Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\n…" [--url https://…]
+                → toast buttons Info · Yes · No; card Open if --url.
+                Agents may still put links in --body/--md; toast body stays blurb-only.
 
   yesno args: <title>=decision name · <blurb>=short toast line
   Full recipe: seatmesh agent help notify
@@ -479,6 +516,20 @@ ops list|clear
 - Run: `seatmesh ops --help`
 - Agent: `seatmesh agent help ops`
 - File: [cli/ops.md](cli/ops.md)
+
+## pane
+
+```text
+pane resume [target]
+  Autodetect original session id on the pane and resume it.
+  Sources: live cmdline → @mesh_oc_session → scrollback → mesh-agents.
+  Live OpenCode: paste resume [ses_…]. Else relaunch oc-proxy/opencode/claude with that id.
+  Default target: here. Examples: pane resume · pane resume secretary
+```
+
+- Run: `seatmesh pane --help`
+- Agent: `seatmesh agent help pane`
+- File: [cli/pane.md](cli/pane.md)
 
 ## pane-meta
 
@@ -536,6 +587,7 @@ ppa [--raw] [--idle SEC]
 preview <file.md...> [--set 1-30] [--notify]
   Publish markdown to mdview.io (https://mdview.io) — NOT a local binary.
   Renders MD + Mermaid in the browser; prints viewerUrl.
+  Local hub gallery: mds hosted host <file.md> → .sm/mds + /mds URL
   Examples:
     preview ./handout.md --set 7
     preview ./handout.md --set 7 --notify
@@ -938,15 +990,16 @@ todo give <target> "<text>"     ← GIVE work (preferred)
 ## update
 
 ```text
-1) npm install -g seatmesh@latest     # bump CLI first
-2) seatmesh update [--dry-run] [--migrate] [--no-restart-inbox]
-  Refresh _vendor + AGENTS.md; merge new mesh.config keys; seed seats/_shared;
-  role-pack migrate; paths.json. --migrate also legacy tasks/ → .sm/
+update [--dry-run] [--migrate] [--no-restart-inbox]
+  TWO STEPS — bump the CLI first, then refresh this mesh profile:
+    1) npm install -g seatmesh@latest     # or: npx seatmesh@latest …
+    2) seatmesh update                    # sync .sm/_vendor from that CLI
+  Step 2 alone does NOT upgrade npm. Guide: seatmesh config upgrade
+  Also: merge new mesh.config keys; seed seats/_shared; role-pack; paths.json.
+  --migrate: legacy tasks/ → .sm/runtime
 ```
 
-`update` alone does not upgrade npm — see `seatmesh config upgrade`.
-
-- Run: `seatmesh update --help` · `seatmesh config upgrade`
+- Run: `seatmesh update --help`
 - Agent: `seatmesh agent help update`
 - File: [cli/update.md](cli/update.md)
 
@@ -971,6 +1024,34 @@ version [--json] [--check-registry]
 - Run: `seatmesh version --help`
 - Agent: `seatmesh agent help version`
 - File: [cli/version.md](cli/version.md)
+
+## web
+
+```text
+web status|up|down|restart|open|url|help
+  Operator hub (packages/web) on http://127.0.0.1:3190 — dashboard / sessions / queues / notify cards.
+  Subcommands:
+    status [--json]     hub up? + pid/log + daemon tips + routes + registry
+    up [--open]         start hub detached (npm run dev in packages/web)
+    down                stop hub (pidfile + :3190 listeners)
+    restart [--open]    down then up
+    open [path]         open hub in browser (alias: open-web)
+    url [path]          print hub URL only
+  npx / global:
+    npx seatmesh web up
+    npx seatmesh web status
+    npx seatmesh web down
+    npx seatmesh web restart --open
+  Needs a seatmesh checkout (@seat-mesh/web is private — not on npm).
+  Resolves packages/web via: cwd walk-up · SEATMESH_WEB_ROOT · SEATMESH_ROOT · CLI monorepo neighbor.
+  Env: SEATMESH_WEB_URL (hub base) · SEATMESH_WEB_ROOT · SEATMESH_ROOT
+  Pid/log: ~/.config/seatmesh/web-<port>.{pid,log}
+  Also: npm run web (repo root). Map: docs/patterns/cli-web-parity.md · docs/cli/web.md
+```
+
+- Run: `seatmesh web --help`
+- Agent: `seatmesh agent help web`
+- File: [cli/web.md](cli/web.md)
 
 ## whoami
 

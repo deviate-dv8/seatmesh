@@ -4,6 +4,7 @@
 preview <file.md...> [--set 1-30] [--notify]
   Publish markdown to mdview.io (https://mdview.io) — NOT a local binary.
   Renders MD + Mermaid in the browser; prints viewerUrl.
+  Local hub gallery: mds hosted host <file.md> → .sm/mds + /mds URL
   Examples:
     preview ./handout.md --set 7
     preview ./handout.md --set 7 --notify

@@ -60,9 +60,9 @@ Pane `@mesh_role` = column id. `loadRoleIndex` resolves: overlay chain if
 
 | Command | Job |
 |---------|-----|
-| `./sm.sh agent` | Role-filtered command tree (builtins + funcs) |
-| `./sm.sh agent context` | List registered MDs (`read_first` + `files`) for **this pane**; flag `missing` |
-| `./sm.sh agent context init` | Scaffold/fix `.sm/` dotdir; validate role paths; prompt agent to read registry; ensure inbox/labels/cold-start active |
+| `sm agent` | Role-filtered command tree (builtins + funcs) |
+| `sm agent context` | List registered MDs (`read_first` + `files`) for **this pane**; flag `missing` |
+| `sm agent context init` | Scaffold/fix `.sm/` dotdir; validate role paths; prompt agent to read registry; ensure inbox/labels/cold-start active |
 
 `context init` is the **onboarding + stay-active** path: dotfiles exist, role yaml complete,
 registered docs validated, then explicit read order before work.
@@ -74,13 +74,13 @@ registered docs validated, then explicit read order before work.
 | Section | Purpose | Printed by |
 |---------|---------|------------|
 | `kind` | `manager` \| `secretary` \| `worker` \| `mini` | whoami index |
-| `banner` | One-liners at top of cold-start / whoami | `./sm.sh whoami` |
+| `banner` | One-liners at top of cold-start / whoami | `sm whoami` |
 | `read_first` | `{ path, note }` — read before work | whoami `file=` lines |
 | `files` | Extra context paths (FYI grep) | whoami `file=` lines |
 | `policies` | `{ id, text \| cmd \| path, rule? }` | whoami `policy_*=` lines |
-| `guards` | `{ allow: [], deny: [] }` comms + builtins | `./sm.sh agent` (filtered tree) |
-| `commands` | Builtin `./sm.sh` groups (optional; can stay TS catalog) | `./sm.sh agent` |
-| `funcs` | `{ allow: [dc-sh], deny: [] }` attached externals | `./sm.sh agent`, `./sm.sh func` |
+| `guards` | `{ allow: [], deny: [] }` comms + builtins | `sm agent` (filtered tree) |
+| `commands` | Builtin `sm` groups (optional; can stay TS catalog) | `sm agent` |
+| `funcs` | `{ allow: [dc-sh], deny: [] }` attached externals | `sm agent`, `sm func` |
 | `vars` | e.g. mini `job_role: "{{jobRole}}"` | whoami substitution |
 
 Paths in `read_first` / `files` are **relative to workspace root** (parent of `.sm/`).
@@ -91,7 +91,7 @@ Paths in `read_first` / `files` are **relative to workspace root** (parent of `.
 
 ### `common.yaml`
 
-- Banner: engine pointer, `./sm.sh agent` + `./sm.sh whoami`
+- Banner: engine pointer, `sm agent` + `sm whoami`
 - `read_first`: `services/seatmesh/docs/ONE-PATH.md`, `.sm/README.md`
 - `guards.deny`: `[merge, board.mutate]` for all roles
 - `external.default: allow` in `mesh.config.yaml` (not in role file)
@@ -116,7 +116,7 @@ Paths in `read_first` / `files` are **relative to workspace root** (parent of `.
 - `read_first`: worker POV (operator vs manager, prove, seat files)
 - `files`: workflow/permissions stubs — **user replaces** with project docs (consumer: `.agent/`)
 - `guards.allow`: room.say, to-slot, send.peer, snapshot
-- `policies`: status via `./sm.sh room say "DONE|BLOCKED|PROVED|FYI: …"` (optional `-r managers`)
+- `policies`: status via `sm room say "DONE|BLOCKED|PROVED|FYI: …"` (optional `-r managers`)
 - `funcs.deny`: `[docker-exec]` example in template comment; user extends
 
 ### `mini.yaml`
@@ -147,8 +147,8 @@ Paths in `read_first` / `files` are **relative to workspace root** (parent of `.
 | Init has `master.yaml`, no `mini.yaml` | Rename -> `manager.yaml`; add `mini.yaml` template |
 | Init roles stubs | Templates use `extends: common`; column deltas in `roles/columns/` |
 | Bundled `profiles/consumer/roles/` duplicates `.sm/` | Deprecate; consumer uses `.sm/roles/` only |
-| No `guards` / `funcs` in schema | Extend `RoleIndex` + `renderRoleIndex` + `./sm.sh agent` |
-| `./sm.sh agent` not wired | Filter TS catalog + yaml funcs by merged role |
+| No `guards` / `funcs` in schema | Extend `RoleIndex` + `renderRoleIndex` + `sm agent` |
+| `sm agent` not wired | Filter TS catalog + yaml funcs by merged role |
 
 ---
 

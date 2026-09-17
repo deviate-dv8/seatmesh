@@ -28,6 +28,7 @@ export type ScannedRoutes = {
     'sessions.ops.inboxRestart': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sessions.ops.func': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'mds.index': { paramsTuple?: []; params?: {} }
+    'mds.show': { paramsTuple: [ParamValue,...ParamValue[]]; params: {'sessionId': ParamValue,'*': ParamValue[]} }
     'tools.index': { paramsTuple?: []; params?: {} }
   }
   GET: {
@@ -46,6 +47,7 @@ export type ScannedRoutes = {
     'sessions.config': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sessions.ops': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'mds.index': { paramsTuple?: []; params?: {} }
+    'mds.show': { paramsTuple: [ParamValue,...ParamValue[]]; params: {'sessionId': ParamValue,'*': ParamValue[]} }
     'tools.index': { paramsTuple?: []; params?: {} }
   }
   HEAD: {
@@ -64,6 +66,7 @@ export type ScannedRoutes = {
     'sessions.config': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'sessions.ops': { paramsTuple: [ParamValue]; params: {'id': ParamValue} }
     'mds.index': { paramsTuple?: []; params?: {} }
+    'mds.show': { paramsTuple: [ParamValue,...ParamValue[]]; params: {'sessionId': ParamValue,'*': ParamValue[]} }
     'tools.index': { paramsTuple?: []; params?: {} }
   }
   POST: {

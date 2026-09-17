@@ -12,7 +12,7 @@ Canonical notifier: `@seat-mesh/tmux` `runInboxDesktopNotifySync` (daemon `oc-re
 
 | Path | When |
 |------|------|
-| **Mesh inbox daemon** (`./sm.sh`, `connectivity.enabled: true`) | Default — owns probe, rotate, resume, toasts |
+| **Mesh inbox daemon** (`sm`, `connectivity.enabled: true`) | Default — owns probe, rotate, resume, toasts |
 | **Harness** `scripts/inbox-server.mjs` **`:31699`** | Legacy `dev` session only — **do not run with mesh** |
 | **Standalone** `oc-recovery-loop.sh` / `oc-recovery-cron.sh` | Offline fallback — **stop these if mesh daemon is up** |
 
@@ -25,7 +25,7 @@ This workspace listens on **`:31670`** only. Port table: [PORTS.md](PORTS.md). C
 ```bash
 curl -sS -m 3 http://127.0.0.1:31670/health | jq '{port, pid, ocLimitActive, proxyDownActive}'
 ss -ltnp | grep -E '31670|31699'
-./sm.sh inbox restart   # after port or daemon changes
+sm inbox restart   # after port or daemon changes
 ```
 
 ## Expected toast count (mesh daemon, happy path)

@@ -1,6 +1,6 @@
 {
   "name": "seatmesh",
-  "version": "1.2.0",
+  "version": "1.2.3",
   "private": true,
   "type": "module",
   "description": "Typed tmux agent coordination: profiles, role index, inbox daemon, connectivity recovery.",

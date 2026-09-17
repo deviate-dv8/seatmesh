@@ -18,7 +18,7 @@ export function resolveStackScript(loaded: LoadedProfile): string {
 export function printStackHelp(loaded: LoadedProfile): void {
   const cfg = stackConfig(loaded.profile);
   const script = cfg.command;
-  console.log(`seatmesh stack — passthrough to ${script} (only sm.sh external passthrough)`);
+  console.log(`seatmesh stack — passthrough to ${script} (only sm external passthrough)`);
   if (cfg.summary) console.log(cfg.summary);
   console.log("");
   console.log("Usage:");

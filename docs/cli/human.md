@@ -4,18 +4,21 @@
 human — put an agent CLI on a pane (operator)
 
   Empty terminal → agent:
-    switch <target> <opencode|claude|agent|kiro>
+    switch <target> <opencode|oc-proxy|claude|agent|kiro>
     Examples:
       seatmesh switch slot-1 opencode
-      seatmesh switch secretary claude
+      seatmesh switch secretary oc-proxy --keep-resume
       seatmesh switch here agent          # this pane (Cursor)
-      npx seatmesh switch mini-1 opencode
+      seatmesh switch mini-1 oc-proxy --keep-resume
 
   Back to plain shell:
     switch <target> empty
 
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
+
+  Resume known session on a pane (autodetect ses_* / resume id):
+    pane resume [here|secretary|slot-N|…]
 
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
@@ -26,6 +29,7 @@ human — put an agent CLI on a pane (operator)
     assign <target> "do the thing"        # same engine
 
   Targets: manager | secretary | slot-N | mini-N | here
+  Operator help: seatmesh help (human) · seatmesh --agents help (full)
   Aliases for this topic: help put-agent | help panes | help operator
 ```
 

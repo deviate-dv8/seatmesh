@@ -25,7 +25,7 @@ const SUBS: Record<string, string[]> = {
   help: [], // filled dynamically with top-level words
   completion: ["bash", "zsh", "fish", "reply", "install"],
   config: ["check", "upgrade"],
-  web: ["status", "open", "url", "help"],
+  web: ["status", "up", "down", "restart", "open", "url", "help"],
   session: ["attach", "up", "down", "status", "sync", "check", "repair", "init"],
   sessions: ["list", "attach", "forget", "register", "pick"],
   layout: ["column"],
@@ -53,6 +53,8 @@ const SUBS: Record<string, string[]> = {
   todo: ["give", "send", "to", "list", "add", "check", "ls", "show"],
   todos: ["give", "send", "to", "list", "add", "check", "ls", "show"],
   notify: ["info", "md", "details", "yesno", "desktop"],
+  mds: ["hosted", "agent-self", "agent", "status", "list", "help"],
+  preview: [],
   limit: ["idle", "idle-clear"],
   proxy: ["status", "check", "reset"],
   providers: ["list", "scan"],

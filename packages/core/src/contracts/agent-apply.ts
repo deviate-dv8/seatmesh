@@ -117,7 +117,7 @@ function collectInstructionText(rest: string[], start: number): { text: string; 
   return { text, next: i };
 }
 
-/** Parse `./sm.sh agent apply …` argv (after `apply`) into a bundle. */
+/** Parse `sm agent apply …` argv (after `apply`) into a bundle. */
 export function parseAgentApplyArgs(args: string[]): {
   bundle: AgentApplyBundle;
   opts: ParseAgentApplyOptions;

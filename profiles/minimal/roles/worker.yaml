@@ -1,6 +1,6 @@
 kind: worker
 banner:
-  - "cold_start=./sm.sh whoami --validate | seat FOCUS + TASKS every turn"
+  - "cold_start=sm whoami --validate | seat FOCUS + TASKS every turn"
 read_first:
   - path: docs/ONE-PATH.md
     note: one command per job
@@ -12,10 +12,10 @@ files:
   - .sm/README.md
 policies:
   - id: comms
-    cmd: ./sm.sh to-master "<ACK|DONE|BLOCKED|PROVED: ...>"
+    cmd: sm to-master "<ACK|DONE|BLOCKED|PROVED: ...>"
   - id: peer
-    cmd: ./sm.sh to-slot <N> "<msg>"
+    cmd: sm to-slot <N> "<msg>"
   - id: checkback
-    cmd: ./sm.sh checkback start 5m --renew 3m --expect "topic" --here
+    cmd: sm checkback start 5m --renew 3m --expect "topic" --here
   - id: chatroom
-    text: ./sm.sh room tail at turn start; ./sm.sh room say "CLAIMED:/DONE:/FYI:" machine lines
+    text: sm room tail at turn start; sm room say "CLAIMED:/DONE:/FYI:" machine lines

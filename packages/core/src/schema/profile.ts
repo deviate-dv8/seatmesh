@@ -168,7 +168,7 @@ export const MeshProfileSchema = z.object({
   roles: z.object({
     dir: z.string().default("roles"),
   }),
-  /** AGENT-FUNC-GUARDS.md func registry — `./sm.sh func <id> <args>` attached externals. */
+  /** AGENT-FUNC-GUARDS.md func registry — `sm func <id> <args>` attached externals. */
   external: z
     .object({
       default: z.enum(["allow", "deny"]).default("allow"),

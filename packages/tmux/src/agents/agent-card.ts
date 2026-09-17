@@ -81,6 +81,7 @@ const BASE_COMMANDS = [
   m('notify yesno "<title>" "<blurb>" --body "…" [--target seat]  ← Info+Yes+No'),
   m("  help notify  ← full Info/Yes/No recipe"),
   m("preview <file.md> [--set days] [--notify]  ← publish MD+Mermaid → mdview.io URL"),
+  m("mds hosted|agent-self|agent <kind>  ← .sm/mds hub gallery · seat MDs · role POV"),
   m('ack <id> "<note>" | ack | ack clear'),
   m("cb list | cb cancel <id>   ← STOP renew (chat does NOT)"),
   m('cb start <dur> --expect "…"'),

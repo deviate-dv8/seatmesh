@@ -21,7 +21,7 @@ export function resolveAgentId(input: {
   return role || "unknown";
 }
 
-/** One `./sm.sh peer` target — never bare `manager-mini` (use mini-N). */
+/** One `sm peer` target — never bare `manager-mini` (use mini-N). */
 export function peerTargetForComms(input: {
   role: string;
   slot?: number | null;

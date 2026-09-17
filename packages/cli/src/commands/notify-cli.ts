@@ -100,7 +100,7 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
     .alias("details")
     .alias("md")
     .description(
-      "Craft an Info link on seatmesh UI (/act/card) from markdown (+ images). Use yesno for actionables.",
+      "Craft an Info link on the hub (/act/card :3190) from markdown (+ images). Use yesno for actionables.",
     )
     .argument("<title>", "toast + Info title")
     .option("--md <file>", "markdown file (workspace-relative or absolute)")

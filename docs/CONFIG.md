@@ -84,7 +84,7 @@ layout:
     columns: [manager, secretary]
     managerStack: [manager]   # cold start default (profile yaml)
     # Runtime: mesh-agents.json layout.base.managerStack (passthrough extendable)
-    # e.g. [manager, manager-b] after `./sm.sh launch manager-b`
+    # e.g. [manager, manager-b] after `sm launch manager-b`
     managerStackBottomPct: 50
     secretaryWidthPct: 50
     cli:
@@ -126,7 +126,7 @@ daemon:
   managerPromptPrefix: "[agent-manager-kiro-cursor-claude]"
 ```
 
-**Which port is live?** `./sm.sh profile show` (`daemon_port=…`) or `./sm.sh inbox`.
+**Which port is live?** `sm profile show` (`daemon_port=…`) or `sm inbox`.
 Full allocation (mesh `:31670`, harness `:31699`): [PORTS.md](PORTS.md).
 
 ## Seats and state

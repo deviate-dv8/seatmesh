@@ -2,10 +2,10 @@
 
 ```text
 help [cmd]
-  Show this index, or usage for one command.
-  Humans first: seatmesh help human   ← put an agent on a pane
-  Agents: seatmesh agent help [cmd]
-  Card:   seatmesh agent
+  Operator default = human surface only (agent verbs hidden).
+  Full list: seatmesh --agents help
+  One verb:  seatmesh help <cmd> · seatmesh agent help <cmd>
+  Put agent: seatmesh help human
 ```
 
 - CLI: `seatmesh help --help`

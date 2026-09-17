@@ -51,4 +51,5 @@ router
 router.post('/sessions/:id/ops/func', [controllers.SessionOps, 'runFunc']).as('sessions.ops.func')
 
 router.get('/mds', [controllers.Mds, 'index']).as('mds.index')
+router.get('/mds/:sessionId/*', [controllers.Mds, 'show']).as('mds.show')
 router.get('/tools', [controllers.Tools, 'index']).as('tools.index')

@@ -37,6 +37,7 @@ export * from "./chatfile/index.js";
 export * from "./stack/index.js";
 export * from "./contracts/index.js";
 export * from "./runtime/global-registry.js";
+export * from "./runtime/hub-url.js";
 export * from "./messages/mesh-copy.js";
 export * from "./messages/mesh-inject-text.js";
 export * from "./messages/mesh-inbox-intent.js";

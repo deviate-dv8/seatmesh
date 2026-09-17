@@ -14,7 +14,11 @@ import {
 import { capturePaneSnapshot, listMeshMonitorPanes } from "@seat-mesh/tmux";
 import { notifyConnectivityStatus, type ResumeWaveMeta } from "./oc-resume.js";
 import { syncCarrierIpProbe } from "./oc-resume-broadcast.js";
-import { ocLimitV2EpisodeActive, startOcLimitV2Episode } from "./oc-limit-v2.js";
+import {
+  ocLimitV2EpisodeActive,
+  reclaimOrphanOcLimitRecoveryStamp,
+  startOcLimitV2Episode,
+} from "./oc-limit-v2.js";
 
 const PROXY_UP_COOLDOWN_MS = 60_000;
 /** After an episode clears, ignore stale oc-connect re-arm unless streak re-confirms. */
@@ -41,6 +45,40 @@ const SMART_RESTART_COOLDOWN_EXIT_CODE = 2;
  */
 const DEFAULT_OC_LIMIT_RECOVERY_STAMP = "/tmp/seatmesh-oc-limit-recovery.last";
 const DEFAULT_OC_LIMIT_RECOVERY_COOLDOWN_SEC = 1800;
+/** Once-per-stamp toast when rising-edge is suppressed (avoid silent cooldown). */
+const OC_LIMIT_COOLDOWN_NOTIFIED =
+  process.env.CPE_OC_LIMIT_COOLDOWN_NOTIFIED || "/tmp/seatmesh-oc-limit-cooldown-notified";
+
+function notifyOcLimitCooldownOnce(workspace: string, stampLeft: number, log: (line: string) => void): void {
+  let stampTok = "";
+  try {
+    stampTok = fs.readFileSync(
+      process.env.CPE_OC_LIMIT_RECOVERY_STAMP || DEFAULT_OC_LIMIT_RECOVERY_STAMP,
+      "utf8",
+    ).trim();
+  } catch {
+    stampTok = String(stampLeft);
+  }
+  try {
+    const prev = fs.readFileSync(OC_LIMIT_COOLDOWN_NOTIFIED, "utf8").trim();
+    if (prev === stampTok) return;
+  } catch {
+    /* first time */
+  }
+  try {
+    fs.writeFileSync(OC_LIMIT_COOLDOWN_NOTIFIED, `${stampTok}\n`, "utf8");
+  } catch {
+    /* */
+  }
+  log(`OC-LIMIT cooldown notify (once) left=${stampLeft}s`);
+  notifyConnectivityStatus(
+    workspace,
+    "OC-LIMIT",
+    `Rate-limit seen; recovery cooldown ${stampLeft}s (stamp /tmp/seatmesh-oc-limit-recovery.last).`,
+    "If no OC Restart toast ran, clear stamp or POST /connectivity/oc-restart-v2.",
+    "incomplete",
+  );
+}
 
 /**
  * Seconds left on a stamp-file cooldown (0 = none / expired).
@@ -404,6 +442,11 @@ export interface ConnectivityPollInput {
   /** Claude cc-limit rising edge — schedule session-scoped retry checkback. */
   onCcLimitRise?: (paneId: string, snap: import("@seat-mesh/core").PaneSnapshot) => void;
   onCursorUsageLimitRise?: (paneId: string, snap: import("@seat-mesh/core").PaneSnapshot) => void;
+  /**
+   * OpenCode router credit gate (insufficient_user_quota) — intermittent.
+   * Do not arm CPE OC-LIMIT; caller should run atomic 4 CONTINUE on the pane.
+   */
+  onOcCreditRise?: (paneId: string, snap: import("@seat-mesh/core").PaneSnapshot) => void;
 }
 
 /** Scan all monitor panes; update limit sets; trigger async recovery on rising edges only. */
@@ -421,6 +464,7 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
     resumeOpenCodePanes,
     onCcLimitRise,
     onCursorUsageLimitRise,
+    onOcCreditRise,
   } = input;
 
   const conn = loaded.profile.connectivity;
@@ -505,10 +549,23 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
       }
       continue;
     }
+    // OrcaRouter credit gate — intermittent; record + atomic 4 CONTINUE (not CPE reboot).
+    if (st.phase === "limit" && st.limitKind === "oc-credit" && prov.id === "opencode") {
+      const key = `${paneId}:oc-credit`;
+      if (!paneCcLimitSeen.has(key)) {
+        paneCcLimitSeen.add(key);
+        log(
+          `OC-CREDIT rising ${label} ${paneId} kind=oc-credit — intermittent router quota; atomic 4 CONTINUE`,
+        );
+        onOcCreditRise?.(paneId, snap);
+      }
+      continue;
+    }
     if (st.phase !== "limit" || !st.limitKind) {
       paneLimitCache.delete(paneId);
       paneConnectStreak.delete(paneId);
       paneCcLimitSeen.delete(paneId);
+      paneCcLimitSeen.delete(`${paneId}:oc-credit`);
       continue;
     }
     const sawConnect = proxyDownKinds.has(st.limitKind);
@@ -653,13 +710,18 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
   if (action === "start") {
     const fromIp = carrierIpCached() ?? state.carrierIpAtEpisodeStart ?? lastKnownGoodIp;
     log(`OC-LIMIT rising-edge episode start carrier=${fromIp ?? "?"}`);
-    const stampLeft = ocLimitRecoveryCooldownLeftSec();
+    let stampLeft = ocLimitRecoveryCooldownLeftSec();
+    // SIGKILL mid-reboot leaves stamp with no live V2 → reclaim so notify/reset re-arm.
+    if (stampLeft > 0 && reclaimOrphanOcLimitRecoveryStamp(log)) {
+      stampLeft = 0;
+    }
     if (stampLeft > 0) {
       // HMR/SIGKILL wipe in-memory rateLimitRecoveryStarted; stamp is the real once-gate.
       state.rateLimitRecoveryStarted = true;
       log(
-        `OC-LIMIT rising-edge suppressed — shared recovery stamp cooldown ${stampLeft}s (no toast / no re-reset)`,
+        `OC-LIMIT rising-edge suppressed — shared recovery stamp cooldown ${stampLeft}s (live V2 / cooldown)`,
       );
+      notifyOcLimitCooldownOnce(workspace, stampLeft, log);
     } else if (!state.rateLimitRecoveryStarted) {
       maybeRunOcLimitRecovery(
         loaded,

@@ -40,14 +40,14 @@ guards:
 
 ```bash
 npx seatmesh contract on supervise --agent secretary
-./sm.sh room create supervise --kind contract
+sm room create supervise --kind contract
 ```
 
 **Coordination room:** `.sm/chat-rooms/supervise/` (ledger) + `.sm/chat-rooms/managers/` (digest).
 
-Workers/minis: `./sm.sh room say -r supervise "CLAIMED|DONE|BLOCKED|FYI: …"`
+Workers/minis: `sm room say -r supervise "CLAIMED|DONE|BLOCKED|FYI: …"`
 
-Secretary: reads ledger, `./sm.sh secretary collect`, bulk digest to **both** managers via `-r managers` or direct `peer manager` / `peer manager-2`.
+Secretary: reads ledger, `sm secretary collect`, bulk digest to **both** managers via `-r managers` or direct `peer manager` / `peer manager-2`.
 
 ---
 
@@ -79,7 +79,7 @@ seats:
     secretary: secretary
 ```
 
-**Spawn manager-2:** `./sm.sh session up` with profile above, or `./sm.sh switch` handoff into `manager-2` column when layout lands in engine.
+**Spawn manager-2:** `sm session up` with profile above, or `sm switch` handoff into `manager-2` column when layout lands in engine.
 
 **Split work (standing):**
 

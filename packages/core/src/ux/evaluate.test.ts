@@ -32,6 +32,15 @@ describe("evaluateUxRules", () => {
     expect(hit?.border).toBe("PROXY-DOWN");
   });
 
+  it("detects oc-credit (orcarouter) before oc-limit", () => {
+    const tail =
+      "Error from provider (Console): Upstream request failed: [insufficient_user_quota] You're out of credits\n";
+    const hit = evaluateUxRules(snap(tail), "opencode", config);
+    expect(hit?.state.limitKind).toBe("oc-credit");
+    expect(hit?.border).toBe("OC-CREDIT:oc-credit");
+    expect(hit?.onRise).toBe("none");
+  });
+
   it("cursor idle follow-up chrome is empty (inbox deliverable)", () => {
     const tail =
       "assistant text\n \u2192 Add a follow-up\n Composer 2.5 Fast \u00b7 37.4% \u00b7 1 file edited\n ~/proj\n";

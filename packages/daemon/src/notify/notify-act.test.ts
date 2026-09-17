@@ -46,9 +46,11 @@ describe("notify-act registry", () => {
     const card = reg.registerCard(
       { title: "Ship?", body: "Blue button ok?", links },
       300,
-      "http://127.0.0.1:31670",
+      {
+        infoUrl: (id) => `http://127.0.0.1:3190/act/card/${id}?port=31670`,
+      },
     );
-    expect(card.infoUrl).toContain("/act/card/");
+    expect(card.infoUrl).toBe(`http://127.0.0.1:3190/act/card/${card.id}?port=31670`);
     expect(reg.getCard(card.id)?.title).toBe("Ship?");
     expect(reg.getCard(card.id)?.links).toHaveLength(2);
   });

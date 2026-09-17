@@ -34,7 +34,7 @@ import {
 } from "../lib/pane-meta.js";
 import { baseColumns, cliForBaseColumn } from "../session/base-layout.js";
 import { listWindowPaneIds, resolveMiniPaneId } from "../session/window-panes.js";
-import { injectAfterLaunch } from "../seats/cold-start-inject.js";
+import { injectAfterLaunch, tryBriefOnce } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
 import { isOpenCodeHarnessType, prepareOpenCodeForPaste, stopOpenCodeCli } from "./oc-stop.js";
 import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
@@ -167,59 +167,9 @@ export function tryLaunchPane(
   }
   try {
     const registry = registryForProfile(loaded);
-    const snap = capturePaneSnapshot(paneId);
-    const liveProv = snap ? registry.detect(snap) : null;
-    const detectId = liveProv?.id ?? "empty";
-    const saved = seatAgentEntry(loaded, label);
-    // CPE child detects as opencode — use mesh-agents / snap, never the *new* launch cmd.
-    const liveType = resolveOpenCodeHarnessType({
-      detectId,
-      savedType: saved?.type,
-      resumeCmd: saved?.resume_cmd,
-      snap,
-    });
-    const satisfyOpts = { savedType: saved?.type, resumeCmd: saved?.resume_cmd };
-    if (liveType !== "empty" && liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
-      // Fast path: pane already runs the wanted harness (incl. CPE OC for oc-proxy).
-      const live = waitForCli(registry, paneId, capturePaneSnapshot, {
-        maxTries: 4,
-        pollMs: 250,
-        requireComposerReady: true,
-      });
-      if (live) {
-        if (isOpenCodeLaunch(type, cmd)) {
-          syncOpenCodePaneSession(paneId, { waitMs: 1500, retries: 1 });
-        }
-        const brief = injectAfterLaunch(loaded, registry, label, paneId);
-        if (!brief.ok) {
-          console.error(`WARN: post-launch brief ${label}: ${brief.detail}`);
-        } else {
-          console.log(`OK: post-launch brief ${label} ${brief.detail}`);
-        }
-        return { paneId, label, status: "launched", cmd, detail: "already-live" };
-      }
-      // Fall through: same type but not live/ready (crash residue) -> relaunch.
-      console.log(`relaunch ${label}: ${type} present but not ready, re-pasting`);
-    }
-    withPaneInputEnabled(paneId, () => {
-      if (liveType !== "empty" && !liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
-        stopLiveCli(paneId, liveType === "oc-proxy" ? "opencode" : liveType);
-      }
-    });
-    // oc-proxy / long CPE one-liners need welcome-script paste (not raw send-keys).
-    pasteHarnessLaunchCmd(loaded, paneId, type, cmd);
-
-    const verified = verifyHarnessAfterPaste(loaded, registry, paneId, type, cmd, () =>
-      pasteHarnessLaunchCmd(loaded, paneId, type, cmd),
-    );
-    if (!verified.ok) {
-      return {
-        paneId,
-        label,
-        status: "failed",
-        reason: `${label}: ${verified.reason}`,
-        cmd,
-      };
+    const pasted = pasteLaunchIfNeeded(loaded, registry, paneId, label, cmd, type);
+    if (pasted.status === "failed" || pasted.status === "skipped") {
+      return { paneId, label, status: pasted.status, reason: pasted.reason, cmd };
     }
     const brief = injectAfterLaunch(loaded, registry, label, paneId);
     if (!brief.ok) {
@@ -227,7 +177,13 @@ export function tryLaunchPane(
     } else {
       console.log(`OK: post-launch brief ${label} ${brief.detail}`);
     }
-    return { paneId, label, status: "launched", cmd };
+    return {
+      paneId,
+      label,
+      status: "launched",
+      cmd,
+      detail: pasted.detail,
+    };
   } catch (e) {
     return {
       paneId,
@@ -236,6 +192,192 @@ export function tryLaunchPane(
       reason: (e as Error).message,
     };
   }
+}
+
+type PasteOutcome = {
+  status: "pasted" | "already-live" | "skipped" | "failed";
+  reason?: string;
+  detail?: string;
+};
+
+/**
+ * Paste/relaunch only — no brief wait. Used by wave launch so many OC panes
+ * boot in parallel before round-robin briefs.
+ */
+function pasteLaunchIfNeeded(
+  loaded: LoadedProfile,
+  registry: ReturnType<typeof registryForProfile>,
+  paneId: string,
+  label: string,
+  cmd: string,
+  type: string,
+): PasteOutcome {
+  const snap = capturePaneSnapshot(paneId);
+  const liveProv = snap ? registry.detect(snap) : null;
+  const detectId = liveProv?.id ?? "empty";
+  const saved = seatAgentEntry(loaded, label);
+  const liveType = resolveOpenCodeHarnessType({
+    detectId,
+    savedType: saved?.type,
+    resumeCmd: saved?.resume_cmd,
+    snap,
+  });
+  const satisfyOpts = { savedType: saved?.type, resumeCmd: saved?.resume_cmd };
+  if (liveType !== "empty" && liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
+    // OC/CPE already present — wait for composer (do NOT re-paste mid-boot).
+    const live = waitForCli(registry, paneId, capturePaneSnapshot, {
+      maxTries: 45,
+      pollMs: 400,
+      requireComposerReady: true,
+    });
+    if (live) {
+      if (isOpenCodeLaunch(type, cmd)) {
+        syncOpenCodePaneSession(paneId, { waitMs: 1500, retries: 1 });
+      }
+      return { status: "already-live", detail: "already-live" };
+    }
+    console.log(`relaunch ${label}: ${type} present but not ready after wait, re-pasting`);
+  }
+  withPaneInputEnabled(paneId, () => {
+    if (liveType !== "empty" && !liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
+      stopLiveCli(paneId, liveType === "oc-proxy" ? "opencode" : liveType);
+    }
+  });
+  pasteHarnessLaunchCmd(loaded, paneId, type, cmd);
+  const verified = verifyHarnessAfterPaste(loaded, registry, paneId, type, cmd, () =>
+    pasteHarnessLaunchCmd(loaded, paneId, type, cmd),
+  );
+  if (!verified.ok) {
+    return { status: "failed", reason: `${label}: ${verified.reason}` };
+  }
+  return { status: "pasted" };
+}
+
+type LaunchJob = {
+  paneId: string;
+  label: string;
+  cmd: string | null;
+  type: string;
+  skipEmpty: boolean;
+};
+
+/** Paste every seat first (OC boots in parallel), then round-robin briefs. */
+function runLaunchWave(loaded: LoadedProfile, jobs: LaunchJob[]): LaunchResult[] {
+  const registry = registryForProfile(loaded);
+  const results: LaunchResult[] = [];
+  const briefJobs: Array<{ paneId: string; label: string; cmd: string; detail?: string }> = [];
+
+  for (const job of jobs) {
+    if (!job.cmd) {
+      results.push({
+        paneId: job.paneId,
+        label: job.label,
+        status: "skipped",
+        reason: job.skipEmpty && job.type === "empty" ? "empty seat" : "no launch command",
+      });
+      continue;
+    }
+    try {
+      const pasted = pasteLaunchIfNeeded(
+        loaded,
+        registry,
+        job.paneId,
+        job.label,
+        job.cmd,
+        job.type,
+      );
+      if (pasted.status === "failed") {
+        results.push({
+          paneId: job.paneId,
+          label: job.label,
+          status: "failed",
+          reason: pasted.reason,
+          cmd: job.cmd,
+        });
+        continue;
+      }
+      if (pasted.status === "skipped") {
+        results.push({
+          paneId: job.paneId,
+          label: job.label,
+          status: "skipped",
+          reason: pasted.reason,
+          cmd: job.cmd,
+        });
+        continue;
+      }
+      briefJobs.push({
+        paneId: job.paneId,
+        label: job.label,
+        cmd: job.cmd,
+        detail: pasted.detail,
+      });
+    } catch (e) {
+      results.push({
+        paneId: job.paneId,
+        label: job.label,
+        status: "failed",
+        reason: (e as Error).message,
+        cmd: job.cmd,
+      });
+    }
+  }
+
+  if (briefJobs.length === 0) return results;
+
+  console.log(`launch wave: briefing ${briefJobs.length} pane(s) (round-robin)`);
+  const pending = new Map(
+    briefJobs.map((j) => [j.paneId, { ...j, attempts: 0, lastErr: "" }]),
+  );
+  const deadline = Date.now() + 180_000;
+  while (pending.size > 0 && Date.now() < deadline) {
+    for (const [paneId, job] of [...pending]) {
+      const brief = tryBriefOnce(loaded, registry, job.label, paneId);
+      if (brief.ok) {
+        console.log(`OK: post-launch brief ${job.label} ${brief.detail}`);
+        results.push({
+          paneId,
+          label: job.label,
+          status: "launched",
+          cmd: job.cmd,
+          detail: job.detail,
+        });
+        pending.delete(paneId);
+        continue;
+      }
+      if (brief.ready) {
+        job.attempts += 1;
+        job.lastErr = brief.detail;
+        if (job.attempts >= 4) {
+          console.error(`WARN: post-launch brief ${job.label}: ${brief.detail}`);
+          results.push({
+            paneId,
+            label: job.label,
+            status: "launched",
+            cmd: job.cmd,
+            detail: job.detail,
+            reason: `brief soft-fail: ${brief.detail}`,
+          });
+          pending.delete(paneId);
+        }
+      } else {
+        job.lastErr = brief.detail;
+      }
+    }
+    if (pending.size > 0) sleepMs(400);
+  }
+  for (const [paneId, job] of pending) {
+    console.error(`WARN: post-launch brief ${job.label}: ${job.lastErr || "timeout"}`);
+    results.push({
+      paneId,
+      label: job.label,
+      status: "launched",
+      cmd: job.cmd,
+      detail: job.detail,
+      reason: `brief soft-fail: ${job.lastErr || "timeout"}`,
+    });
+  }
+  return results;
 }
 
 export interface LaunchOptions {
@@ -262,7 +404,8 @@ export function launchSession(
   const wantAll = !opts.targets?.length;
   const want = new Set((opts.targets ?? []).map((t) => t.toLowerCase()));
 
-  const results: LaunchResult[] = [];
+  const jobs: LaunchJob[] = [];
+  const early: LaunchResult[] = [];
 
   const basePanes = listWindowPaneIds(session, layout.base.window);
 
@@ -276,13 +419,16 @@ export function launchSession(
     const pane = meshManagerPane(session, layout.base.window) ?? basePanes[0];
     if (pane && state.manager) {
       const cmd = launchCmdForSeat(active, "manager", state.manager.type, state);
-      results.push(
-        tryLaunchPane(active, pane, "manager", cmd, skipEmpty, state.manager.type),
-      );
+      jobs.push({
+        paneId: pane,
+        label: "manager",
+        cmd,
+        type: state.manager.type,
+        skipEmpty,
+      });
     }
   }
 
-  const meshForCoord = loadMeshAgentsForProfile(loaded);
   const extraCols = baseColumnIds(layout).filter(
     (id) =>
       id !== primaryManagerColumn(layout) && id !== primarySecretaryColumn(layout),
@@ -295,7 +441,7 @@ export function launchSession(
     const profileCli = cliForBaseColumn(loaded, id);
     const harnessType = profileCli === "cursor-agent" ? "agent" : profileCli;
     const cmd = launchCmdForSeat(loaded, id, harnessType, state);
-    results.push(tryLaunchPane(loaded, pane, id, cmd, skipEmpty, harnessType));
+    jobs.push({ paneId: pane, label: id, cmd, type: harnessType, skipEmpty });
   }
 
   if (wantAll || want.has("secretary")) {
@@ -308,7 +454,7 @@ export function launchSession(
         "opencode";
       const wanted = state.secretary?.wanted ?? true;
       if (!wanted) {
-        results.push({
+        early.push({
           paneId: pane,
           label: "secretary",
           status: "skipped",
@@ -317,7 +463,13 @@ export function launchSession(
       } else {
         const harnessType = secType === "cursor-agent" ? "agent" : secType;
         const cmd = launchCmdForSeat(loaded, "secretary", harnessType, state);
-        results.push(tryLaunchPane(loaded, pane, "secretary", cmd, skipEmpty, harnessType));
+        jobs.push({
+          paneId: pane,
+          label: "secretary",
+          cmd,
+          type: harnessType,
+          skipEmpty,
+        });
       }
     }
   }
@@ -339,7 +491,7 @@ export function launchSession(
       const saved = mesh ? seatAgentEntry(loaded, key, state, mesh) : null;
       const harnessType = resolveMiniHarnessType(saved?.type, miniCli);
       const cmd = launchCmdForSeat(loaded, key, harnessType, state);
-      results.push(tryLaunchPane(loaded, pane, key, cmd, false, harnessType));
+      jobs.push({ paneId: pane, label: key, cmd, type: harnessType, skipEmpty: false });
     }
   }
 
@@ -356,7 +508,7 @@ export function launchSession(
     if (!pane) continue;
     const entry = workerStateForSlot(state, slot);
     if (!entry) {
-      results.push({
+      early.push({
         paneId: pane,
         label: `slot-${slot}`,
         status: "skipped",
@@ -365,7 +517,7 @@ export function launchSession(
       continue;
     }
     if (skipEmpty && entry.type === "empty") {
-      results.push({
+      early.push({
         paneId: pane,
         label: `slot-${slot}`,
         status: "skipped",
@@ -374,8 +526,25 @@ export function launchSession(
       continue;
     }
     const cmd = resolveLaunchCmd(entry, loaded.workspace, loaded);
-    results.push(tryLaunchPane(loaded, pane, `slot-${slot}`, cmd, skipEmpty, entry.type));
+    jobs.push({
+      paneId: pane,
+      label: `slot-${slot}`,
+      cmd,
+      type: entry.type,
+      skipEmpty,
+    });
   }
+
+  // Single seat → full path; multi-seat → paste wave then round-robin briefs.
+  const results =
+    jobs.length <= 1
+      ? [
+          ...early,
+          ...jobs.map((j) =>
+            tryLaunchPane(active, j.paneId, j.label, j.cmd, j.skipEmpty, j.type),
+          ),
+        ]
+      : [...early, ...runLaunchWave(active, jobs)];
 
   if (results.some((r) => r.status === "launched")) {
     try {

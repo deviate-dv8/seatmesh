@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="seatmesh">
+  <!-- Banded triangle as plain paths — no url(#id) (breaks as Chrome favicon). -->
+  <path fill="#86efac" d="M4 4 H60 L54 16 H10 Z"/>
+  <path fill="#4ade80" d="M10 16 H54 L46 32 H18 Z"/>
+  <path fill="#22c55e" d="M18 32 H46 L38 48 H26 Z"/>
+  <path fill="#16a34a" d="M26 48 H38 L32 60 Z"/>
+</svg>

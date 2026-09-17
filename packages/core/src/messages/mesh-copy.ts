@@ -170,6 +170,28 @@ export function secretaryColdStartBrief(): string {
 }
 
 /**
+ * Printed into the logs window left pane (plain operator shell).
+ * Right panes stay inbox-log + peer-queue tails.
+ */
+export function logsPaneWelcomeShell(): string {
+  return [
+    "echo ''",
+    "echo '══════════════════════════════════════════════════════'",
+    "echo ' seatmesh — logs (operator shell)'",
+    "echo '══════════════════════════════════════════════════════'",
+    "echo ' Left: run seatmesh here. Right: inbox + peer tails.'",
+    "echo '  npx seatmesh help'",
+    "echo '  npx seatmesh report'",
+    "echo '  npx seatmesh inbox'",
+    "echo ' Attach / resume any mesh:'",
+    "echo '       npx seatmesh sessions'",
+    "echo '       npx seatmesh start'",
+    "echo '══════════════════════════════════════════════════════'",
+    "echo ''",
+  ].join("\n");
+}
+
+/**
  * Printed into the manager pane on fresh `session up` / `start` (plain shell).
  * Operator runs whoami + switch from here — no agent CLI auto-launched on manager.
  */

@@ -49,7 +49,7 @@ export const LayoutSchema = z.object({
       secretaryWidthPct: z.number().int().min(25).max(65).optional(),
       /**
        * When to auto-repair coord panes (secretary) from mesh-agents.json.
-       * reload=false: never kill/relaunch live CLIs on `./sm.sh reload` (default).
+       * reload=false: never kill/relaunch live CLIs on `sm reload` (default).
        */
       coordSync: z
         .object({
@@ -68,7 +68,7 @@ export const LayoutSchema = z.object({
         .regex(/^\d+x\d+$/, "grid must be COLSxROWS e.g. 3x2")
         .default("3x2"),
       slots: z.number().int().min(1).max(12).default(6),
-      /** Off on cold start — manager runs `./sm.sh layout` to add worker grid. */
+      /** Off on cold start — manager runs `sm layout` to add worker grid. */
       enabled: z.boolean().default(false),
     })
     .default({ window: "workers", grid: "3x2", slots: 6, enabled: false })
@@ -84,7 +84,7 @@ export const LayoutSchema = z.object({
   minis: z
     .object({
       window: z.string().default("minis"),
-      /** Off on cold start — manager runs `./sm.sh layout` to add mini grid. */
+      /** Off on cold start — manager runs `sm layout` to add mini grid. */
       enabled: z.boolean().default(false),
       /** Equal grid: `2x2`, `4x2`, etc. `max` must equal cols*rows. */
       grid: z

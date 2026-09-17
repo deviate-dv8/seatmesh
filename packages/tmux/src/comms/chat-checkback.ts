@@ -74,7 +74,7 @@ export function armAfterToSlot(
   });
 }
 
-/** Default-on checkback for `./sm.sh peer <target> <msg>` (coordinator <-> coordinator/worker). */
+/** Default-on checkback for `sm peer <target> <msg>` (coordinator <-> coordinator/worker). */
 export function armAfterPeer(
   loaded: LoadedProfile,
   target: string,

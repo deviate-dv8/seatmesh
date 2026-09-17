@@ -241,3 +241,43 @@ export function injectAfterLaunch(
   }
   return { ok: false, detail: `brief failed on ${paneId}: ${lastErr}` };
 }
+
+/**
+ * One-shot brief for wave launch — no long waits. Caller round-robins panes
+ * so many OC composers can finish booting in parallel.
+ */
+export function tryBriefOnce(
+  loaded: LoadedProfile,
+  registry: ProviderRegistry,
+  target: string,
+  paneId: string,
+): { ok: boolean; ready: boolean; detail: string } {
+  const snap = capturePaneSnapshot(paneId);
+  if (!snap) return { ok: false, ready: false, detail: `no snapshot on ${paneId}` };
+  const prov = registry.detect(snap);
+  if (!prov) return { ok: false, ready: false, detail: `no live CLI on ${paneId}` };
+  if (prov.id === "opencode") {
+    const tail = snap.captureTail ?? "";
+    if (/esc exit shell mode/i.test(tail)) {
+      tmux(["send-keys", "-t", paneId, "Escape"]);
+      return { ok: false, ready: false, detail: "opencode shell-mode" };
+    }
+  }
+  if (!launchUiReady(registry, paneId, prov.id)) {
+    return { ok: false, ready: false, detail: `TUI not ready (${prov.id})` };
+  }
+  try {
+    injectColdStartDirect(loaded, registry, target);
+    sleepMs(500);
+    if (briefVisible(paneId, target)) {
+      return {
+        ok: true,
+        ready: true,
+        detail: `brief in ${paneId} provider=${prov.id} attempt=1`,
+      };
+    }
+    return { ok: false, ready: true, detail: "token missing from scrollback" };
+  } catch (e) {
+    return { ok: false, ready: true, detail: (e as Error).message };
+  }
+}

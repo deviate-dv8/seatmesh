@@ -3,7 +3,7 @@
 Planning doc — not part of the public handout. See [README.md](README.md).
 
 **Status:** proposal  
-**North star:** `npx seatmesh` / `./sm.sh` is a thin engine. All durable behavior
+**North star:** `npx seatmesh` / `sm` is a thin engine. All durable behavior
 lives in **dotdir `.sm/`** + `mesh-agents.json`. No project-specific branches in
 packages. OC-LIMIT, proxy recovery, coord repair, launch, comms prefixes,
 checkback — all config, not TypeScript magic.
@@ -44,7 +44,7 @@ moving seat files), `--name slug`.
 | File | Owns | Mutated by |
 |------|------|------------|
 | `.sm/mesh.config.yaml` | Layout, daemon poll/settle, connectivity recovery, comms prefixes, guards, roles dir, seats.root | Humans / `npx seatmesh init` |
-| `mesh-agents.json` (path from yaml `state.meshAgentsJson`) | Per-pane CLI type, resumeId/resumeCmd, minis grid override, runtime convention overrides | `./sm.sh save`, future switch/set/tag |
+| `mesh-agents.json` (path from yaml `state.meshAgentsJson`) | Per-pane CLI type, resumeId/resumeCmd, minis grid override, runtime convention overrides | `sm save`, future switch/set/tag |
 
 **Merge rule (canonical):**
 
@@ -56,7 +56,7 @@ moving seat files), `--name slug`.
 
 ```bash
 # Today (consumer wrapper — stays at workspace root):
-./sm.sh …   # → services/seatmesh --profile .sm/ (or services/seatmesh/profiles/consumer)
+sm …   # → services/seatmesh --profile .sm/ (or services/seatmesh/profiles/consumer)
 
 # Portable shape:
 seatmesh --profile /path/to/profile …
@@ -263,7 +263,7 @@ never has to remember.
 ```
 
 **TODO 4.1 (blocker for full json engine):** switch / set / tag / launch must
-**write** mesh-agents.json — not only `./sm.sh save` scrape.
+**write** mesh-agents.json — not only `sm save` scrape.
 
 ---
 
@@ -308,7 +308,7 @@ knobs, legacy `tmux-main-agents.json` write path.
 3. Border labels from `connectivity.recovery.labels` or comms section
 4. Tests: profile fixture with fake short timeouts
 
-**Verify:** `./sm.sh test` + forced limit fixture.
+**Verify:** `sm test` + forced limit fixture.
 
 ### Phase C — Launch + comms json
 
@@ -320,7 +320,7 @@ knobs, legacy `tmux-main-agents.json` write path.
 
 1. switch/set/tag persist to mesh-agents.json
 2. Deprecate tmux-main-agents.json reads for mesh session
-3. `./sm.sh save` remains scrape fallback
+3. `sm save` remains scrape fallback
 
 ### Phase E — CLI debloat
 
@@ -334,7 +334,7 @@ knobs, legacy `tmux-main-agents.json` write path.
 
 - [ ] Zero product-specific strings / `18887` / `cpe-proxy` in `packages/*`
       (only in `profiles/consumer/mesh.config.yaml`)
-- [ ] `./sm.sh reload` behavior fully explained by `coordSync` + `managerB` row
+- [ ] `sm reload` behavior fully explained by `coordSync` + `managerB` row
       — no hidden skip params
 - [ ] OC-LIMIT recovery timings changed only in yaml on a test profile
 - [ ] New profile directory + mesh-agents.json runs without code changes

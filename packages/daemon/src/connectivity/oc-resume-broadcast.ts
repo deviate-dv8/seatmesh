@@ -3,32 +3,40 @@ import { loadProfile, resolveDaemonPort, type LoadedProfile } from "@seat-mesh/c
 import type { ResumeWaveMeta } from "./oc-resume.js";
 
 /**
- * Direct host egress IP using the wired LAN interface (eno1) — NOT the CPE USB adapter.
- * Used for eth-fallback detection: if gost egresses via eno1 it's the same as this IP.
- * Returns null when eno1 is down/missing (no carrier) — callers treat null as "can't tell,
- * don't flag as eth fallback".
+ * Direct host egress IP — uses the first UP non-loopback interface that is NOT on the CPE
+ * LAN subnet (192.168.100.x) and NOT a docker/bridge interface.
+ * Falls back through eno1 → enx* (sorted) → wlo1 as last resort.
+ * Returns null when no usable interface found.
  */
 export function syncDirectIp(workspace: string): string | null {
-  // Try eno1 explicitly so we don't accidentally use the CPE USB adapter (enx*) which
-  // shares the same WAN IP as the carrier probe and would cause false-positive isViaEth.
+  // Auto-detect: pick first UP iface that isn't CPE-subnet or docker bridge.
+  // We shell out once to get the routing + bind in one shot.
   const r = spawnSync(
     "bash",
     [
       "-c",
-      // --interface eno1: fails fast if eno1 is down → empty output → null returned.
-      `env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy ` +
-        `curl --interface eno1 -4 -sS -m 12 https://api.ipify.org 2>/dev/null || true`,
+      // Try each candidate interface in preference order; stop on first that returns a valid IP.
+      // Exclude interfaces on 192.168.100.0/24 (CPE LAN) and loopback.
+      `env -u HTTPS_PROXY -u HTTP_PROXY -u https_proxy -u http_proxy -u ALL_PROXY -u all_proxy bash -c '
+        for iface in eno1 $(ip -o link show up | awk -F": " "{print \\$2}" | grep -v "^lo\\|^wlo\\|^docker\\|^br-\\|^veth"); do
+          ip=$(ip -4 addr show "$iface" 2>/dev/null | awk "/inet /{print \\$2}" | cut -d/ -f1 | head -1)
+          [ -z "$ip" ] && continue
+          echo "$ip" | grep -qE "^192\\.168\\.100\\." && continue
+          result=$(curl --interface "$iface" -4 -sS -m 10 https://api.ipify.org 2>/dev/null)
+          [ "$(printf "%s" "$result" | wc -c)" -ge 7 ] && echo "$result" && break
+        done
+      '`,
     ],
-    { cwd: workspace, encoding: "utf8", timeout: 20_000 },
+    { cwd: workspace, encoding: "utf8", timeout: 25_000 },
   );
   const ip = (r.stdout || "").trim();
   return ip.length >= 7 ? ip : null;
 }
 
 /**
- * via == eth means gost steers egress through the host wired LAN (eno1) instead of the CPE —
+ * via == eth means gost steers egress through the host wired LAN instead of the CPE —
  * not a real carrier rotation, so the caller must treat it as no carrier (ignore eth).
- * Returns false when eth is null (eno1 down/absent — CPE USB is not "eth fallback").
+ * Returns false when eth is null (no usable direct iface — CPE is not "eth fallback").
  */
 export function isViaEth(via: string | null, eth: string | null): boolean {
   return Boolean(via && eth && via === eth);
