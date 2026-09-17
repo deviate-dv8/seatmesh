@@ -109,7 +109,10 @@ export const MeshProfileSchema = z.object({
   providers: z
     .array(z.string().min(1))
     .default(["cursor-agent", "kiro", "claude", "opencode", "empty"]),
-  /** Agent kind → runner script (e.g. opencode → scripts/opencode-cpe.sh). */
+  /**
+   * Agent kinds: provider-emitted kindBase/kindExtensions ⊎ agents.kinds overlay.
+   * Legacy agents.runners shims onto kinds.*.launch.command.
+   */
   agents: AgentsConfigSchema.optional(),
   seats: z.object({
     root: z.string().default("seats"),

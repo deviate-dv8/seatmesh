@@ -10,7 +10,7 @@ import { extractOpenCodeSession, normalizeOpenCodeSessionId, waitForCli } from "
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { syncOpenCodePaneSession } from "./oc-session-sync.js";
-import { buildProfileLaunchCmd } from "./agent-launch.js";
+import { buildProfileLaunchCmd, kindsForLoaded } from "./agent-launch.js";
 import {
   isOpenCodeLaunch,
   registryForProfile,
@@ -216,13 +216,15 @@ function pasteLaunchIfNeeded(
   const liveProv = snap ? registry.detect(snap) : null;
   const detectId = liveProv?.id ?? "empty";
   const saved = seatAgentEntry(loaded, label);
+  const kinds = kindsForLoaded(loaded);
   const liveType = resolveOpenCodeHarnessType({
     detectId,
     savedType: saved?.type,
     resumeCmd: saved?.resume_cmd,
     snap,
+    kinds,
   });
-  const satisfyOpts = { savedType: saved?.type, resumeCmd: saved?.resume_cmd };
+  const satisfyOpts = { savedType: saved?.type, resumeCmd: saved?.resume_cmd, kinds };
   if (liveType !== "empty" && liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
     // OC/CPE already present — wait for composer (do NOT re-paste mid-boot).
     const live = waitForCli(registry, paneId, capturePaneSnapshot, {

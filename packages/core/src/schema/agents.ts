@@ -15,16 +15,24 @@ import { expandColumnAlias } from "./seat-kind.js";
  * base column id from the profile) + workers + minis.
  */
 
-export const CliTypeSchema = z.enum([
+/**
+ * Seat harness kind id (`opencode`, `oc-proxy`, custom extends…).
+ * Open string — validated at switch/launch against resolved agent kinds, not a closed enum.
+ * Legacy enum values remain valid; custom kinds (extends) are allowed.
+ */
+export const CliTypeSchema = z.string().min(1);
+
+export type CliType = z.infer<typeof CliTypeSchema>;
+
+/** Well-known builtin kind ids (documentation / completion seeds — not a schema gate). */
+export const BUILTIN_CLI_TYPE_IDS = [
   "agent",
   "claude",
   "kiro",
   "opencode",
   "oc-proxy",
   "empty",
-]);
-
-export type CliType = z.infer<typeof CliTypeSchema>;
+] as const;
 
 // -- Slot sub-schemas --------------------------------------------------
 

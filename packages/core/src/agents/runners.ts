@@ -1,5 +1,11 @@
 import path from "node:path";
 import { z } from "zod";
+import {
+  AgentKindsMapSchema,
+  launchCmdFromKind,
+  lookupResolvedKind,
+  type ResolvedAgentKind,
+} from "./kinds.js";
 
 const LAUNCH_PREFIX = "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor";
 
@@ -18,12 +24,14 @@ export const AgentRunnersMapSchema = z.record(z.string(), AgentRunnerSchema);
 
 export const AgentsConfigSchema = z
   .object({
-    /** kind → runner (e.g. oc-proxy: scripts/opencode-cpe.sh). */
-    runners: AgentRunnersMapSchema.default({}),
+    kinds: AgentKindsMapSchema.optional().default({}),
+    runners: AgentRunnersMapSchema.optional().default({}),
   })
   .default({});
 
 export type AgentsConfig = z.infer<typeof AgentsConfigSchema>;
+/** Loose input for profile patches / tests (defaults applied at parse). */
+export type AgentsConfigInput = z.input<typeof AgentsConfigSchema>;
 
 const BUILTIN_KINDS = new Set(["agent", "claude", "kiro", "opencode", "empty"]);
 
@@ -152,7 +160,13 @@ export function buildKindLaunchCmd(
   workspace: string,
   resumeId?: string | null,
   runners: Record<string, AgentRunnerEntry> = {},
+  /** When set, prefer resolved kind launch (provider JSON + profile overlay). */
+  kinds?: Record<string, ResolvedAgentKind>,
 ): string | null {
+  if (kinds) {
+    const resolved = lookupResolvedKind(kinds, kindRaw);
+    if (resolved) return launchCmdFromKind(resolved, workspace, resumeId);
+  }
   const custom = buildCustomKindLaunchCmd(kindRaw, workspace, resumeId, runners);
   if (custom !== undefined) return custom;
   return buildBuiltinLaunchCmd(kindRaw, workspace, resumeId);
@@ -160,7 +174,7 @@ export function buildKindLaunchCmd(
 
 /** Merge profile runners; `runners.opencode` aliases to oc-proxy when oc-proxy unset. */
 export function runnersFromProfile(
-  profile: { agents?: AgentsConfig } | undefined,
+  profile: { agents?: AgentsConfigInput } | undefined,
 ): Record<string, AgentRunnerEntry> {
   const raw = profile?.agents?.runners ?? {};
   const runners = { ...raw };

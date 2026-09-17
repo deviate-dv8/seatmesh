@@ -87,4 +87,12 @@ export const claudeProvider: AgentProvider = {
   humanDraft(pane: PaneSnapshot): string {
     return claudeInputDraft(pane.captureTail);
   },
+
+  kindBase() {
+    return {
+      provider: "claude",
+      aliases: ["cc"],
+      launch: { builtin: "claude" },
+    };
+  },
 };

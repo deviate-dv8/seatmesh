@@ -1,9 +1,14 @@
 import {
   createProviderRegistry,
+  kindsMapsFromAgentsConfig,
   normalizeAgentKind,
+  resolveAgentKinds,
   resolveUxConfig,
+  type AgentKindDef,
+  type AgentProvider,
   type MeshProfile,
   type ProviderRegistry,
+  type ResolvedAgentKind,
   type UxConfig,
 } from "@seat-mesh/core";
 import { cursorAgentProvider } from "./cursor-agent.js";
@@ -47,6 +52,44 @@ export function normalizeProviderEnableIds(raw: string[] | undefined): string[] 
     if (k !== entry.trim()) out.add(k);
   }
   return [...out];
+}
+
+/** Collect kindBase + kindExtensions from provider classes into a kinds map. */
+export function collectProviderKinds(
+  providers: AgentProvider[] = BUILTIN,
+): Record<string, AgentKindDef> {
+  const out: Record<string, AgentKindDef> = {};
+  for (const p of providers) {
+    if (p.kindBase) {
+      const base = p.kindBase();
+      // Seat harness id for cursor family is `agent` (switch/layout); provider id stays cursor-agent
+      const kindId = p.id === "cursor-agent" ? "agent" : p.id;
+      out[kindId] = {
+        ...base,
+        provider: base.provider ?? p.id,
+      };
+    }
+    for (const ext of p.kindExtensions?.() ?? []) {
+      const { id, ...rest } = ext;
+      out[id] = rest;
+    }
+  }
+  return out;
+}
+
+/** Provider-emitted kinds ⊎ profile.agents.kinds ⊎ runners shim. */
+export function resolveKindsForProfile(
+  profile: Pick<MeshProfile, "agents" | "providers">,
+): Record<string, ResolvedAgentKind> {
+  const enabled = normalizeProviderEnableIds(profile.providers);
+  const allow = enabled ? new Set(enabled) : null;
+  const providers = allow ? BUILTIN.filter((p) => allow.has(p.id)) : [...BUILTIN];
+  if (!providers.some((p) => p.id === "empty")) {
+    providers.push(emptyProvider);
+  }
+  const fromProviders = collectProviderKinds(providers);
+  const { fromProfile, runners } = kindsMapsFromAgentsConfig(profile.agents);
+  return resolveAgentKinds({ fromProviders, fromProfile, runners });
 }
 
 export function createBuiltinRegistry(

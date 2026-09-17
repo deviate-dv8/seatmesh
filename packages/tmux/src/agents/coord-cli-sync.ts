@@ -1,4 +1,15 @@
-import type { BaseColumn, LoadedProfile, PaneSnapshot, ProviderRegistry } from "@seat-mesh/core";
+import type {
+  BaseColumn,
+  LoadedProfile,
+  PaneSnapshot,
+  ProviderRegistry,
+  ResolvedAgentKind,
+} from "@seat-mesh/core";
+import {
+  entryWantsProxyRecovery,
+  kindProveMatches,
+  lookupResolvedKind,
+} from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import { resolveLiveTmuxSession } from "../lib/live-session.js";
 import { coordPaneForRole } from "../lib/pane-meta.js";
@@ -6,7 +17,7 @@ import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { baseColumns, cliForBaseColumn } from "../session/base-layout.js";
 import { saveMeshSession } from "../session/save-session.js";
 import { loadLaunchState, resolveLaunchCmd, type AgentsStateFile, type PaneAgentState } from "./agents-state.js";
-import { buildProfileLaunchCmd } from "./agent-launch.js";
+import { buildProfileLaunchCmd, kindsForLoaded } from "./agent-launch.js";
 import { tryLaunchPane, type LaunchResult } from "./launch.js";
 import { registryForProfile } from "./launch-verify.js";
 import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
@@ -107,6 +118,7 @@ export function paneNeedsProfileCliFromSnap(
   registry: ProviderRegistry,
   snap: PaneSnapshot,
   profileCli: string,
+  kinds?: Record<string, ResolvedAgentKind>,
 ): boolean {
   const prov = registry.detect(snap);
   if (!prov) {
@@ -117,9 +129,9 @@ export function paneNeedsProfileCliFromSnap(
     detectId: prov.id,
     savedType: profileCli,
     snap,
+    kinds,
   });
-  // oc-proxy wanted + live CPE / configured oc-proxy with OC UI → no repair.
-  if (liveHarnessSatisfiesWanted(liveType, profileCli, snap, { savedType: profileCli })) {
+  if (liveHarnessSatisfiesWanted(liveType, profileCli, snap, { savedType: profileCli, kinds })) {
     return false;
   }
   if (liveType === "empty") return true;
@@ -132,8 +144,9 @@ export function shouldLaunchCoordPane(
   profileCli: string,
   trigger: CoordSyncTrigger,
   disruptLiveOnReload: boolean,
+  kinds?: Record<string, ResolvedAgentKind>,
 ): boolean {
-  if (!paneNeedsProfileCliFromSnap(registry, snap, profileCli)) return false;
+  if (!paneNeedsProfileCliFromSnap(registry, snap, profileCli, kinds)) return false;
   if (trigger !== "reload" || disruptLiveOnReload) return true;
   const prov = registry.detect(snap);
   const liveType = prov ? providerIdToHarnessType(prov.id) : "empty";
@@ -150,12 +163,19 @@ function launchCoordRole(
 ): LaunchResult {
   const profileCli = profileCliForRole(loaded, state, role);
   const saved = savedCoordEntry(state, role);
+  const kinds = kindsForLoaded(loaded);
   const harnessType = profileCli === "cursor-agent" ? "agent" : profileCli;
+  const wanted = lookupResolvedKind(kinds, harnessType);
   const keepResume =
     Boolean(saved) &&
     (saved!.type === harnessType ||
-      (harnessType === "oc-proxy" &&
-        (saved!.type === "opencode" || Boolean(saved!.resume_cmd?.includes("opencode-cpe")))));
+      (wanted?.prove != null &&
+        (saved!.type === wanted.provider ||
+          kindProveMatches(wanted, { resumeCmd: saved!.resume_cmd }) ||
+          entryWantsProxyRecovery(
+            { type: saved!.type, resume_cmd: saved!.resume_cmd ?? null },
+            kinds,
+          ))));
   const entry = {
     type: harnessType,
     resume_id: keepResume ? (saved?.resume_id ?? null) : null,
@@ -188,6 +208,7 @@ export function syncCoordClisFromProfile(
 
   const disruptLiveOnReload = coordSyncDisruptLiveOnReload(loaded, state.conventions);
   const registry = registryForProfile(loaded);
+  const kinds = kindsForLoaded(loaded);
   const results: LaunchResult[] = [];
 
   for (const role of coordRepairRoles(loaded)) {
@@ -200,7 +221,7 @@ export function syncCoordClisFromProfile(
     const snap = capturePaneSnapshot(pane);
     if (
       snap &&
-      shouldLaunchCoordPane(registry, snap, profileCli, trigger, disruptLiveOnReload)
+      shouldLaunchCoordPane(registry, snap, profileCli, trigger, disruptLiveOnReload, kinds)
     ) {
       results.push(launchCoordRole(loaded, state, role, pane));
     }

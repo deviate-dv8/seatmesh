@@ -1,73 +1,63 @@
-import type { PaneSnapshot } from "@seat-mesh/core";
-import { cmdlines, matchAny } from "@seat-mesh/providers";
-import { isOpenCodeCpeResumeCmd } from "../session/save-session.js";
+import type { PaneSnapshot, ResolvedAgentKind } from "@seat-mesh/core";
+import {
+  liveKindSatisfiesWanted,
+  resolveLiveHarnessKind,
+} from "@seat-mesh/core";
+import { cmdlines } from "@seat-mesh/providers";
 
 /**
- * Live provider detect always returns `opencode` for CPE-wrapped OC (child
- * process is bare opencode with HTTPS_PROXY). Without this, tryLaunchPane /
- * coord-sync see liveType=opencode vs wanted=oc-proxy and stopLiveCli — panes
- * "kill themselves".
+ * Live harness labeling + satisfy for OpenCode family extensions (CPE, etc.).
+ * Logic lives in `@seat-mesh/core` (kind prove/satisfy). This module keeps the
+ * historical API and optional kinds map from the profile.
  */
 
 export function cmdlineLooksLikeOcProxy(snap: PaneSnapshot | null | undefined): boolean {
   if (!snap) return false;
-  return matchAny(cmdlines(snap), [
-    /opencode-cpe\.sh/i,
-    /HTTPS_PROXY=.*18887/i,
-    /HTTP_PROXY=.*18887/i,
-  ]);
+  return cmdlines(snap).some((l) =>
+    /opencode-cpe\.sh|HTTPS_PROXY=.*18887|HTTP_PROXY=.*18887/i.test(l),
+  );
 }
 
-function ocUiLive(snap: PaneSnapshot | null | undefined): boolean {
-  if (!snap) return false;
-  if (snap.options?.mesh_oc_session?.trim()) return true;
-  return /ctrl\+p commands|Build auto\s+·|OpenCode\s+\d/i.test(snap.captureTail ?? "");
-}
-
-/** Prefer mesh-agents / CPE proof over raw detect id for OpenCode harness label. */
+/** Prefer mesh-agents / prove evidence over raw detect id for harness label. */
 export function resolveOpenCodeHarnessType(input: {
   detectId?: string | null;
   savedType?: string | null;
   resumeCmd?: string | null;
   snap?: PaneSnapshot | null;
+  kinds?: Record<string, ResolvedAgentKind>;
 }): string {
-  const detect = input.detectId ?? "empty";
-  if (detect && detect !== "opencode" && detect !== "empty") {
-    return detect === "cursor-agent" ? "agent" : detect;
-  }
-  if (
-    input.savedType === "oc-proxy" ||
-    isOpenCodeCpeResumeCmd(input.resumeCmd) ||
-    cmdlineLooksLikeOcProxy(input.snap)
-  ) {
-    return "oc-proxy";
-  }
-  if (detect === "opencode") return "opencode";
-  return detect || "empty";
+  return resolveLiveHarnessKind({
+    detectId: input.detectId,
+    savedType: input.savedType,
+    resumeCmd: input.resumeCmd,
+    snap: input.snap,
+    cmdlines: input.snap ? cmdlines(input.snap) : undefined,
+    kinds: input.kinds,
+  });
 }
 
 /**
  * True when we must NOT kill/relaunch: live pane already satisfies wanted type.
- * CPE live (detect=opencode) + mesh-agents oc-proxy / cpe cmdline → satisfies oc-proxy.
  */
 export function liveHarnessSatisfiesWanted(
   liveType: string,
   wantedType: string,
   snap?: PaneSnapshot | null,
-  opts?: { savedType?: string | null; resumeCmd?: string | null },
+  opts?: {
+    savedType?: string | null;
+    resumeCmd?: string | null;
+    kinds?: Record<string, ResolvedAgentKind>;
+  },
 ): boolean {
-  if (!wantedType || wantedType === "empty") return liveType === "empty";
-  if (liveType === wantedType) return true;
-  if (wantedType === "oc-proxy" && liveType === "opencode") {
-    if (cmdlineLooksLikeOcProxy(snap)) return true;
-    // Seat is configured oc-proxy and OC UI is up — never kill as "wrong provider".
-    if (
-      (opts?.savedType === "oc-proxy" || isOpenCodeCpeResumeCmd(opts?.resumeCmd)) &&
-      ocUiLive(snap)
-    ) {
-      return true;
-    }
-  }
-  if (wantedType === "opencode" && liveType === "oc-proxy") return false;
-  return false;
+  return liveKindSatisfiesWanted(
+    liveType,
+    wantedType,
+    {
+      snap,
+      cmdlines: snap ? cmdlines(snap) : undefined,
+      resumeCmd: opts?.resumeCmd,
+    },
+    opts?.kinds,
+    { savedType: opts?.savedType, resumeCmd: opts?.resumeCmd },
+  );
 }

@@ -11,6 +11,8 @@ export * from "./layout/stack.js";
 export * from "./runtime/mesh-state-merge.js";
 export * from "./schema/agents.js";
 export * from "./agents/runners.js";
+export * from "./agents/kinds.js";
+export * from "./agents/harness-satisfy.js";
 export * from "./providers/types.js";
 export * from "./providers/registry.js";
 export * from "./queue/types.js";

@@ -3,6 +3,7 @@ import { composerFromCapture } from "@seat-mesh/providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { seatAgentEntry } from "../agents/agents-state.js";
+import { kindsForLoaded } from "../agents/agent-launch.js";
 import { resolveOpenCodeHarnessType } from "../agents/oc-proxy-live.js";
 
 export type PaneSurfaceKind = "agent" | "terminal" | "unknown";
@@ -85,11 +86,13 @@ export function inspectPaneKind(
   const mini = snap.options.mesh_mini || row.mini || "";
   const seat = seatLabel(role, slot === "-" ? "" : slot, mini);
   const saved = seatAgentEntry(loaded, seat);
+  const kinds = kindsForLoaded(loaded);
   const providerId = resolveOpenCodeHarnessType({
     detectId: detectId === "unknown" ? "empty" : detectId,
     savedType: saved?.type,
     resumeCmd: saved?.resume_cmd,
     snap,
+    kinds,
   });
   const reportProvider = providerId === "empty" ? detectId : providerId;
   const composer = composerFromCapture(snap, detectId === "unknown" ? "empty" : detectId);

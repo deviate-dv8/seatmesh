@@ -5,10 +5,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadProfile, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
+import { loadProfile, entryWantsProxyRecovery, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
-  isOpenCodeCpeResumeCmd,
+  kindsForLoaded,
   listMeshMonitorPanes,
   loadLaunchState,
   resolveLaunchCmd,
@@ -51,16 +51,15 @@ export interface OcProxyAtomicsResult {
 
 function wantOcProxy(
   entry: { type?: string; resume_cmd?: string | null } | null,
-  paneId?: string,
+  paneId: string | undefined,
+  kinds: ReturnType<typeof kindsForLoaded>,
 ): boolean {
   if (!entry) return false;
-  // Honour operator-set skip flag — lets Cursor / non-oc panes survive atomics.
   if (paneId) {
     const skip = tmux(["show-options", "-p", "-t", paneId, "-v", "@mesh_atomics_skip"]).out?.trim();
     if (skip === "1" || skip === "true") return false;
   }
-  if (entry.type === "oc-proxy") return true;
-  return isOpenCodeCpeResumeCmd(entry.resume_cmd);
+  return entryWantsProxyRecovery(entry, kinds);
 }
 
 function paneSes(
@@ -98,11 +97,12 @@ export function recordOcProxySeats(
   const panes = listMeshMonitorPanes(session, baseWindow, workersWindow, minisWindow);
   const mesh = opts.mesh ?? loaded.profile.name ?? "mesh";
   const profileDir = opts.profileDir ?? loaded.profileDir;
+  const kinds = kindsForLoaded(loaded);
   const seats: OcProxyAtomicSeat[] = [];
   for (const p of panes) {
     if (!p.label) continue;
     const entry = seatAgentEntry(loaded, p.label, state);
-    if (!wantOcProxy(entry, p.paneId)) continue;
+    if (!wantOcProxy(entry, p.paneId, kinds)) continue;
     const { ses, source } = paneSes(p.paneId, entry);
     seats.push({
       mesh,

@@ -71,4 +71,12 @@ export const cursorAgentProvider: AgentProvider = {
   humanDraft(pane: PaneSnapshot): string {
     return agentInputDraft(pane.captureTail, pane.captureTailAnsi);
   },
+
+  kindBase() {
+    return {
+      provider: "cursor-agent",
+      aliases: ["cursor", "cursor-agent"],
+      launch: { builtin: "agent" },
+    };
+  },
 };

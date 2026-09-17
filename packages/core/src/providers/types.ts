@@ -85,6 +85,21 @@ export interface PromptRecording {
   scrapePromptTurn(pane: PaneSnapshot): PromptCapture | null;
 }
 
+/** JSON kind document emitted by a provider (see agents/kinds.ts). */
+export interface ProviderKindBase {
+  extends?: string;
+  provider?: string;
+  aliases?: string[];
+  launch?:
+    | { builtin: string }
+    | { command: string; sessionFlag?: string }
+    | null;
+  prove?: { cmdline?: string[]; resumeCmd?: string[] };
+  satisfy?: { whenProvider?: string; requireProve?: boolean };
+  recovery?: { onProxyUp?: boolean; continueCopy?: string };
+  [key: string]: unknown;
+}
+
 export interface AgentProvider extends PromptRecording {
   id: string;
   detect(pane: PaneSnapshot): Detection | null;
@@ -101,6 +116,13 @@ export interface AgentProvider extends PromptRecording {
    */
   humanDraft?(pane: PaneSnapshot): string;
   limits?: LimitDetector[];
+  /**
+   * Auto-built base kind JSON for this family (`kinds[id]`). Meshes overlay via
+   * `agents.kinds` — do not hand-duplicate in CliType enums.
+   */
+  kindBase?(): ProviderKindBase;
+  /** First-party extensions (e.g. oc-proxy extends opencode). */
+  kindExtensions?(): Array<ProviderKindBase & { id: string }>;
 }
 
 export interface ProviderRegistry {

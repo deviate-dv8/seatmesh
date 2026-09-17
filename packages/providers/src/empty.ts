@@ -51,4 +51,11 @@ export const emptyProvider: AgentProvider = {
   scrapePromptTurn() {
     return null;
   },
+
+  kindBase() {
+    return {
+      provider: "empty",
+      launch: null,
+    };
+  },
 };

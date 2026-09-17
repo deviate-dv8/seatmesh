@@ -1,9 +1,15 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import {
+  continueCopyForKind,
+  entryWantsProxyRecovery,
+  lookupResolvedKind,
+  type LoadedProfile,
+  type ProviderRegistry,
+} from "@seat-mesh/core";
 import {
   capturePaneSnapshot,
   injectToPane,
-  isOpenCodeCpeResumeCmd,
+  kindsForLoaded,
   listMeshMonitorPanes,
   loadLaunchState,
   pasteHarnessLaunchCmd,
@@ -16,19 +22,13 @@ import {
   verifyHarnessAfterPaste,
 } from "@seat-mesh/tmux";
 
-/** Direct composer paste — oc-proxy recovery is outside mesh-inbox/peer. */
+/** Fallback CONTINUE when kind.recovery.continueCopy unset. */
 export const OC_PROXY_CONTINUE =
-  "CONTINUE after oc-proxy revive — finish open TASKS. Stay on oc-proxy (opencode-cpe / :18887). Do not wait for operator.";
+  "CONTINUE after CPE revive — finish open TASKS. Stay on CPE OpenCode (opencode-cpe / :18887). Do not wait for operator.";
 
 /** Atomic 4 — OrcaRouter insufficient_user_quota blip (not CPE reboot). */
 export const OC_CREDIT_CONTINUE =
-  "CONTINUE — OrcaRouter credit gate blipped (insufficient_user_quota). Retry the last turn. Stay on oc-proxy (opencode-cpe / :18887).";
-
-function isOcProxySeat(entry: { type?: string; resume_cmd?: string | null } | null): boolean {
-  if (!entry) return false;
-  if (entry.type === "oc-proxy") return true;
-  return isOpenCodeCpeResumeCmd(entry.resume_cmd);
-}
+  "CONTINUE — OrcaRouter credit gate blipped (insufficient_user_quota). Retry the last turn. Stay on CPE OpenCode (opencode-cpe / :18887).";
 
 function sleepMs(ms: number): void {
   if (ms <= 0) return;
@@ -36,8 +36,9 @@ function sleepMs(ms: number): void {
 }
 
 /**
- * After oc-reset kills CPE OpenCode: paste all oc-proxy seats first (parallel boot),
+ * After oc-reset kills CPE OpenCode: paste recovery seats first (parallel boot),
  * then round-robin briefs + CONTINUE. Avoids sequential wait-per-pane.
+ * Seat selection = kind.recovery.onProxyUp (oc-proxy extends opencode by default).
  */
 export function relaunchOcProxyAfterReset(
   loaded: LoadedProfile,
@@ -51,17 +52,22 @@ export function relaunchOcProxyAfterReset(
   const state = loadLaunchState(loaded);
   const panes = listMeshMonitorPanes(session, baseWindow, workersWindow, minisWindow);
   const reg = registry ?? registryForProfile(loaded);
-  const jobs: Array<{ seatId: string; paneId: string; cmd: string }> = [];
+  const kinds = kindsForLoaded(loaded);
+  const jobs: Array<{ seatId: string; paneId: string; cmd: string; harnessType: string; continueMsg: string }> =
+    [];
 
   for (const p of panes) {
     const seatId = p.label;
     if (!seatId) continue;
     const entry = seatAgentEntry(loaded, seatId, state);
-    if (!isOcProxySeat(entry)) continue;
+    if (!entryWantsProxyRecovery(entry, kinds)) continue;
+    const harnessType = entry?.type && lookupResolvedKind(kinds, entry.type) ? entry.type : "oc-proxy";
+    const kind = lookupResolvedKind(kinds, harnessType);
+    const continueMsg = continueCopyForKind(kind, OC_PROXY_CONTINUE);
     const cmd =
       resolveLaunchCmd(
         {
-          type: "oc-proxy",
+          type: harnessType,
           resume_id: entry?.resume_id ?? null,
           resume_cmd: entry?.resume_cmd ?? null,
         },
@@ -72,19 +78,23 @@ export function relaunchOcProxyAfterReset(
       log?.(`OC-RELAUNCH skip ${seatId}: no launch cmd`);
       continue;
     }
-    jobs.push({ seatId, paneId: p.paneId, cmd });
+    jobs.push({ seatId, paneId: p.paneId, cmd, harnessType, continueMsg });
   }
 
   const total = jobs.length;
   if (total === 0) return { sent: 0, total: 0, sentPaneIds: [] };
 
-  // Phase 1: paste every seat quickly so OC boots in parallel.
   log?.(`OC-RELAUNCH paste wave n=${total}`);
   for (const job of jobs) {
     try {
-      pasteHarnessLaunchCmd(loaded, job.paneId, "oc-proxy", job.cmd);
-      const verified = verifyHarnessAfterPaste(loaded, reg, job.paneId, "oc-proxy", job.cmd, () =>
-        pasteHarnessLaunchCmd(loaded, job.paneId, "oc-proxy", job.cmd),
+      pasteHarnessLaunchCmd(loaded, job.paneId, job.harnessType, job.cmd);
+      const verified = verifyHarnessAfterPaste(
+        loaded,
+        reg,
+        job.paneId,
+        job.harnessType,
+        job.cmd,
+        () => pasteHarnessLaunchCmd(loaded, job.paneId, job.harnessType, job.cmd),
       );
       if (!verified.ok) {
         log?.(`OC-RELAUNCH paste-verify soft ${job.seatId}: ${verified.reason}`);
@@ -94,7 +104,6 @@ export function relaunchOcProxyAfterReset(
     }
   }
 
-  // Phase 2: round-robin brief + CONTINUE (panes finish boot together).
   const pending = new Map(
     jobs.map((j) => [j.paneId, { ...j, attempts: 0, done: false }]),
   );
@@ -107,8 +116,7 @@ export function relaunchOcProxyAfterReset(
         if (brief.ready) job.attempts += 1;
         if (job.attempts >= 4) {
           log?.(`OC-RELAUNCH brief soft-fail ${job.seatId}: ${brief.detail}`);
-          // Still CONTINUE if composer is up — brief is best-effort.
-          if (directInjectContinue(reg, paneId, OC_PROXY_CONTINUE)) {
+          if (directInjectContinue(reg, paneId, job.continueMsg)) {
             sentPaneIds.push(paneId);
             log?.(`OC-RELAUNCH ${job.seatId} ${paneId} (continue-without-brief)`);
           }
@@ -117,7 +125,7 @@ export function relaunchOcProxyAfterReset(
         continue;
       }
       log?.(`OC-RELAUNCH brief ok ${job.seatId}: ${brief.detail}`);
-      if (directInjectContinue(reg, paneId, OC_PROXY_CONTINUE)) {
+      if (directInjectContinue(reg, paneId, job.continueMsg)) {
         sentPaneIds.push(paneId);
         log?.(`OC-RELAUNCH ${job.seatId} ${paneId}`);
       } else {
@@ -129,7 +137,7 @@ export function relaunchOcProxyAfterReset(
   }
   for (const [paneId, job] of pending) {
     log?.(`OC-RELAUNCH timeout ${job.seatId} ${paneId}`);
-    if (directInjectContinue(reg, paneId, OC_PROXY_CONTINUE)) {
+    if (directInjectContinue(reg, paneId, job.continueMsg)) {
       sentPaneIds.push(paneId);
     }
   }

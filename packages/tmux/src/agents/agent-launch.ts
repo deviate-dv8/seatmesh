@@ -1,11 +1,14 @@
 import {
   buildKindLaunchCmd,
   defaultCliForKind,
+  knownAgentKindIds,
   runnersFromProfile,
   seatKindFromId,
   type AgentRunnerEntry,
   type LoadedProfile,
+  type ResolvedAgentKind,
 } from "@seat-mesh/core";
+import { resolveKindsForProfile } from "@seat-mesh/providers";
 import { cliForBaseColumn } from "../session/base-layout.js";
 import { loadLaunchState } from "./agents-state.js";
 import { buildAgentLaunchCmd } from "./agent-builder.js";
@@ -17,14 +20,20 @@ import {
 import type { PaneRow } from "../lib/resolve-pane.js";
 import { tmux } from "../lib/tmux-run.js";
 
-/** Profile-aware launch one-liner (oc-proxy + custom runners). */
+/** Resolved kinds for this profile (provider kindBase ⊎ overlay ⊎ runners). */
+export function kindsForLoaded(loaded: LoadedProfile): Record<string, ResolvedAgentKind> {
+  return resolveKindsForProfile(loaded.profile);
+}
+
+/** Profile-aware launch one-liner (kinds JSON + runners shim). */
 export function buildProfileLaunchCmd(
   type: string,
   loaded: LoadedProfile,
   resumeId?: string | null,
 ): string | null {
   const runners = runnersFromProfile(loaded.profile);
-  return buildLaunchCmdWithRunners(type, loaded.workspace, resumeId, runners);
+  const kinds = kindsForLoaded(loaded);
+  return buildLaunchCmdWithRunners(type, loaded.workspace, resumeId, runners, kinds);
 }
 
 export function buildLaunchCmdWithRunners(
@@ -32,10 +41,16 @@ export function buildLaunchCmdWithRunners(
   workspace: string,
   resumeId?: string | null,
   runners: Record<string, AgentRunnerEntry> = {},
+  kinds?: Record<string, ResolvedAgentKind>,
 ): string | null {
-  const custom = buildKindLaunchCmd(type, workspace, resumeId, runners);
+  const custom = buildKindLaunchCmd(type, workspace, resumeId, runners, kinds);
   if (custom !== undefined && custom !== null) return custom;
   return buildAgentLaunchCmd(type, workspace, resumeId);
+}
+
+/** Known switch/set kind ids for this profile (open — includes custom extends). */
+export function knownHarnessKinds(loaded: LoadedProfile): Set<string> {
+  return knownAgentKindIds(kindsForLoaded(loaded));
 }
 
 /** Profile + mesh default harness type for any seat id. */

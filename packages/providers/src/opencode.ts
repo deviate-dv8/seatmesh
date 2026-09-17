@@ -107,4 +107,38 @@ export const opencodeProvider: AgentProvider = {
   humanDraft(pane: PaneSnapshot): string {
     return opencodeInputDraft(pane.captureTail);
   },
+
+  kindBase() {
+    return {
+      provider: "opencode",
+      aliases: ["oc"],
+      launch: { builtin: "opencode" },
+    };
+  },
+
+  kindExtensions() {
+    return [
+      {
+        id: "oc-proxy",
+        extends: "opencode",
+        launch: {
+          command: "scripts/opencode-cpe.sh",
+          sessionFlag: "--session",
+        },
+        prove: {
+          cmdline: ["opencode-cpe\\.sh", "HTTPS_PROXY=.*18887", "HTTP_PROXY=.*18887"],
+          resumeCmd: ["opencode-cpe\\.sh"],
+        },
+        satisfy: {
+          whenProvider: "opencode",
+          requireProve: true,
+        },
+        recovery: {
+          onProxyUp: true,
+          continueCopy:
+            "CONTINUE after CPE revive — finish open TASKS. Stay on CPE OpenCode (opencode-cpe / :18887).",
+        },
+      },
+    ];
+  },
 };

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
 import { normalizeAgentKind, portsForSlot } from "@seat-mesh/core";
-import { resolveSeatLaunchCmd } from "./agent-launch.js";
+import { knownHarnessKinds, kindsForLoaded, resolveSeatLaunchCmd } from "./agent-launch.js";
 import { withPaneInputEnabled } from "../inject/inject.js";
 import { pasteHarnessLaunchCmd, pasteLaunchCmd } from "./launch.js";
 import { isOpenCodeLaunch, verifyHarnessAfterPaste } from "./launch-verify.js";
@@ -17,8 +17,6 @@ import { tmux } from "../lib/tmux-run.js";
 import { isSecretaryKind, seatKindFromId } from "@seat-mesh/core";
 import { enqueueColdStart } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
-
-const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "oc-proxy", "empty"]);
 
 function normalizeType(t: string): string {
   return normalizeAgentKind(t);
@@ -69,8 +67,10 @@ export function runSwitch(
 ): void {
   const session = loaded.sessionName;
   const newType = normalizeType(newTypeRaw);
-  if (!CLI_TYPES.has(newType)) {
-    throw new Error(`bad type: ${newTypeRaw} (want agent|kiro|claude|opencode|oc-proxy|oc|empty)`);
+  const known = knownHarnessKinds(loaded);
+  if (!known.has(newType)) {
+    const sample = [...known].sort().slice(0, 12).join("|");
+    throw new Error(`bad type: ${newTypeRaw} (known: ${sample}${known.size > 12 ? "|…" : ""})`);
   }
 
   if (target === "here" || target === "self") {
@@ -106,11 +106,13 @@ export function runSwitch(
   const snapBefore = capturePaneSnapshot(paneId);
   const oldProv = snapBefore ? registry.detect(snapBefore) : null;
   const savedBefore = seatAgentEntry(loaded, target);
+  const kindsMap = kindsForLoaded(loaded);
   const oldType = resolveOpenCodeHarnessType({
     detectId: oldProv?.id ?? "empty",
     savedType: savedBefore?.type,
     resumeCmd: savedBefore?.resume_cmd,
     snap: snapBefore,
+    kinds: kindsMap,
   });
   const oldDet = oldProv && snapBefore ? oldProv.detect(snapBefore) : null;
   const fresh = opts.fresh ?? true;
@@ -124,6 +126,7 @@ export function runSwitch(
     (liveHarnessSatisfiesWanted(oldType, newType, snapBefore, {
       savedType: savedBefore?.type,
       resumeCmd: savedBefore?.resume_cmd,
+      kinds: kindsMap,
     }) ||
       oldType === "empty")
   ) {

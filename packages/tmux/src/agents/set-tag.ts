@@ -1,29 +1,25 @@
 import type { CliType, LoadedProfile, MeshAgents, ProviderRegistry } from "@seat-mesh/core";
-import { MeshAgentsSchema, isManagerKind, portsForSlot } from "@seat-mesh/core";
-import { buildProfileLaunchCmd } from "./agent-launch.js";
+import { MeshAgentsSchema, isManagerKind, normalizeAgentKind, portsForSlot } from "@seat-mesh/core";
+import { buildProfileLaunchCmd, knownHarnessKinds } from "./agent-launch.js";
 import { loadMeshAgentsForProfile, meshAgentsJsonPath } from "./agents-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { resolvePaneTarget, type PaneRow } from "../lib/resolve-pane.js";
 import { saveMeshAgentsFile } from "../session/save-session.js";
 import { extractResumeIdAuto } from "./resume-extract.js";
 
-const CLI_TYPES = new Set(["agent", "kiro", "claude", "opencode", "oc-proxy", "empty"]);
-
-function normalizeType(t: string): CliType {
-  const x = t.trim().toLowerCase();
-  if (x === "cursor-agent") return "agent";
-  if (x === "oc") return "opencode";
-  if (x === "ocproxy" || x === "oc-proxy" || x === "oc_proxy") return "oc-proxy";
-  if (!CLI_TYPES.has(x)) {
-    throw new Error(`bad type: ${t} (want agent|kiro|claude|opencode|oc-proxy|oc|empty)`);
+function normalizeType(loaded: LoadedProfile, t: string): CliType {
+  const x = normalizeAgentKind(t);
+  const known = knownHarnessKinds(loaded);
+  if (!known.has(x)) {
+    const sample = [...known].sort().slice(0, 12).join("|");
+    throw new Error(`bad type: ${t} (known: ${sample}${known.size > 12 ? "|…" : ""})`);
   }
-  return x as CliType;
+  return x;
 }
 
 function providerIdToType(id: string): CliType {
   if (id === "cursor-agent") return "agent";
-  if (CLI_TYPES.has(id)) return id as CliType;
-  return "empty";
+  return id;
 }
 
 function detectLiveType(
@@ -246,7 +242,7 @@ export function runSet(
   target: string,
   typeRaw: string,
 ): void {
-  const newType = normalizeType(typeRaw);
+  const newType = normalizeType(loaded, typeRaw);
   const resolved = resolvePaneTarget(target, loaded);
   if ("error" in resolved) throw new Error(resolved.error);
 

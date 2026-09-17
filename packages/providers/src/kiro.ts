@@ -55,4 +55,11 @@ export const kiroProvider: AgentProvider = {
   scrapePromptTurn(pane) {
     return scrapePromptTurnGeneric(pane);
   },
+
+  kindBase() {
+    return {
+      provider: "kiro",
+      launch: { builtin: "kiro" },
+    };
+  },
 };
