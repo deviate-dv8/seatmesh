@@ -44,7 +44,7 @@ describe("requireRole / requireCoordRole", () => {
     expect(() => requireRole(loaded, ["manager"], "mini spawn")).toThrow("__exit__");
     expect(exitCode()).toBe(2);
     expect(errors[0]).toBe("UNAUTHORIZED: mini spawn requires role=manager (you_are=worker)");
-    expect(errors[1]).toBe("hint: seatmesh agent");
+    expect(errors[1]).toBe("hint: seatmesh --profile .sm agent");
   });
 
   it("requireCoordRole allows manager-2 and secretary, denies worker", () => {
@@ -85,6 +85,20 @@ describe("requireRole / requireCoordRole", () => {
       expect(errors[0]).toContain("UNAUTHORIZED: inbox restart");
       expect(errors[0]).toContain("you_are=manager-2");
       expect(errors[1]).toContain("ask manager or secretary");
+    } finally {
+      if (prev === undefined) delete process.env.TMUX_PANE;
+      else process.env.TMUX_PANE = prev;
+    }
+  });
+
+  it("requireInboxLifecycleRole allows cross-mesh TMUX_PANE (pane not in this profile)", () => {
+    const prev = process.env.TMUX_PANE;
+    process.env.TMUX_PANE = "%32";
+    try {
+      vi.mocked(runWhoami).mockImplementation(() => {
+        throw new Error("pane %32 not found");
+      });
+      expect(() => requireInboxLifecycleRole(loaded, "inbox restart")).not.toThrow();
     } finally {
       if (prev === undefined) delete process.env.TMUX_PANE;
       else process.env.TMUX_PANE = prev;
