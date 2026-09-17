@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   chatRoomConfigForLoaded,
+  entryWantsProxyRecovery,
   formatAckOpenLine,
   listRooms,
   loadRoomProfile,
@@ -22,6 +23,7 @@ const m = (sub: string) => seatmeshCmd(sub);
 import type { WhoamiResult } from "./whoami.js";
 import { hubRetrievalWhoamiLines } from "./hub-lines.js";
 import { seatAgentEntry } from "./agents-state.js";
+import { kindsForLoaded } from "./agent-launch.js";
 
 interface CheckbackRow {
   id: string;
@@ -172,15 +174,13 @@ export function buildWhoamiContextLines(
               : w.role || agentId
           : w.role || agentId;
     const entry = seatAgentEntry(loaded, seatKey);
-    const cli =
-      entry?.type === "oc-proxy" ||
-      (entry?.resume_cmd && /opencode-cpe\.sh/i.test(entry.resume_cmd))
-        ? "oc-proxy"
-        : entry?.type || "unknown";
+    const kinds = kindsForLoaded(loaded);
+    const cpe = entryWantsProxyRecovery(entry, kinds);
+    const cli = cpe ? (entry?.type && entry.type !== "opencode" ? entry.type : "oc-proxy") : entry?.type || "unknown";
     lines.push(`cli=${cli}`);
-    if (cli === "oc-proxy") {
+    if (cpe) {
       lines.push(
-        "cli_note=oc-proxy (CPE :18887) — do NOT switch to bare opencode; that kills the proxied session",
+        `cli_note=${cli} extends opencode (CPE :18887) — do NOT switch to bare opencode; that kills the proxied session`,
       );
     }
     if (entry?.resume_id) lines.push(`oc_session=${entry.resume_id}`);

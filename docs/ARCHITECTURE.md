@@ -193,81 +193,88 @@ a failed `assign` exit code does not mean the seat has no hub — run `whoami` o
 ## Agent CLI: three layers (do not confuse them)
 
 Adding a name to yaml — or a runner script — is **not** a finished feature. Three
-separate layers must agree. Today they often do not unless you touch all of them.
+separate layers must agree.
 
 | Layer | What it controls | Where it lives | Config-only? |
 |-------|------------------|----------------|--------------|
-| **1. CliType** | `switch` / `set` / `tag`; `mesh-agents.json` `type` | `CliTypeSchema` in `packages/core/src/schema/agents.ts`; whitelists in `switch.ts`, `set-tag.ts` | **No** — closed enum (`agent`, `claude`, `kiro`, `opencode`, `empty`) |
-| **2. Launch** | Full one-liner pasted into pane; `resumeCmd` on save | `buildKindLaunchCmd` / `agents.runners` in `packages/core/src/agents/runners.ts`; wired via `agent-launch.ts`, `save-session.ts`, `resolveLaunchCmd` | **Partly** — see runners below |
-| **3. Provider** | Detect live CLI, busy/typing gate, inject plan, limits | `@seat-mesh/providers` (`cursor-agent`, `claude`, `kiro`, `opencode`, `empty`); enabled by `profile.providers` | **No** — TypeScript module per family |
+| **1. Kind** | `switch` / `set` / `tag`; `mesh-agents.json` `type`; `layout.base.cli` | Open string validated against **resolved kinds** (`resolveAgentKinds`) | **Mostly** — overlays in `agents.kinds`; bases emitted by providers |
+| **2. Launch** | Full one-liner pasted into pane; `resumeCmd` on save | `kind.launch` (builtin or `command`) + legacy `agents.runners` shim | **Yes** for wrappers |
+| **3. Provider** | Detect live CLI, busy/typing gate, inject plan, limits | `@seat-mesh/providers` TS class; enabled by `profile.providers` | **No** — one module per family |
 
 ```text
-  switch opencode  ──►  buildKindLaunchCmd + agents.runners  ──►  pane shell
-                                                              │
-  inbox drain      ──►  registry.detect(pane)  ◄──────────────┘
-                              │
-                              ▼
-                        inject when idle (Provider only)
+  provider.kindBase() + kindExtensions()
+            │
+            ▼
+  agents.kinds overlay  ⊎  agents.runners shim
+            │
+            ▼
+  resolveAgentKinds → switch / layout / mesh-agents.type / launch / prove
+            │
+  inbox drain ──► registry.detect(pane)  (provider id only)
 ```
 
-**If layer 2 works but layer 3 does not:** the pane boots, but the daemon treats it
-as plain shell — peer/inbox never injects, save may scrape `type: empty`, verify fails.
+**Kinds can `extends` another kind.** CPE OpenCode is not a second CLI family:
 
-**If you add `kimi` (or any new CLI) to yaml only:** nothing happens on the daemon.
-There is no kimi provider, no CliType, no switch alias. Config is not a plugin registry.
+```yaml
+# Engine default (from opencode.kindExtensions) — mesh may overlay
+agents:
+  kinds:
+    oc-proxy:
+      extends: opencode
+      launch: { command: scripts/opencode-cpe.sh }
+      prove: { cmdline: [opencode-cpe\.sh], resumeCmd: [opencode-cpe\.sh] }
+      satisfy: { whenProvider: opencode, requireProve: true }
+      recovery: { onProxyUp: true }
+```
+
+| Concern | Home |
+|---------|------|
+| Detect / inject / limits | Provider class (`opencode`) |
+| Kind id, extends, launch, prove, satisfy, recovery | JSON kinds (provider-emitted ⊎ profile) |
+| Custom wrap of OC | `agents.kinds.my-oc: { extends: opencode, launch: … }` |
+
+**If layer 2 works but layer 3 does not:** the pane boots, but the daemon treats it
+as plain shell — peer/inbox never injects.
+
+**If you add `kimi` to yaml only:** launch may work via `agents.kinds` / runners; inject
+needs a provider module with `kindBase()`.
 
 ### Checklist: adding a new CLI family (e.g. Kimi)
 
 | Step | Required work |
 |------|----------------|
-| Provider | New `AgentProvider` in `packages/providers/src/`; register in `builtin.ts` |
-| Profile | Add id to `providers:` array in `mesh.config.yaml` |
-| CliType | Add to `CliTypeSchema`; extend `switch` / `set` / `tag` whitelists |
-| Launch | `buildBuiltinLaunchCmd` case **or** `agents.runners.<kind>` shell wrapper only |
-| Save/scrape | `cliTypeFromProvider` mapping if provider id ≠ CliType name |
-| Tests | Provider detect + launch smoke at minimum |
+| Provider | New `AgentProvider` with `kindBase()` in `packages/providers/src/`; register in `builtin.ts` |
+| Profile | Add id to `providers:` array |
+| Kind | Comes from `kindBase()`; mesh may overlay `agents.kinds` |
+| Launch | `kindBase().launch` builtin **or** `{ command: … }` |
+| Tests | Provider detect + kind resolve + launch smoke |
 
-Script-only via `agents.runners` without a provider is **launch-only** — useful for
-one-off wrappers, useless for mesh mail until a provider exists.
+### Legacy `agents.runners` (shim)
 
-### `agents.runners` (launch overrides — modular, not new types)
+Still supported: `runners.X` → overlays `kinds.X.launch.command`. Prefer `agents.kinds`
+for new meshes. `runners.opencode` alone also overlays `oc-proxy` launch (compat).
 
-One **CliType** (`opencode`). Optional **runner script** per profile. No `oc-proxy`
-kind — that was a doc/code mistake; `oc` / `oc-proxy` spellings alias to `opencode`.
+| Code path | Uses kinds? |
+|-----------|-------------|
+| `switch` / `launch` / `set` / `tag` | Yes — `kindsForLoaded` → `buildKindLaunchCmd` |
+| Live satisfy / coord-sync | Yes — `prove` / `satisfy` (`harness-satisfy.ts`) |
+| CPE revive / atomics | Yes — `kind.recovery.onProxyUp` |
+| Inbox inject / busy gate | **No** — providers only |
 
-```yaml
-agents:
-  runners:
-    opencode: scripts/opencode-cpe.sh   # CPE/proxy wrapper; type stays opencode
-```
+### Built-in kinds (provider-emitted defaults)
 
-| Code path | Uses runners? |
-|-----------|----------------|
-| `switch` / `launch` / `set` / `tag` | Yes — `buildProfileLaunchCmd` → `buildKindLaunchCmd` |
-| `save` / auto-scrape | Yes — preserves `resumeCmd` when it contains `opencode-cpe.sh`; refreshes `--session` only |
-| `resolveLaunchCmd` | Yes — saved CPE `resumeCmd` wins over bare rebuild |
-| Inbox inject / busy gate | **No** — providers only (still `opencode` provider) |
+| Switch / type | Extends | Default launch | Provider id |
+|---------------|---------|----------------|-------------|
+| `agent`, `cursor` | — | `agent --trust …` | `cursor-agent` |
+| `claude`, `cc` | — | `claude --permission-mode auto …` | `claude` |
+| `kiro` | — | `kiro-cli chat …` | `kiro` |
+| `oc`, `opencode` | — | `opencode --auto …` | `opencode` |
+| `oc-proxy` | **opencode** | `scripts/opencode-cpe.sh` | `opencode` |
+| `empty` | — | (plain shell) | `empty` |
 
-Legacy yaml key `runners.oc-proxy` is merged to `runners.opencode` at load
-(`runnersFromProfile`). Plain `opencode --auto` when no runner is configured.
-
-Implementation map: `packages/core/src/agents/runners.ts`,
-`packages/tmux/src/agents/agent-launch.ts`, `packages/tmux/src/session/save-session.ts`
-(`isOpenCodeCpeResumeCmd`, `injectOpenCodeSessionIntoCmd`).
-
-### Built-in launch kinds (layer 2 defaults)
-
-| Switch alias | CliType | Default launch (no runner) | Provider id |
-|--------------|---------|----------------------------|-------------|
-| `agent`, `cursor` | `agent` | `agent --trust --approve-mcps …` | `cursor-agent` |
-| `claude`, `cc` | `claude` | `claude --permission-mode auto …` | `claude` |
-| `kiro` | `kiro` | `kiro-cli chat …` | `kiro` |
-| `oc`, `opencode` | `opencode` | `opencode --auto …` | `opencode` |
-| `empty` | `empty` | (plain shell) | `empty` |
-
-Non-builtin keys in `agents.runners` (e.g. a hypothetical `kimi:` script) can build a
-launch line but will **not** pass `switch` until CliType + whitelist exist, and will
-**not** receive daemon inject until a provider is registered.
+Implementation: `packages/core/src/agents/kinds.ts`, `harness-satisfy.ts`,
+`packages/providers/src/builtin.ts` (`resolveKindsForProfile`),
+`packages/tmux/src/agents/agent-launch.ts`.
 
 ## Agent provider interface (layer 3)
 
@@ -279,14 +286,16 @@ interface AgentProvider {
   id: string;
   detect(pane: PaneSnapshot): Detection | null;
   composerState(pane: PaneSnapshot): ComposerState;
-  injectTarget(pane: PaneSnapshot): InjectPlan;
+  injectPlan(pane: PaneSnapshot): InjectPlan;
   limits?: LimitDetector[];
+  kindBase?(): ProviderKindBase;           // auto-built base kind JSON
+  kindExtensions?(): Array<ProviderKindBase & { id: string }>;
 }
 ```
 
 Builtin registry (`packages/providers/src/builtin.ts`) is fixed at compile time.
-`createRegistryForProfile(profile)` filters by `profile.providers` but does not load
-new providers from yaml. **There is no dynamic provider list in config today.**
+`createRegistryForProfile(profile)` filters by `profile.providers`. Kind JSON is
+merged from those providers + `profile.agents.kinds`.
 
 ## Limits (hooks)
 
@@ -304,12 +313,14 @@ Handlers enqueue work; daemon workers execute. Handlers never call tmux directly
 
 `@seat-mesh/connectivity` is a library. Recovery policies enqueue jobs; the profile
 names the driver and hooks (`connectivity.driver`, `hooks.*`, `policy.*`).
+CPE seat selection uses `kind.recovery.onProxyUp`, not a hard-coded CliType name.
 
 ## Profile-driven everything
 
 `mesh.config.yaml` declares session name, slot count, port formula, provider ids,
-daemon port, seats paths, chat roots, stack passthrough, and connectivity. Shipped
-profiles under `profiles/` are examples; consumers use `.sm/` or their own tree.
+daemon port, seats paths, chat roots, stack passthrough, connectivity, and optional
+`agents.kinds` overlays. Shipped profiles under `profiles/` are examples; consumers
+use `.sm/` or their own tree.
 
 See [CONFIG.md](CONFIG.md).
 

@@ -93,17 +93,23 @@ Aliases: `notify info` · `notify md` · `notify details`
 
 Lead-only extras (manager/secretary) appear on your `agent` card — spawn/assign/inbox restart are not universal.
 
-## OpenCode via CPE (`oc-proxy`)
+## OpenCode via CPE (`oc-proxy` kind)
 
-**Proxied OpenCode** — not bare `opencode`. Type **`oc-proxy`** only (`oc` / `opencode` = direct, no CPE script).
+**Kind** `oc-proxy` **extends** `opencode` — same inject provider, CPE launch wrapper.
+Not bare `opencode` (`oc` / `opencode` = direct).
 
 ### Config (once per mesh)
 
 ```yaml
-# mesh.config.yaml
+# mesh.config.yaml — engine already emits oc-proxy extends opencode;
+# overlay only if you diverge:
 agents:
-  runners:
-    oc-proxy: scripts/opencode-cpe.sh
+  kinds:
+    oc-proxy:
+      launch: { command: scripts/opencode-cpe.sh }
+  # legacy also works:
+  # runners:
+  #   oc-proxy: scripts/opencode-cpe.sh
 connectivity:
   driver: cpe
   proxyPort: 18887

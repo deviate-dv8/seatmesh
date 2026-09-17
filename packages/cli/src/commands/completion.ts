@@ -6,7 +6,17 @@ import { listHelpAliases, listHelpVerbs } from "./help-text.js";
 
 const GLOBAL_FLAGS = ["--profile", "-p", "--help", "-h"];
 
-const CLI_TYPES = ["agent", "claude", "opencode", "kiro", "empty", "cc", "oc", "cursor"];
+const CLI_TYPES = [
+  "agent",
+  "claude",
+  "opencode",
+  "oc-proxy",
+  "kiro",
+  "empty",
+  "cc",
+  "oc",
+  "cursor",
+];
 
 const COMMON_TARGETS = [
   "manager",

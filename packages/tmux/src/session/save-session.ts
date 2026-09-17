@@ -3,6 +3,9 @@ import path from "node:path";
 import {
   MeshAgentsSchema,
   buildKindLaunchCmd,
+  entryWantsProxyRecovery,
+  isOpenCodeKind,
+  lookupResolvedKind,
   runnersFromProfile,
   type AgentRunnerEntry,
   type CliType,
@@ -10,6 +13,7 @@ import {
   type ManagerSlot,
   type MeshAgents,
   type MiniSlot,
+  type ResolvedAgentKind,
   type SavedLayout,
   type SecretarySlot,
   type WorkerSlot,
@@ -22,6 +26,7 @@ import {
   portsForSlot,
 } from "@seat-mesh/core";
 import type { ProviderRegistry } from "@seat-mesh/core";
+import { kindsForLoaded } from "../agents/agent-launch.js";
 import {
   cmdlines,
   extractOpenCodeSession,
@@ -85,10 +90,33 @@ export function injectOpenCodeSessionIntoCmd(
 }
 
 function isOpenCodeFamily(type: CliType | undefined): boolean {
-  return type === "opencode" || type === "oc-proxy";
+  return Boolean(type && isOpenCodeKind(type));
 }
 
-function isOcProxyKind(type: CliType | undefined, preserved?: PreservedSlot): boolean {
+function isOcProxyKind(
+  type: CliType | undefined,
+  preserved?: PreservedSlot,
+  kinds?: Record<string, ResolvedAgentKind>,
+): boolean {
+  if (kinds) {
+    if (
+      entryWantsProxyRecovery(
+        { type: type ?? null, resumeCmd: preserved?.resumeCmd ?? null },
+        kinds,
+      )
+    ) {
+      return true;
+    }
+    if (
+      preserved &&
+      entryWantsProxyRecovery(
+        { type: preserved.type ?? null, resumeCmd: preserved.resumeCmd ?? null },
+        kinds,
+      )
+    ) {
+      return true;
+    }
+  }
   if (type === "oc-proxy") return true;
   if (preserved?.type === "oc-proxy") return true;
   if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) return true;
@@ -101,12 +129,13 @@ function buildSavedResumeCmd(
   resumeId: string | null,
   runners: Record<string, AgentRunnerEntry>,
   preserved?: PreservedSlot,
+  kinds?: Record<string, ResolvedAgentKind>,
 ): string | null {
   if (type === "empty") return null;
   if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) {
     return injectOpenCodeSessionIntoCmd(preserved.resumeCmd, resumeId);
   }
-  const custom = buildKindLaunchCmd(type, workspace, resumeId, runners);
+  const custom = buildKindLaunchCmd(type, workspace, resumeId, runners, kinds);
   if (custom != null) return custom;
   return buildAgentLaunchCmd(type, workspace, resumeId);
 }
@@ -116,6 +145,7 @@ function finalizePaneState(
   live: { type: CliType; resumeId: string | null },
   preserved: PreservedSlot | undefined,
   runners: Record<string, AgentRunnerEntry>,
+  kinds?: Record<string, ResolvedAgentKind>,
 ): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
   let type = live.type;
   let resumeId = live.resumeId;
@@ -132,14 +162,22 @@ function finalizePaneState(
     if (type === "empty" && preserved?.type && preserved.type !== "empty") {
       type = preserved.type;
     }
-    if (!resumeId) resumeId = preservedId;
+    // Prefer preserved session when scrape misses (CPE child looks like bare OC)
+    if (isOpenCodeFamily(type) && !resumeId) {
+      resumeId = preservedId;
+    }
   }
 
-  if (isOcProxyKind(type, preserved)) {
-    type = "oc-proxy";
+  if (isOcProxyKind(type, preserved, kinds)) {
+    const byType = type ? lookupResolvedKind(kinds ?? {}, type) : undefined;
+    if (byType?.prove || byType?.recovery?.onProxyUp) {
+      type = byType.id;
+    } else {
+      type = lookupResolvedKind(kinds ?? {}, "oc-proxy")?.id ?? "oc-proxy";
+    }
   }
 
-  const resumeCmd = buildSavedResumeCmd(type, workspace, resumeId, runners, preserved);
+  const resumeCmd = buildSavedResumeCmd(type, workspace, resumeId, runners, preserved, kinds);
   return { type, resumeId, resumeCmd };
 }
 
@@ -156,12 +194,38 @@ function detectPaneType(
   snap: NonNullable<ReturnType<typeof capturePaneSnapshot>>,
   provType: CliType,
   preserved?: PreservedSlot,
+  kinds?: Record<string, ResolvedAgentKind>,
 ): CliType {
-  if (matchAny(cmdlines(snap), [/opencode-cpe\.sh/i])) return "oc-proxy";
+  const lines = cmdlines(snap);
+  if (kinds) {
+    for (const kind of Object.values(kinds)) {
+      if (!kind.prove?.cmdline?.length) continue;
+      const regs = kind.prove.cmdline.flatMap((p) => {
+        try {
+          return [new RegExp(p, "i")];
+        } catch {
+          return [];
+        }
+      });
+      if (regs.length && matchAny(lines, regs)) return kind.id;
+    }
+    if (
+      preserved &&
+      entryWantsProxyRecovery(
+        { type: preserved.type ?? null, resumeCmd: preserved.resumeCmd ?? null },
+        kinds,
+      )
+    ) {
+      return preserved.type && lookupResolvedKind(kinds, preserved.type)
+        ? preserved.type
+        : "oc-proxy";
+    }
+  }
+  if (matchAny(lines, [/opencode-cpe\.sh/i])) return "oc-proxy";
   if (preserved?.type === "oc-proxy" || isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
     return "oc-proxy";
   }
-  if (matchAny(cmdlines(snap), [/opencode/i])) return "opencode";
+  if (matchAny(lines, [/opencode/i])) return "opencode";
   return provType;
 }
 
@@ -171,6 +235,7 @@ function detectPane(
   workspace: string,
   runners: Record<string, AgentRunnerEntry>,
   preserved?: PreservedSlot,
+  kinds?: Record<string, ResolvedAgentKind>,
 ): { type: CliType; resumeId: string | null; resumeCmd: string | null } {
   const snap = capturePaneSnapshot(paneId);
   if (!snap) {
@@ -179,6 +244,7 @@ function detectPane(
       { type: "empty", resumeId: null },
       preserved,
       runners,
+      kinds,
     );
     if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
     return out;
@@ -190,15 +256,16 @@ function detectPane(
       { type: "empty", resumeId: null },
       preserved,
       runners,
+      kinds,
     );
     if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
     return out;
   }
   const det = prov.detect(snap);
   const baseType = cliTypeFromProvider(prov.id);
-  const type = detectPaneType(snap, baseType, preserved);
+  const type = detectPaneType(snap, baseType, preserved, kinds);
   const resumeId = det?.resumeId ?? null;
-  const out = finalizePaneState(workspace, { type, resumeId }, preserved, runners);
+  const out = finalizePaneState(workspace, { type, resumeId }, preserved, runners, kinds);
   if (out.resumeId) stampOpenCodeSessionOnPane(paneId, out.resumeId);
   return out;
 }
@@ -273,6 +340,7 @@ export function scrapeMeshAgents(
   const miniState = loadMinisState(loaded);
   const existing = loadMeshAgentsForProfile(loaded);
   const runners = runnersFromProfile(loaded.profile);
+  const kinds = kindsForLoaded(loaded);
   const workerMeta = listMeshWorkers(session, layout.workers.window);
   const miniMeta = listMeshMinis(session, layout.minis.window);
 
@@ -281,7 +349,7 @@ export function scrapeMeshAgents(
     const paneId = workerMeta.find((w) => Number(w.slot) === slot)?.paneId;
     if (!paneId) continue;
     const prev = existing?.workers.find((w) => w.slot === slot);
-    const det = detectPane(paneId, registry, loaded.workspace, runners, prev);
+    const det = detectPane(paneId, registry, loaded.workspace, runners, prev, kinds);
     workers.push({
       type: det.type,
       slot,
@@ -298,7 +366,7 @@ export function scrapeMeshAgents(
     const paneId = miniMeta.find((m) => Number(m.mini) === n)?.paneId;
     if (!paneId) continue;
     const prev = existing?.minis.find((m) => m.mini === n);
-    const det = detectPane(paneId, registry, loaded.workspace, runners, prev);
+    const det = detectPane(paneId, registry, loaded.workspace, runners, prev, kinds);
     const row = miniState.minis[String(n)];
     minis.push({
       type: det.type,
@@ -316,7 +384,7 @@ export function scrapeMeshAgents(
   const secPane = meshSecretaryPane(session, layout.base.window);
   const manager = mgrPane
     ? (() => {
-        const det = detectPane(mgrPane, registry, loaded.workspace, runners, existing?.manager);
+        const det = detectPane(mgrPane, registry, loaded.workspace, runners, existing?.manager, kinds);
         return {
           type: det.type,
           name: "manager",
@@ -337,7 +405,7 @@ export function scrapeMeshAgents(
       delete coords[id];
       continue;
     }
-    const det = detectPane(pane, registry, loaded.workspace, runners, existing?.coords?.[id]);
+    const det = detectPane(pane, registry, loaded.workspace, runners, existing?.coords?.[id], kinds);
     coords[id] = {
       type: det.type,
       name: id,
@@ -365,7 +433,7 @@ export function scrapeMeshAgents(
         resumeId: paneSid,
       };
     }
-    const det = detectPane(secPane, registry, loaded.workspace, runners, preserved);
+    const det = detectPane(secPane, registry, loaded.workspace, runners, preserved, kinds);
     secretary = {
       type: det.type === "empty" ? secDefaultType : det.type,
       wanted: true,

@@ -65,28 +65,28 @@ Humans and session ops only — not the pane default path:
 
 `session` · `session init <sm-name>` · `update` · `init` · `report` · `layout` · `save` · `inbox restart` · `target` · `switch` · `launch`
 
-## OpenCode via CPE (`oc-proxy`)
+## OpenCode via CPE (`oc-proxy` kind)
 
-Type **`oc-proxy`** (not `oc` — bare opencode). Operator:
+**Kind** `oc-proxy` **extends** `opencode` (same provider; CPE launch + prove). Not a
+second detect/inject family.
 
 ```bash
 sm switch <target> oc-proxy --keep-resume
 sm launch minis    # after miniDefaultCli: oc-proxy in mesh-agents.json
 ```
 
-**Two different config keys:**
+| Key | Purpose |
+|-----|---------|
+| `providers:` | Enable **provider classes** (`opencode`, `claude`, …). Listing `oc-proxy` still maps to the opencode provider. |
+| `layout.base.cli.<seat>` / mesh-agents `type` | **Kind id** (open string) — e.g. `oc-proxy` |
+| `agents.kinds.oc-proxy` | Optional overlay (launch / prove). Engine default already extends opencode → `scripts/opencode-cpe.sh` |
+| `agents.runners.oc-proxy` | Legacy shim → `kinds.oc-proxy.launch.command` |
 
-| Key | Allowed values | Purpose |
-|-----|----------------|---------|
-| `providers:` | **open strings** — `opencode`, `oc-proxy`, `claude`, `agent`, `kimi`, … | Which detect/inject families to enable. `oc-proxy` → uses the **opencode** provider under the hood. Unknown names are allowed (schema); inject works once a matching provider module exists. |
-| `layout.base.cli.<seat>` | includes `oc-proxy` | Which CliType that seat launches |
-| `agents.runners.oc-proxy` | path to `scripts/opencode-cpe.sh` | How `oc-proxy` is launched (CPE wrapper) |
+Also need CPE proxy up: `./scripts/cpe-proxy-up.sh` (`127.0.0.1:18887`).
 
-Also need CPE proxy up: `./scripts/cpe-proxy-up.sh` (listens `127.0.0.1:18887`).
+Prove CPE: cmdline / `resumeCmd` match kind `prove` (default: `opencode-cpe.sh`, `HTTPS_PROXY=…18887`). Bare `opencode --auto` = kind `opencode`, not `oc-proxy`.
 
-Prove it's real CPE: pane process parent runs `opencode-cpe.sh` / welcome script, and `HTTPS_PROXY=http://127.0.0.1:18887` is set. Bare `opencode --auto` = **not** oc-proxy.
-
-Stuck: Esc×3 → `sm agent whoami`. See `.sm/docs/cli/oc-proxy.md` on each mesh.
+Stuck: Esc×3 → `sm agent whoami`. See docs under kinds / CPE on each mesh.
 
 ## Hard rules
 
