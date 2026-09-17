@@ -36,9 +36,9 @@ export const DEFAULT_UX_RULES: UxRule[] = [
   {
     id: "oc-credit",
     for: ["opencode"],
-    priority: 88,
+    priority: 110,
     when: {
-      scan: { tailLines: 28 },
+      scan: { tailLines: 80 },
       match:
         "insufficient_user_quota|out of credits|needs\\s*\\$[\\d.]+|orcarouter\\.ai/console/billing|err_credit_gate|Add credits to keep going",
     },

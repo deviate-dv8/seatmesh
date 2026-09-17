@@ -52,8 +52,7 @@ import {
   resumeAllOpenCodePanes,
   type ResumeWaveMeta,
 } from "./connectivity/oc-resume.js";
-import { relaunchOcProxyAfterReset } from "./connectivity/oc-relaunch.js";
-import { continueOcProxySeats } from "./connectivity/oc-proxy-atomics.js";
+import { continueOcCreditSeat, relaunchOcProxyAfterReset } from "./connectivity/oc-relaunch.js";
 import { broadcastOcResumeToRemotes, syncCarrierIpProbe } from "./connectivity/oc-resume-broadcast.js";
 import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
 import {
@@ -441,9 +440,9 @@ async function main(): Promise<void> {
       onOcCreditRise: (paneId) => {
         // Atomic 4 only — intermittent OrcaRouter credit gate; no CPE reboot / kill-revive.
         try {
-          const { continued, missed } = continueOcProxySeats(registry, [paneId], log);
+          const ok = continueOcCreditSeat(registry, paneId, log);
           log(
-            `OC-CREDIT atomic4 CONTINUE pane=${paneId} continued=${continued} missed=${missed.length}`,
+            `OC-CREDIT atomic4 CONTINUE pane=${paneId} continued=${ok ? 1 : 0} missed=${ok ? 0 : 1}`,
           );
         } catch (e) {
           log(`OC-CREDIT atomic4 CONTINUE fail pane=${paneId}: ${(e as Error).message}`);

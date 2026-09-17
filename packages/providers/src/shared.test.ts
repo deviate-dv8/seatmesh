@@ -180,6 +180,21 @@ describe("agentInputDraft (cursor ghost-text / placeholders)", () => {
     });
   });
 
+  it("oc-credit still wins when error sits above a tall scrollback band", () => {
+    const filler = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
+    const tail =
+      "Error from provider (Console): Upstream request failed: [insufficient_user_quota] You're out of credits\n" +
+      filler +
+      "\nctrl+p commands\n";
+    const pane = { captureTail: tail, currentCommand: "opencode" } as Parameters<
+      typeof composerFromCapture
+    >[0];
+    expect(composerFromCapture(pane, "opencode")).toEqual({
+      phase: "limit",
+      limitKind: "oc-credit",
+    });
+  });
+
   it("active generate + follow-up is busy", () => {
     const tail =
       " \u2192 Add a follow-up  ctrl+c to stop\n Working...\n";

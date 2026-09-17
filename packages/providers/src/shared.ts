@@ -397,8 +397,13 @@ export function composerFromCapture(
     const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-8);
     const bottom = bottomLines.join("\n");
     const bottom28 = tail.split("\n").slice(-28).join("\n");
-    // Credit gate even if composer chrome still visible (intermittent router blip).
-    if (OC_CREDIT_RE.test(bottom) || OC_CREDIT_RE.test(bottom28)) {
+    // Credit gate: scan a wide band — error often sits above ctrl+p chrome.
+    const creditBand = tail.split("\n").slice(-80).join("\n");
+    if (
+      OC_CREDIT_RE.test(bottom) ||
+      OC_CREDIT_RE.test(bottom28) ||
+      OC_CREDIT_RE.test(creditBand)
+    ) {
       return { phase: "limit", limitKind: "oc-credit" };
     }
     const atComposer =

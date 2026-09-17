@@ -41,6 +41,17 @@ describe("evaluateUxRules", () => {
     expect(hit?.onRise).toBe("none");
   });
 
+  it("oc-credit beats idle ctrl+p composer chrome (atomic 4 must fire)", () => {
+    const tail =
+      "Error from provider (Console): Upstream request failed: [insufficient_user_quota] " +
+      "You're out of credits — this request needs $0.03. Add credits to keep going: " +
+      "https://www.orcarouter.ai/console/billing?ref=err_credit_gate#add-credits\n" +
+      "ctrl+p commands\n";
+    const hit = evaluateUxRules(snap(tail), "opencode", config);
+    expect(hit?.ruleId).toBe("oc-credit");
+    expect(hit?.state).toEqual({ phase: "limit", limitKind: "oc-credit" });
+  });
+
   it("cursor idle follow-up chrome is empty (inbox deliverable)", () => {
     const tail =
       "assistant text\n \u2192 Add a follow-up\n Composer 2.5 Fast \u00b7 37.4% \u00b7 1 file edited\n ~/proj\n";

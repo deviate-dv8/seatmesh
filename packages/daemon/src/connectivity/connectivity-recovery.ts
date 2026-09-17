@@ -217,6 +217,9 @@ const paneLimitCache = new Map<string, { connect: boolean; rate: boolean }>();
 /** Per-pane consecutive oc-connect observations (batch scan), not scrollback one-shots. */
 const paneConnectStreak = new Map<string, number>();
 const paneCcLimitSeen = new Set<string>();
+/** Last atomic-4 CONTINUE attempt while still on oc-credit (miss → retry). */
+const ocCreditContinueAt = new Map<string, number>();
+const OC_CREDIT_CONTINUE_COOLDOWN_MS = 45_000;
 let lastProxyDownClearAt = 0;
 
 /** Exported for unit tests. */
@@ -480,7 +483,13 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
     if (!liveIds.has(id)) paneConnectStreak.delete(id);
   }
   for (const id of paneCcLimitSeen) {
-    if (!liveIds.has(id)) paneCcLimitSeen.delete(id);
+    // Compound keys: `${paneId}:oc-credit` / `:cursor-usage` / `:kiro-limit`
+    const paneId = id.includes(":") ? id.slice(0, id.indexOf(":")) : id;
+    if (!liveIds.has(paneId)) paneCcLimitSeen.delete(id);
+  }
+  for (const key of ocCreditContinueAt.keys()) {
+    const paneId = key.includes(":") ? key.slice(0, key.indexOf(":")) : key;
+    if (!liveIds.has(paneId)) ocCreditContinueAt.delete(key);
   }
 
   const connectThreshold =
@@ -549,14 +558,26 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
       }
       continue;
     }
-    // OrcaRouter credit gate — intermittent; record + atomic 4 CONTINUE (not CPE reboot).
+    // OrcaRouter credit gate — intermittent; atomic 4 CONTINUE (not CPE reboot).
+    // Retry on cooldown while banner stays — first inject often misses error UI.
     if (st.phase === "limit" && st.limitKind === "oc-credit" && prov.id === "opencode") {
       const key = `${paneId}:oc-credit`;
-      if (!paneCcLimitSeen.has(key)) {
+      const now = Date.now();
+      const lastAt = ocCreditContinueAt.get(key) ?? 0;
+      const isRising = !paneCcLimitSeen.has(key);
+      if (isRising) {
         paneCcLimitSeen.add(key);
         log(
           `OC-CREDIT rising ${label} ${paneId} kind=oc-credit — intermittent router quota; atomic 4 CONTINUE`,
         );
+      }
+      if (isRising || now - lastAt >= OC_CREDIT_CONTINUE_COOLDOWN_MS) {
+        ocCreditContinueAt.set(key, now);
+        if (!isRising) {
+          log(
+            `OC-CREDIT retry ${label} ${paneId} — still credit-gated; atomic 4 CONTINUE again`,
+          );
+        }
         onOcCreditRise?.(paneId, snap);
       }
       continue;
@@ -566,6 +587,7 @@ export function pollConnectivityRecovery(input: ConnectivityPollInput): void {
       paneConnectStreak.delete(paneId);
       paneCcLimitSeen.delete(paneId);
       paneCcLimitSeen.delete(`${paneId}:oc-credit`);
+      ocCreditContinueAt.delete(`${paneId}:oc-credit`);
       continue;
     }
     const sawConnect = proxyDownKinds.has(st.limitKind);

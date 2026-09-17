@@ -20,6 +20,10 @@ import {
 export const OC_PROXY_CONTINUE =
   "CONTINUE after oc-proxy revive — finish open TASKS. Stay on oc-proxy (opencode-cpe / :18887). Do not wait for operator.";
 
+/** Atomic 4 — OrcaRouter insufficient_user_quota blip (not CPE reboot). */
+export const OC_CREDIT_CONTINUE =
+  "CONTINUE — OrcaRouter credit gate blipped (insufficient_user_quota). Retry the last turn. Stay on oc-proxy (opencode-cpe / :18887).";
+
 function isOcProxySeat(entry: { type?: string; resume_cmd?: string | null } | null): boolean {
   if (!entry) return false;
   if (entry.type === "oc-proxy") return true;
@@ -150,5 +154,30 @@ export function directInjectContinue(
     injectToPane(paneId, message, plan, prov.id, snap.captureTail, snap.captureTailAnsi);
     ok = true;
   });
+  return ok;
+}
+
+/**
+ * Atomic 4 for OrcaRouter credit gate: Esc out of error chrome, then CONTINUE.
+ * Uses OC_CREDIT_CONTINUE copy (not revive wording).
+ */
+export function continueOcCreditSeat(
+  registry: ProviderRegistry,
+  paneId: string,
+  log?: (line: string) => void,
+): boolean {
+  withPaneInputEnabled(paneId, () => {
+    prepareOpenCodeForPaste(paneId, capturePaneSnapshot);
+  });
+  let ok = directInjectContinue(registry, paneId, OC_CREDIT_CONTINUE);
+  if (!ok) {
+    spawnSync("sleep", ["2"]);
+    ok = directInjectContinue(registry, paneId, OC_CREDIT_CONTINUE);
+  }
+  log?.(
+    ok
+      ? `OC-CREDIT CONTINUE direct ${paneId}`
+      : `OC-CREDIT CONTINUE miss ${paneId}`,
+  );
   return ok;
 }
