@@ -1,4 +1,5 @@
 import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { entryWantsProxyRecovery, lookupResolvedKind } from "@seat-mesh/core";
 import {
   extractOpenCodeSession,
   formatOpenCodeResumeCommand,
@@ -9,7 +10,7 @@ import { resolvePaneTarget, type PaneRow } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { injectToPane, withPaneInputEnabled } from "../inject/inject.js";
 import { seatAgentEntry, seatIdFromPaneRow } from "./agents-state.js";
-import { defaultHarnessTypeForSeat } from "./agent-launch.js";
+import { defaultHarnessTypeForSeat, kindsForLoaded } from "./agent-launch.js";
 import { syncOpenCodePaneSession } from "./oc-session-sync.js";
 import { isOpenCodeCpeResumeCmd } from "../session/save-session.js";
 import { prepareOpenCodeForPaste, isOpenCodeHarnessType } from "./oc-stop.js";
@@ -31,13 +32,19 @@ function providerIdToHarnessType(id: string): string {
   return id;
 }
 
-/** Prefer CPE wrapper when mesh-agents / resumeCmd say so. */
+/** Prefer prove-kind (CPE) when mesh-agents / resumeCmd say so. */
 function resolveHarnessType(
   loaded: LoadedProfile,
   seatId: string,
   liveType: string,
   saved: ReturnType<typeof seatAgentEntry>,
 ): string {
+  const kinds = kindsForLoaded(loaded);
+  if (entryWantsProxyRecovery(saved, kinds)) {
+    const byType = saved?.type ? lookupResolvedKind(kinds, saved.type) : undefined;
+    if (byType?.recovery?.onProxyUp || byType?.prove) return byType.id;
+    return lookupResolvedKind(kinds, "oc-proxy")?.id ?? "oc-proxy";
+  }
   if (saved?.type === "oc-proxy" || isOpenCodeCpeResumeCmd(saved?.resume_cmd)) {
     return "oc-proxy";
   }

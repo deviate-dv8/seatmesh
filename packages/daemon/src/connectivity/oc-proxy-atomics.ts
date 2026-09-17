@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadProfile, entryWantsProxyRecovery, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
+import { loadProfile, entryWantsProxyRecovery, lookupResolvedKind, resumeCmdMatchesKindProve, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
   kindsForLoaded,
@@ -287,22 +287,35 @@ export function reviveOcProxySeats(
       failed.push(`${s.mesh}/${s.label}:no-profile`);
       continue;
     }
+    const kinds = kindsForLoaded(loaded);
+    const harnessType =
+      (s.type && lookupResolvedKind(kinds, s.type)?.id) ||
+      (entryWantsProxyRecovery({ type: s.type, resume_cmd: s.resume_cmd }, kinds)
+        ? Object.values(kinds).find((k) => k.recovery?.onProxyUp)?.id
+        : null) ||
+      "oc-proxy";
     const cmd =
       resolveLaunchCmd(
         {
-          type: "oc-proxy",
+          type: harnessType,
           resume_id: s.ses,
           resume_cmd: s.resume_cmd,
         },
         loaded.workspace,
         loaded,
       ) ?? null;
-    if (!cmd || !/opencode-cpe\.sh/.test(cmd)) {
-      log?.(`OC-ATOMICS revive fail ${s.mesh}/${s.label}: not oc-proxy wrapper`);
+    if (
+      !cmd ||
+      !(
+        resumeCmdMatchesKindProve(cmd, kinds) ||
+        /opencode-cpe\.sh/i.test(cmd)
+      )
+    ) {
+      log?.(`OC-ATOMICS revive fail ${s.mesh}/${s.label}: not CPE wrapper`);
       failed.push(`${s.mesh}/${s.label}:not-cpe`);
       continue;
     }
-    const result = tryLaunchPane(loaded, s.paneId, s.label, cmd, false, "oc-proxy");
+    const result = tryLaunchPane(loaded, s.paneId, s.label, cmd, false, harnessType);
     if (result.status !== "launched") {
       log?.(
         `OC-ATOMICS revive fail ${s.mesh}/${s.label} ${s.paneId}: ${result.reason ?? result.status}`,

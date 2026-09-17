@@ -3,11 +3,14 @@ import path from "node:path";
 import {
   MeshAgentsSchema,
   buildResolvedPaths,
+  entryWantsProxyRecovery,
+  resumeCmdMatchesKindProve,
   runnersFromProfile,
   seatKindFromId,
   type LoadedProfile,
   type MeshAgents,
 } from "@seat-mesh/core";
+import { resolveKindsForProfile } from "@seat-mesh/providers";
 import type { PaneRow } from "../lib/resolve-pane.js";
 import { buildLaunchCmdWithRunners } from "./agent-launch.js";
 import {
@@ -184,17 +187,23 @@ export function resolveLaunchCmd(
   loaded?: LoadedProfile,
 ): string | null {
   const runners = loaded ? runnersFromProfile(loaded.profile) : {};
+  const kinds = loaded ? resolveKindsForProfile(loaded.profile) : undefined;
   const resumeId = entry.resume_id ?? null;
   if (entry.resume_cmd) {
-    if (isOpenCodeCpeResumeCmd(entry.resume_cmd)) {
+    // Keep CPE (or any prove-kind) wrapper — only refresh --session
+    if (
+      (kinds && resumeCmdMatchesKindProve(entry.resume_cmd, kinds)) ||
+      isOpenCodeCpeResumeCmd(entry.resume_cmd)
+    ) {
       return injectOpenCodeSessionIntoCmd(entry.resume_cmd, resumeId);
     }
-    if (entry.type === "oc-proxy" && !isOpenCodeCpeResumeCmd(entry.resume_cmd)) {
-      return buildLaunchCmdWithRunners(entry.type, workspace, resumeId, runners);
+    // Recovery kind configured but resume_cmd lost the wrapper → rebuild from kinds
+    if (kinds && entryWantsProxyRecovery(entry, kinds)) {
+      return buildLaunchCmdWithRunners(entry.type, workspace, resumeId, runners, kinds);
     }
     return entry.resume_cmd;
   }
-  return buildLaunchCmdWithRunners(entry.type, workspace, resumeId, runners);
+  return buildLaunchCmdWithRunners(entry.type, workspace, resumeId, runners, kinds);
 }
 
 // ---------------------------------------------------------------------------

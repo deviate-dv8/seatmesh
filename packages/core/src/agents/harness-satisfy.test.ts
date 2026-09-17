@@ -5,6 +5,7 @@ import {
   kindProveMatches,
   liveKindSatisfiesWanted,
   resolveLiveHarnessKind,
+  resumeCmdMatchesKindProve,
 } from "./harness-satisfy.js";
 import { resolveAgentKinds, type AgentKindDef } from "./kinds.js";
 
@@ -99,5 +100,12 @@ describe("harness-satisfy", () => {
       false,
     );
     expect(entryWantsProxyRecovery({ type: "claude" }, kinds)).toBe(false);
+  });
+
+  it("resumeCmdMatchesKindProve", () => {
+    expect(
+      resumeCmdMatchesKindProve("cd /x && scripts/opencode-cpe.sh --session ses_1", kinds),
+    ).toBe(true);
+    expect(resumeCmdMatchesKindProve("opencode --auto", kinds)).toBe(false);
   });
 });

@@ -50,6 +50,7 @@ export function isOpenCodeKind(kind: string): boolean {
   return k === "opencode" || k === "oc-proxy";
 }
 
+/** @deprecated prefer kind.launch via resolveAgentKinds — kept for dual-read without kinds map */
 export function defaultOcProxyRunner(): string {
   return "scripts/opencode-cpe.sh";
 }

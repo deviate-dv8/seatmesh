@@ -189,6 +189,34 @@ export function entryWantsProxyRecovery(
   return false;
 }
 
+/** True when resumeCmd matches any kind's prove.resumeCmd / prove.cmdline patterns. */
+export function resumeCmdMatchesKindProve(
+  cmd: string | null | undefined,
+  kinds: Record<string, ResolvedAgentKind>,
+): boolean {
+  if (!cmd) return false;
+  for (const kind of Object.values(kinds)) {
+    if (kind.prove && kindProveMatches(kind, { resumeCmd: cmd, cmdlines: [cmd] })) return true;
+  }
+  return false;
+}
+
+/**
+ * OpenCode family: provider === opencode when kinds known; else legacy id check.
+ */
+export function isOpenCodeFamilyKind(
+  kindRaw: string | null | undefined,
+  kinds?: Record<string, ResolvedAgentKind>,
+): boolean {
+  if (!kindRaw) return false;
+  if (kinds) {
+    const k = lookupResolvedKind(kinds, kindRaw);
+    return k?.provider === "opencode";
+  }
+  const x = kindRaw.trim().toLowerCase().replace(/_/g, "-");
+  return x === "opencode" || x === "oc-proxy" || x === "oc";
+}
+
 export function continueCopyForKind(
   kind: ResolvedAgentKind | undefined,
   fallback: string,
