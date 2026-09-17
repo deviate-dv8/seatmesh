@@ -349,6 +349,10 @@ knobs, legacy `tmux-main-agents.json` write path.
 3. **Limit patterns** — yaml regex (flexible) vs named presets (`cpe-zen`)?
 4. **Legacy harness** — when can mesh stop reading `tmux-main-agents.json` entirely?
 
+## 8b. Agent kinds backlog (2026-09-17)
+
+Tracked in root `TODO.md` **P6**. Highest: **`.sm/providers/` drop-in** so adding Kimi (or any CLI) is mesh-local JSON + one local provider file — **no seatmesh fork**. Until then: `agents.kinds` = launch-only; inject needs a provider module.
+
 ---
 
 ## 9. Related docs to update on approve
