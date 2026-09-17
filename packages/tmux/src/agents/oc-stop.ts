@@ -11,12 +11,13 @@ function sleepMs(ms: number): void {
 }
 
 export function isOpenCodeHarnessType(type: string): boolean {
-  const t = type.trim().toLowerCase();
+  const t = type.trim().toLowerCase().replace(/_/g, "-");
   return (
     t === "opencode" ||
     t === "oc" ||
     t === "opencode-cpe" ||
     t === "opencode-main" ||
+    t === "oc-proxy" ||
     t === "ocproxy"
   );
 }

@@ -6,6 +6,7 @@ import {
   entryWantsProxyRecovery,
   isOpenCodeKind,
   lookupResolvedKind,
+  normalizeAgentKind,
   runnersFromProfile,
   type AgentRunnerEntry,
   type CliType,
@@ -423,7 +424,7 @@ export function scrapeMeshAgents(
     const profileSecCli =
       loaded.profile.layout?.base.cli?.secretary?.trim().toLowerCase() ?? "opencode";
     const secDefaultType: CliType =
-      profileSecCli === "opencode-cpe" || profileSecCli === "ocproxy" ? "opencode-cpe" : "opencode";
+      normalizeAgentKind(profileSecCli) === "opencode-cpe" ? "opencode-cpe" : "opencode";
     if (!paneSid && !isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
       preserved = { ...preserved, type: secDefaultType, resumeId: null, resumeCmd: null };
     } else if (paneSid) {

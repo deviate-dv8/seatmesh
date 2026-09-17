@@ -1,6 +1,7 @@
 import type { PaneSnapshot } from "../providers/types.js";
 import type { ResolvedAgentKind } from "./kinds.js";
 import { lookupResolvedKind } from "./kinds.js";
+import { normalizeAgentKind } from "./runners.js";
 
 export interface ProveEvidence {
   cmdlines?: string[];
@@ -192,7 +193,9 @@ export function entryWantsProxyRecovery(
   if (!entry) return false;
   const type = entry.type ?? "";
   const resume = entry.resume_cmd ?? entry.resumeCmd ?? null;
-  const byType = type ? lookupResolvedKind(kinds, type) : undefined;
+  const byType =
+    (type ? lookupResolvedKind(kinds, type) : undefined) ??
+    (type ? kinds[normalizeAgentKind(type)] : undefined);
   if (kindWantsProxyRecovery(byType)) return true;
   for (const kind of Object.values(kinds)) {
     if (!kind.recovery?.onProxyUp) continue;
@@ -226,7 +229,13 @@ export function isOpenCodeFamilyKind(
     return k?.provider === "opencode";
   }
   const x = kindRaw.trim().toLowerCase().replace(/_/g, "-");
-  return x === "opencode" || x === "opencode-cpe" || x === "oc";
+  return (
+    x === "opencode" ||
+    x === "opencode-cpe" ||
+    x === "oc" ||
+    x === "oc-proxy" ||
+    x === "ocproxy"
+  );
 }
 
 export function continueCopyForKind(

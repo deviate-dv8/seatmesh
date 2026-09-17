@@ -17,6 +17,7 @@ const PROVIDER_KINDS: Record<string, AgentKindDef> = {
   },
   "opencode-cpe": {
     extends: "opencode",
+    aliases: ["oc-proxy", "ocproxy"],
     launch: { command: "scripts/opencode-cpe.sh", sessionFlag: "--session" },
     prove: {
       cmdline: ["opencode-cpe\\.sh", "HTTPS_PROXY=.*18887"],
@@ -90,6 +91,8 @@ describe("harness-satisfy", () => {
 
   it("entryWantsProxyRecovery uses kind.recovery.onProxyUp", () => {
     expect(entryWantsProxyRecovery({ type: "opencode-cpe" }, kinds)).toBe(true);
+    expect(entryWantsProxyRecovery({ type: "oc-proxy" }, kinds)).toBe(true);
+    expect(entryWantsProxyRecovery({ type: "ocproxy" }, kinds)).toBe(true);
     expect(
       entryWantsProxyRecovery(
         { type: "opencode", resume_cmd: "scripts/opencode-cpe.sh --session x" },

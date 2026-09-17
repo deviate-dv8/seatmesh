@@ -9,6 +9,10 @@ describe("normalizeProviderEnableIds", () => {
     ]);
   });
 
+  it("maps legacy providers: oc-proxy to opencode (pia/zsign config)", () => {
+    expect(normalizeProviderEnableIds(["oc-proxy", "claude"])).toEqual(["opencode", "claude"]);
+  });
+
   it("keeps unknown kinds for future providers", () => {
     expect(normalizeProviderEnableIds(["kimi", "claude"])).toEqual(["kimi", "claude"]);
   });
@@ -36,16 +40,14 @@ describe("resolveKindsForProfile", () => {
     });
   });
 
-  it("mesh agents.kinds overlay wins on launch", () => {
+  it("runners.oc-proxy shim lands on opencode-cpe launch", () => {
     const kinds = resolveKindsForProfile({
-      providers: ["opencode"],
+      providers: ["oc-proxy", "empty"],
       agents: {
-        runners: {},
-        kinds: {
-          "opencode-cpe": { launch: { command: "scripts/custom-cpe.sh" } },
-        },
+        runners: { "oc-proxy": "scripts/from-legacy-key.sh" },
+        kinds: {},
       },
     });
-    expect(kinds["opencode-cpe"].launch).toEqual({ command: "scripts/custom-cpe.sh" });
+    expect(kinds["opencode-cpe"].launch).toEqual({ command: "scripts/from-legacy-key.sh" });
   });
 });
