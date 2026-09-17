@@ -1,0 +1,62 @@
+# Keep the oc-proxy branch current with main (merge main → oc-proxy).
+# Lives on main so `push` to main triggers it. Also runnable by hand / schedule.
+name: Sync oc-proxy from main
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Safety net if a main push skipped the workflow
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-oc-proxy-from-main
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Need push access to oc-proxy
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Merge main into oc-proxy
+        env:
+          BRANCH: oc-proxy
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main "$BRANCH" || true
+
+          if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+            echo "origin/$BRANCH missing — creating from main"
+            git checkout -B "$BRANCH" origin/main
+            git push -u origin "$BRANCH"
+            echo "created=$BRANCH"
+            exit 0
+          fi
+
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+          if git merge-base --is-ancestor origin/main HEAD; then
+            echo "oc-proxy already contains origin/main — nothing to do"
+            exit 0
+          fi
+
+          if git merge origin/main --no-edit; then
+            git push origin "$BRANCH"
+            echo "synced origin/main → $BRANCH"
+          else
+            git merge --abort || true
+            echo "::error::Merge conflict merging main into $BRANCH — resolve manually"
+            exit 1
+          fi
