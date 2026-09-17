@@ -114,16 +114,30 @@ export function formatOperatorDecideMsg(
   answer: "YES" | "NO",
   title: string,
   custom?: string,
+  meta?: { cardId?: string; infoUrl?: string; target?: string; session?: string },
 ): string {
   const t = title.trim() || "decision";
   const customTrim = custom?.trim();
+  let head: string;
   if (customTrim && !/^Dan notify reply:/i.test(customTrim) && !/^\[operator-decide\]/i.test(customTrim)) {
-    return `PRIORITY [operator-decide] ${answer} — ${t}\n${customTrim}`;
+    head = `PRIORITY [operator-decide] ${answer} — ${t}\n${customTrim}`;
+  } else if (customTrim && /^\[operator-decide\]/i.test(customTrim)) {
+    head = /\bPRIORITY\b/i.test(customTrim) ? customTrim : `PRIORITY ${customTrim}`;
+  } else {
+    head = `PRIORITY [operator-decide] ${answer} — ${t}`;
   }
-  if (customTrim && /^\[operator-decide\]/i.test(customTrim)) {
-    return /\bPRIORITY\b/i.test(customTrim) ? customTrim : `PRIORITY ${customTrim}`;
-  }
-  return `PRIORITY [operator-decide] ${answer} — ${t}`;
+  if (!meta) return head;
+  if (/\bcard=/.test(head)) return head;
+  const lines = [head.trimEnd()];
+  const cardId = meta.cardId?.trim();
+  if (cardId) lines.push(`card=${cardId}`);
+  const infoUrl = meta.infoUrl?.trim();
+  if (infoUrl) lines.push(`info=${infoUrl}`);
+  const target = meta.target?.trim();
+  if (target) lines.push(`target=${target}`);
+  const session = meta.session?.trim();
+  if (session) lines.push(`session=${session}`);
+  return lines.join("\n");
 }
 
 /** Standard Yes / No peer actions — both target the same seat (the requester). */

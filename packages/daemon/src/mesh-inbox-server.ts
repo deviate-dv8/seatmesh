@@ -1067,6 +1067,11 @@ async function main(): Promise<void> {
             { infoUrl: (id) => hubActCardUrl(id, port) },
           );
           infoUrl = card.infoUrl.trim();
+          actRegistry.annotatePeerMsgsWithCard({
+            cardId: card.id,
+            infoUrl,
+            session,
+          });
         }
         log(`NOTIFY-ACT register n=${links.length}${card ? ` card=${card.id} info=${infoUrl}` : ""}`);
         return json(res, 200, { ok: true, links, card, infoUrl });

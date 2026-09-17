@@ -121,6 +121,33 @@ export function createNotifyActRegistry() {
     return row;
   }
 
+  /**
+   * After card id is known, stamp peer Yes/No msgs with card=/info=/session=
+   * so mesh-inbox PRIORITY lines are greppable (not title-only).
+   */
+  function annotatePeerMsgsWithCard(input: {
+    cardId: string;
+    infoUrl: string;
+    session?: string;
+  }): void {
+    const cardId = input.cardId.trim();
+    const infoUrl = input.infoUrl.trim();
+    if (!cardId) return;
+    for (const row of tokens.values()) {
+      if (row.type !== "peer") continue;
+      const msg = String(row.params.msg ?? "");
+      if (!/\[operator-decide\]/i.test(msg)) continue;
+      if (/\bcard=/.test(msg)) continue;
+      const lines = [msg.trimEnd(), `card=${cardId}`];
+      if (infoUrl) lines.push(`info=${infoUrl}`);
+      const target = String(row.params.target ?? "").trim();
+      if (target) lines.push(`target=${target}`);
+      const session = input.session?.trim();
+      if (session) lines.push(`session=${session}`);
+      row.params.msg = lines.join("\n");
+    }
+  }
+
   function take(token: string): NotifyActTokenRow | null {
     pruneExpired();
     const row = tokens.get(token);
@@ -130,7 +157,7 @@ export function createNotifyActRegistry() {
     return row;
   }
 
-  return { register, registerCard, getCard, take, pruneExpired };
+  return { register, registerCard, getCard, annotatePeerMsgsWithCard, take, pruneExpired };
 }
 
 export type NotifyActRegistry = ReturnType<typeof createNotifyActRegistry>;

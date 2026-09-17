@@ -58,4 +58,22 @@ describe("formatOperatorDecideMsg", () => {
       "PRIORITY [operator-decide] YES — T\nship it",
     );
   });
+
+  it("appends card/info/target/session meta lines", () => {
+    const out = formatOperatorDecideMsg("YES", "Act card → hub", undefined, {
+      cardId: "abc-123",
+      infoUrl: "http://127.0.0.1:3190/act/card/abc-123?port=31680",
+      target: "manager",
+      session: "mesh-c87d62",
+    });
+    expect(out).toBe(
+      [
+        "PRIORITY [operator-decide] YES — Act card → hub",
+        "card=abc-123",
+        "info=http://127.0.0.1:3190/act/card/abc-123?port=31680",
+        "target=manager",
+        "session=mesh-c87d62",
+      ].join("\n"),
+    );
+  });
 });
