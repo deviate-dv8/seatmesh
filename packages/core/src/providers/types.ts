@@ -121,7 +121,7 @@ export interface AgentProvider extends PromptRecording {
    * `agents.kinds` — do not hand-duplicate in CliType enums.
    */
   kindBase?(): ProviderKindBase;
-  /** First-party extensions (e.g. oc-proxy extends opencode). */
+  /** First-party extensions (e.g. opencode-cpe extends opencode). */
   kindExtensions?(): Array<ProviderKindBase & { id: string }>;
 }
 

@@ -60,7 +60,7 @@ Optional **5th**: `incomplete` OC resume if some panes still limited after 5 min
 
 ### Manual rotate / reset (you run the script)
 
-When **you** run `./scripts/cpe-proxy-rotate-until.sh` or `./legacy harness oc-proxy reset`
+When **you** run `./scripts/cpe-proxy-rotate-until.sh` or `./legacy harness opencode-cpe reset`
 (not daemon-spawned), you may see **one** script toast:
 
 - `inbox · Proxy rotate (complete)` or `inbox · Proxy reset (complete)`

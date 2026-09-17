@@ -93,7 +93,7 @@ function isOpenCodeFamily(type: CliType | undefined): boolean {
   return Boolean(type && isOpenCodeKind(type));
 }
 
-function isOcProxyKind(
+function isOpenCodeCpeKind(
   type: CliType | undefined,
   preserved?: PreservedSlot,
   kinds?: Record<string, ResolvedAgentKind>,
@@ -117,8 +117,8 @@ function isOcProxyKind(
       return true;
     }
   }
-  if (type === "oc-proxy") return true;
-  if (preserved?.type === "oc-proxy") return true;
+  if (type === "opencode-cpe") return true;
+  if (preserved?.type === "opencode-cpe") return true;
   if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) return true;
   return false;
 }
@@ -168,12 +168,12 @@ function finalizePaneState(
     }
   }
 
-  if (isOcProxyKind(type, preserved, kinds)) {
+  if (isOpenCodeCpeKind(type, preserved, kinds)) {
     const byType = type ? lookupResolvedKind(kinds ?? {}, type) : undefined;
     if (byType?.prove || byType?.recovery?.onProxyUp) {
       type = byType.id;
     } else {
-      type = lookupResolvedKind(kinds ?? {}, "oc-proxy")?.id ?? "oc-proxy";
+      type = lookupResolvedKind(kinds ?? {}, "opencode-cpe")?.id ?? "opencode-cpe";
     }
   }
 
@@ -218,12 +218,12 @@ function detectPaneType(
     ) {
       return preserved.type && lookupResolvedKind(kinds, preserved.type)
         ? preserved.type
-        : "oc-proxy";
+        : "opencode-cpe";
     }
   }
-  if (matchAny(lines, [/opencode-cpe\.sh/i])) return "oc-proxy";
-  if (preserved?.type === "oc-proxy" || isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
-    return "oc-proxy";
+  if (matchAny(lines, [/opencode-cpe\.sh/i])) return "opencode-cpe";
+  if (preserved?.type === "opencode-cpe" || isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
+    return "opencode-cpe";
   }
   if (matchAny(lines, [/opencode/i])) return "opencode";
   return provType;
@@ -423,13 +423,13 @@ export function scrapeMeshAgents(
     const profileSecCli =
       loaded.profile.layout?.base.cli?.secretary?.trim().toLowerCase() ?? "opencode";
     const secDefaultType: CliType =
-      profileSecCli === "oc-proxy" || profileSecCli === "ocproxy" ? "oc-proxy" : "opencode";
+      profileSecCli === "opencode-cpe" || profileSecCli === "ocproxy" ? "opencode-cpe" : "opencode";
     if (!paneSid && !isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
       preserved = { ...preserved, type: secDefaultType, resumeId: null, resumeCmd: null };
     } else if (paneSid) {
       preserved = {
         ...preserved,
-        type: isOpenCodeCpeResumeCmd(preserved?.resumeCmd) ? "oc-proxy" : secDefaultType,
+        type: isOpenCodeCpeResumeCmd(preserved?.resumeCmd) ? "opencode-cpe" : secDefaultType,
         resumeId: paneSid,
       };
     }

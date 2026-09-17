@@ -160,7 +160,7 @@ export function buildWhoamiContextLines(
 
   lines.push("--- context ---");
   lines.push(`agent_id=${agentId}`);
-  // cli= must say oc-proxy when mesh-agents / CPE — agents that see provider=opencode
+  // cli= must say opencode-cpe when mesh-agents / CPE — agents that see provider=opencode
   // sometimes switch to bare opencode and kill the CPE session.
   {
     const seatKey =
@@ -176,7 +176,7 @@ export function buildWhoamiContextLines(
     const entry = seatAgentEntry(loaded, seatKey);
     const kinds = kindsForLoaded(loaded);
     const cpe = entryWantsProxyRecovery(entry, kinds);
-    const cli = cpe ? (entry?.type && entry.type !== "opencode" ? entry.type : "oc-proxy") : entry?.type || "unknown";
+    const cli = cpe ? (entry?.type && entry.type !== "opencode" ? entry.type : "opencode-cpe") : entry?.type || "unknown";
     lines.push(`cli=${cli}`);
     if (cpe) {
       lines.push(

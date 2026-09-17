@@ -37,7 +37,7 @@ import { listWindowPaneIds, resolveMiniPaneId } from "../session/window-panes.js
 import { injectAfterLaunch, tryBriefOnce } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
 import { isOpenCodeHarnessType, prepareOpenCodeForPaste, stopOpenCodeCli } from "./oc-stop.js";
-import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
+import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./opencode-cpe-live.js";
 import { pasteWelcomeScript } from "../session/welcome-paste.js";
 export interface LaunchResult {
   paneId: string;
@@ -127,7 +127,7 @@ export function pasteLaunchCmd(paneId: string, cmd: string, harnessType?: string
   tmux(["send-keys", "-t", paneId, "Enter"]);
 }
 
-/** Paste harness launch — Esc×3 for live OC; welcome script for long oc-proxy one-liners. */
+/** Paste harness launch — Esc×3 for live OC; welcome script for long opencode-cpe one-liners. */
 export function pasteHarnessLaunchCmd(
   loaded: LoadedProfile,
   paneId: string,
@@ -242,7 +242,7 @@ function pasteLaunchIfNeeded(
   }
   withPaneInputEnabled(paneId, () => {
     if (liveType !== "empty" && !liveHarnessSatisfiesWanted(liveType, type, snap, satisfyOpts)) {
-      stopLiveCli(paneId, liveType === "oc-proxy" ? "opencode" : liveType);
+      stopLiveCli(paneId, liveType === "opencode-cpe" ? "opencode" : liveType);
     }
   });
   pasteHarnessLaunchCmd(loaded, paneId, type, cmd);

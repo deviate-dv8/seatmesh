@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isViaEth } from "./oc-resume-broadcast.js";
 
-describe("isViaEth (oc-proxy eth fallback guard)", () => {
+describe("isViaEth (opencode-cpe eth fallback guard)", () => {
   it("treats via == eth as proxy-not-active (ignore eth as carrier)", () => {
     expect(isViaEth("138.84.114.16", "138.84.114.16")).toBe(true);
   });

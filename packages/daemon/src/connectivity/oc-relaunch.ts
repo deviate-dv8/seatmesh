@@ -23,7 +23,7 @@ import {
 } from "@seat-mesh/tmux";
 
 /** Fallback CONTINUE when kind.recovery.continueCopy unset. */
-export const OC_PROXY_CONTINUE =
+export const OC_CPE_CONTINUE =
   "CONTINUE after CPE revive — finish open TASKS. Stay on CPE OpenCode (opencode-cpe / :18887). Do not wait for operator.";
 
 /** Atomic 4 — OrcaRouter insufficient_user_quota blip (not CPE reboot). */
@@ -38,9 +38,9 @@ function sleepMs(ms: number): void {
 /**
  * After oc-reset kills CPE OpenCode: paste recovery seats first (parallel boot),
  * then round-robin briefs + CONTINUE. Avoids sequential wait-per-pane.
- * Seat selection = kind.recovery.onProxyUp (oc-proxy extends opencode by default).
+ * Seat selection = kind.recovery.onProxyUp (opencode-cpe extends opencode by default).
  */
-export function relaunchOcProxyAfterReset(
+export function relaunchOpenCodeCpeAfterReset(
   loaded: LoadedProfile,
   registry: ProviderRegistry | null,
   session: string,
@@ -61,9 +61,9 @@ export function relaunchOcProxyAfterReset(
     if (!seatId) continue;
     const entry = seatAgentEntry(loaded, seatId, state);
     if (!entryWantsProxyRecovery(entry, kinds)) continue;
-    const harnessType = entry?.type && lookupResolvedKind(kinds, entry.type) ? entry.type : "oc-proxy";
+    const harnessType = entry?.type && lookupResolvedKind(kinds, entry.type) ? entry.type : "opencode-cpe";
     const kind = lookupResolvedKind(kinds, harnessType);
-    const continueMsg = continueCopyForKind(kind, OC_PROXY_CONTINUE);
+    const continueMsg = continueCopyForKind(kind, OC_CPE_CONTINUE);
     const cmd =
       resolveLaunchCmd(
         {
@@ -149,7 +149,7 @@ export function relaunchOcProxyAfterReset(
 export function directInjectContinue(
   registry: ProviderRegistry,
   paneId: string,
-  message: string = OC_PROXY_CONTINUE,
+  message: string = OC_CPE_CONTINUE,
 ): boolean {
   const snap = capturePaneSnapshot(paneId);
   if (!snap) return false;

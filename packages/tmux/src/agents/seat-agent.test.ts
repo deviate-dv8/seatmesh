@@ -28,13 +28,13 @@ describe("seatAgentEntry", () => {
     const state = {
       panes: [],
       secretary: {
-        type: "oc-proxy",
+        type: "opencode-cpe",
         resume_id: "ses_abc",
         resume_cmd: "cd /ws && scripts/opencode-cpe.sh --session ses_abc",
       },
     };
     const entry = seatAgentEntry(loaded, "secretary", state, null);
-    expect(entry?.type).toBe("oc-proxy");
+    expect(entry?.type).toBe("opencode-cpe");
     expect(entry?.resume_cmd).toContain("opencode-cpe");
   });
 

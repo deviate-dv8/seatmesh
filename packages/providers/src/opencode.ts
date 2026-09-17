@@ -119,8 +119,10 @@ export const opencodeProvider: AgentProvider = {
   kindExtensions() {
     return [
       {
-        id: "oc-proxy",
+        /** CPE OpenCode — extends opencode. Legacy switch id `oc-proxy` normalizes here. */
+        id: "opencode-cpe",
         extends: "opencode",
+        aliases: ["oc-proxy", "ocproxy"],
         launch: {
           command: "scripts/opencode-cpe.sh",
           sessionFlag: "--session",

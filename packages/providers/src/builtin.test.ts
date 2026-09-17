@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { createBuiltinRegistry, normalizeProviderEnableIds, resolveKindsForProfile } from "./builtin.js";
 
 describe("normalizeProviderEnableIds", () => {
-  it("maps oc-proxy / oc aliases to opencode provider", () => {
-    expect(normalizeProviderEnableIds(["oc-proxy", "oc", "cursor"])).toEqual([
+  it("maps opencode-cpe / oc aliases to opencode provider", () => {
+    expect(normalizeProviderEnableIds(["opencode-cpe", "oc", "cursor"])).toEqual([
       "opencode",
       "cursor-agent",
     ]);
@@ -15,8 +15,8 @@ describe("normalizeProviderEnableIds", () => {
 });
 
 describe("createBuiltinRegistry", () => {
-  it("enables opencode detect when profile lists oc-proxy", () => {
-    const reg = createBuiltinRegistry(["cursor-agent", "oc-proxy", "empty"]);
+  it("enables opencode detect when profile lists opencode-cpe", () => {
+    const reg = createBuiltinRegistry(["cursor-agent", "opencode-cpe", "empty"]);
     expect(reg.get("opencode")).toBeTruthy();
     expect(reg.get("cursor-agent")).toBeTruthy();
     expect(reg.get("claude")).toBeUndefined();
@@ -24,14 +24,14 @@ describe("createBuiltinRegistry", () => {
 });
 
 describe("resolveKindsForProfile", () => {
-  it("emits oc-proxy as extension of opencode from provider kindBase", () => {
+  it("emits opencode-cpe as extension of opencode from provider kindBase", () => {
     const kinds = resolveKindsForProfile({
       providers: ["opencode", "empty"],
       agents: { runners: {}, kinds: {} },
     });
     expect(kinds.opencode.provider).toBe("opencode");
-    expect(kinds["oc-proxy"].provider).toBe("opencode");
-    expect(kinds["oc-proxy"].launch).toMatchObject({
+    expect(kinds["opencode-cpe"].provider).toBe("opencode");
+    expect(kinds["opencode-cpe"].launch).toMatchObject({
       command: "scripts/opencode-cpe.sh",
     });
   });
@@ -42,10 +42,10 @@ describe("resolveKindsForProfile", () => {
       agents: {
         runners: {},
         kinds: {
-          "oc-proxy": { launch: { command: "scripts/custom-cpe.sh" } },
+          "opencode-cpe": { launch: { command: "scripts/custom-cpe.sh" } },
         },
       },
     });
-    expect(kinds["oc-proxy"].launch).toEqual({ command: "scripts/custom-cpe.sh" });
+    expect(kinds["opencode-cpe"].launch).toEqual({ command: "scripts/custom-cpe.sh" });
   });
 });

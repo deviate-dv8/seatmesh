@@ -1,5 +1,5 @@
 /**
- * OC-LIMIT V2 atomics: record ses → kill CPE OpenCode → revive oc-proxy + CONTINUE.
+ * OC-LIMIT V2 atomics: record ses → kill CPE OpenCode → revive opencode-cpe + CONTINUE.
  * Outside mesh-inbox/peer. Covers pia + zsign + seatmesh (shared CPE).
  */
 import fs from "node:fs";
@@ -17,19 +17,19 @@ import {
   tryLaunchPane,
   tmux,
 } from "@seat-mesh/tmux";
-import { directInjectContinue, OC_PROXY_CONTINUE } from "./oc-relaunch.js";
+import { directInjectContinue, OC_CPE_CONTINUE } from "./oc-relaunch.js";
 
-const DEFAULT_SES_STAMP = "/tmp/seatmesh-oc-proxy-sessions.json";
+const DEFAULT_SES_STAMP = "/tmp/seatmesh-opencode-cpe-sessions.json";
 const CONTINUE_WAIT_MS = 8_000;
 
 /** Hub meshes that share the CPE proxy — all get kill→revive→CONTINUE on V2 success. */
-export const OC_PROXY_MESH_ROOTS: ReadonlyArray<{ name: string; profile: string }> = [
+export const OC_CPE_MESH_ROOTS: ReadonlyArray<{ name: string; profile: string }> = [
   { name: "seatmesh", profile: "/home/dan/Desktop/Projects/seatmesh/.sm" },
   { name: "pia", profile: "/home/dan/Desktop/Work/pia/.sm" },
   { name: "zsign", profile: "/home/dan/Desktop/Work/zsign/.sm" },
 ];
 
-export interface OcProxyAtomicSeat {
+export interface OcCpeAtomicSeat {
   mesh: string;
   label: string;
   paneId: string;
@@ -41,15 +41,15 @@ export interface OcProxyAtomicSeat {
   profileDir: string;
 }
 
-export interface OcProxyAtomicsResult {
+export interface OcCpeAtomicsResult {
   recorded: number;
   killed: number;
   revived: number;
   continued: number;
-  seats: OcProxyAtomicSeat[];
+  seats: OcCpeAtomicSeat[];
 }
 
-function wantOcProxy(
+function wantOpenCodeCpe(
   entry: { type?: string; resume_cmd?: string | null } | null,
   paneId: string | undefined,
   kinds: ReturnType<typeof kindsForLoaded>,
@@ -84,25 +84,25 @@ function tryLoadMesh(profileDir: string): LoadedProfile | null {
   }
 }
 
-/** Snapshot oc-proxy seats on one mesh. */
-export function recordOcProxySeats(
+/** Snapshot opencode-cpe seats on one mesh. */
+export function recordOpenCodeCpeSeats(
   loaded: LoadedProfile,
   session: string,
   baseWindow: string,
   workersWindow: string,
   minisWindow: string,
   opts: { mesh?: string; profileDir?: string; stampPath?: string } = {},
-): OcProxyAtomicSeat[] {
+): OcCpeAtomicSeat[] {
   const state = loadLaunchState(loaded);
   const panes = listMeshMonitorPanes(session, baseWindow, workersWindow, minisWindow);
   const mesh = opts.mesh ?? loaded.profile.name ?? "mesh";
   const profileDir = opts.profileDir ?? loaded.profileDir;
   const kinds = kindsForLoaded(loaded);
-  const seats: OcProxyAtomicSeat[] = [];
+  const seats: OcCpeAtomicSeat[] = [];
   for (const p of panes) {
     if (!p.label) continue;
     const entry = seatAgentEntry(loaded, p.label, state);
-    if (!wantOcProxy(entry, p.paneId, kinds)) continue;
+    if (!wantOpenCodeCpe(entry, p.paneId, kinds)) continue;
     const { ses, source } = paneSes(p.paneId, entry);
     seats.push({
       mesh,
@@ -136,15 +136,15 @@ export function recordOcProxySeats(
 }
 
 /**
- * Record oc-proxy seats across pia + zsign + seatmesh (shared CPE).
+ * Record opencode-cpe seats across pia + zsign + seatmesh (shared CPE).
  * Dedupes by paneId. Always includes the triggering mesh even if not in the hub list.
  */
 export function recordAllMeshesOcProxySeats(
   trigger?: LoadedProfile,
   log?: (line: string) => void,
-): OcProxyAtomicSeat[] {
-  const byPane = new Map<string, OcProxyAtomicSeat>();
-  const roots = [...OC_PROXY_MESH_ROOTS];
+): OcCpeAtomicSeat[] {
+  const byPane = new Map<string, OcCpeAtomicSeat>();
+  const roots = [...OC_CPE_MESH_ROOTS];
   if (trigger?.profileDir) {
     const abs = path.resolve(trigger.profileDir);
     if (!roots.some((r) => path.resolve(r.profile) === abs)) {
@@ -170,7 +170,7 @@ export function recordAllMeshesOcProxySeats(
       log?.(`OC-ATOMICS skip mesh=${root.name}: ${(e as Error).message}`);
       continue;
     }
-    const seats = recordOcProxySeats(
+    const seats = recordOpenCodeCpeSeats(
       loaded,
       session,
       layout.base.window,
@@ -214,7 +214,7 @@ function resetPaneShell(paneId: string): void {
 
 /** Kill CPE-proxied opencode whose --session matches stamped ses (never whole-host wipe). */
 export function killOcProxySeats(
-  seats: OcProxyAtomicSeat[],
+  seats: OcCpeAtomicSeat[],
   proxyPort: number = 18887,
   log?: (line: string) => void,
 ): number {
@@ -254,7 +254,7 @@ export function killOcProxySeats(
 
 const loadedCache = new Map<string, LoadedProfile>();
 
-function loadedForSeat(seat: OcProxyAtomicSeat): LoadedProfile | null {
+function loadedForSeat(seat: OcCpeAtomicSeat): LoadedProfile | null {
   const key = seat.profileDir || seat.workspace;
   const hit = loadedCache.get(key);
   if (hit) return hit;
@@ -264,12 +264,12 @@ function loadedForSeat(seat: OcProxyAtomicSeat): LoadedProfile | null {
 }
 
 /**
- * Relaunch every stamped seat as oc-proxy (keep ses). Uses each seat's own mesh profile.
+ * Relaunch every stamped seat as opencode-cpe (keep ses). Uses each seat's own mesh profile.
  * Returns paneIds that launched — CONTINUE must hit 100% of these.
  */
-export function reviveOcProxySeats(
+export function reviveOpenCodeCpeSeats(
   _triggerLoaded: LoadedProfile | null,
-  seats: OcProxyAtomicSeat[],
+  seats: OcCpeAtomicSeat[],
   log?: (line: string) => void,
 ): { revived: number; paneIds: string[]; failed: string[] } {
   let revived = 0;
@@ -293,7 +293,7 @@ export function reviveOcProxySeats(
       (entryWantsProxyRecovery({ type: s.type, resume_cmd: s.resume_cmd }, kinds)
         ? Object.values(kinds).find((k) => k.recovery?.onProxyUp)?.id
         : null) ||
-      "oc-proxy";
+      "opencode-cpe";
     const cmd =
       resolveLaunchCmd(
         {
@@ -340,10 +340,10 @@ export function continueOcProxySeats(
   let n = 0;
   const missed: string[] = [];
   for (const paneId of paneIds) {
-    let ok = directInjectContinue(registry, paneId, OC_PROXY_CONTINUE);
+    let ok = directInjectContinue(registry, paneId, OC_CPE_CONTINUE);
     if (!ok) {
       spawnSync("sleep", ["2"]);
-      ok = directInjectContinue(registry, paneId, OC_PROXY_CONTINUE);
+      ok = directInjectContinue(registry, paneId, OC_CPE_CONTINUE);
     }
     if (ok) {
       n += 1;
@@ -356,7 +356,7 @@ export function continueOcProxySeats(
   return { continued: n, missed };
 }
 
-export interface OcProxyAtomicsRoundtripInput {
+export interface OcCpeAtomicsRoundtripInput {
   loaded: LoadedProfile;
   registry: ProviderRegistry | null;
   session: string;
@@ -373,9 +373,9 @@ export interface OcProxyAtomicsRoundtripInput {
 /**
  * Full V2 atomic across hub meshes: record → kill → revive → CONTINUE.
  */
-export function runOcProxyAtomicsRoundtrip(
-  input: OcProxyAtomicsRoundtripInput,
-): OcProxyAtomicsResult {
+export function runOcCpeAtomicsRoundtrip(
+  input: OcCpeAtomicsRoundtripInput,
+): OcCpeAtomicsResult {
   const {
     loaded,
     registry,
@@ -391,14 +391,14 @@ export function runOcProxyAtomicsRoundtrip(
 
   const seats = allMeshes
     ? recordAllMeshesOcProxySeats(loaded, log)
-    : recordOcProxySeats(loaded, session, baseWindow, workersWindow, minisWindow, {
+    : recordOpenCodeCpeSeats(loaded, session, baseWindow, workersWindow, minisWindow, {
         mesh: loaded.profile.name,
         profileDir: loaded.profileDir,
       });
-  log?.(`OC-ATOMICS record ${seats.length} oc-proxy seats (allMeshes=${allMeshes})`);
+  log?.(`OC-ATOMICS record ${seats.length} opencode-cpe seats (allMeshes=${allMeshes})`);
   const killed = killOcProxySeats(seats, proxyPort, log);
   spawnSync("sleep", ["2"]);
-  const { revived, paneIds } = reviveOcProxySeats(loaded, seats, log);
+  const { revived, paneIds } = reviveOpenCodeCpeSeats(loaded, seats, log);
 
   let continued = 0;
   if (waitAndContinue && paneIds.length > 0) {
@@ -419,14 +419,14 @@ export function runOcProxyAtomicsRoundtrip(
 /**
  * Async variant — does not block the daemon event loop on the CONTINUE wait.
  */
-export function runOcProxyAtomicsRoundtripAsync(
-  input: OcProxyAtomicsRoundtripInput,
-  onDone: (result: OcProxyAtomicsResult) => void,
+export function runOcCpeAtomicsRoundtripAsync(
+  input: OcCpeAtomicsRoundtripInput,
+  onDone: (result: OcCpeAtomicsResult) => void,
 ): void {
   const { loaded, registry, proxyPort = 18887, log, allMeshes = true } = input;
   const seats = allMeshes
     ? recordAllMeshesOcProxySeats(loaded, log)
-    : recordOcProxySeats(
+    : recordOpenCodeCpeSeats(
         loaded,
         input.session,
         input.baseWindow,
@@ -434,10 +434,10 @@ export function runOcProxyAtomicsRoundtripAsync(
         input.minisWindow,
         { mesh: loaded.profile.name, profileDir: loaded.profileDir },
       );
-  log?.(`OC-ATOMICS record ${seats.length} oc-proxy seats`);
+  log?.(`OC-ATOMICS record ${seats.length} opencode-cpe seats`);
   const killed = killOcProxySeats(seats, proxyPort, log);
   setTimeout(() => {
-    const { revived, paneIds } = reviveOcProxySeats(loaded, seats, log);
+    const { revived, paneIds } = reviveOpenCodeCpeSeats(loaded, seats, log);
     if (paneIds.length === 0) {
       onDone({ recorded: seats.length, killed, revived, continued: 0, seats });
       return;

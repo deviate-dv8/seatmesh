@@ -35,7 +35,7 @@ export function normalizeProviderEnableIds(raw: string[] | undefined): string[] 
   const out = new Set<string>();
   for (const entry of raw) {
     const k = normalizeAgentKind(entry);
-    if (k === "oc-proxy" || k === "opencode") {
+    if (k === "opencode-cpe" || k === "opencode-cpe" || k === "opencode") {
       out.add("opencode");
       continue;
     }

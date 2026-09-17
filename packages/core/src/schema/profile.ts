@@ -102,7 +102,7 @@ export const MeshProfileSchema = z.object({
   paths: PathsScopeSchema,
   storage: StorageSchema,
   /**
-   * Detect/inject provider ids (and aliases). Open strings — `oc-proxy` maps to the
+   * Detect/inject provider ids (and aliases). Open strings — `opencode-cpe` maps to the
    * opencode provider; unknown ids (e.g. kimi) are kept for future registration and
    * do not fail schema parse.
    */

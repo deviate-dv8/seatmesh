@@ -91,14 +91,15 @@ export function resolveLiveHarnessKind(input: {
       if (kind.prove && kindProveMatches(kind, evidence)) return kind.id;
     }
   } else {
-    // No kinds map — legacy CPE heuristics (same patterns as opencode.kindExtensions)
+    // No kinds map — legacy CPE heuristics
     if (
-      input.savedType === "oc-proxy" ||
+      input.savedType === "opencode-cpe" ||
+      input.savedType === "opencode-cpe" ||
       (input.resumeCmd && /opencode-cpe\.sh/i.test(input.resumeCmd)) ||
       (input.cmdlines?.some((l) => /opencode-cpe\.sh|HTTPS_PROXY=.*18887|HTTP_PROXY=.*18887/i.test(l)) ??
         false)
     ) {
-      return "oc-proxy";
+      return "opencode-cpe";
     }
   }
 
@@ -146,11 +147,16 @@ export function liveKindSatisfiesWanted(
   }
 
   // Legacy without kinds map
-  if (!kinds && wantedType === "oc-proxy" && liveType === "opencode") {
+  if (
+    !kinds &&
+    (wantedType === "opencode-cpe" || wantedType === "opencode-cpe") &&
+    liveType === "opencode"
+  ) {
     const cmdlines = evidence.cmdlines ?? [];
     if (cmdlines.some((l) => /opencode-cpe\.sh|HTTPS_PROXY=.*18887/i.test(l))) return true;
     if (
-      (opts?.savedType === "oc-proxy" ||
+      (opts?.savedType === "opencode-cpe" ||
+        opts?.savedType === "opencode-cpe" ||
         (opts?.resumeCmd != null && /opencode-cpe\.sh/i.test(opts.resumeCmd))) &&
       openCodeUiLive(evidence.snap)
     ) {
@@ -163,7 +169,13 @@ export function liveKindSatisfiesWanted(
     const liveKind = kinds ? lookupResolvedKind(kinds, liveType) : undefined;
     if (liveKind?.prove && liveKind.provider === wanted.provider) return false;
   }
-  if (!kinds && wantedType === "opencode" && liveType === "oc-proxy") return false;
+  if (
+    !kinds &&
+    wantedType === "opencode" &&
+    (liveType === "opencode-cpe" || liveType === "opencode-cpe")
+  ) {
+    return false;
+  }
 
   return false;
 }
@@ -214,7 +226,7 @@ export function isOpenCodeFamilyKind(
     return k?.provider === "opencode";
   }
   const x = kindRaw.trim().toLowerCase().replace(/_/g, "-");
-  return x === "opencode" || x === "oc-proxy" || x === "oc";
+  return x === "opencode" || x === "opencode-cpe" || x === "oc";
 }
 
 export function continueCopyForKind(

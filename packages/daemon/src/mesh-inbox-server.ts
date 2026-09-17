@@ -52,7 +52,7 @@ import {
   resumeAllOpenCodePanes,
   type ResumeWaveMeta,
 } from "./connectivity/oc-resume.js";
-import { continueOcCreditSeat, relaunchOcProxyAfterReset } from "./connectivity/oc-relaunch.js";
+import { continueOcCreditSeat, relaunchOpenCodeCpeAfterReset } from "./connectivity/oc-relaunch.js";
 import { broadcastOcResumeToRemotes, syncCarrierIpProbe } from "./connectivity/oc-resume-broadcast.js";
 import { armResumeAckWave, pollResumeAcks } from "./connectivity/oc-resume-ack.js";
 import {
@@ -362,7 +362,7 @@ async function main(): Promise<void> {
   ): void {
     // oc-reset kills CPE OC — relaunch from mesh-agents + CONTINUE (not Esc/resume keys).
     if (reason === "oc-reset") {
-      const { sent, total, sentPaneIds } = relaunchOcProxyAfterReset(
+      const { sent, total, sentPaneIds } = relaunchOpenCodeCpeAfterReset(
         loaded,
         registry,
         session,

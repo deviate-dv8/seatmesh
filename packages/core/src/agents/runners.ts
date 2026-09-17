@@ -41,17 +41,18 @@ export function normalizeAgentKind(raw: string): string {
   if (x === "cursor-agent" || x === "cursor") return "agent";
   if (x === "cc") return "claude";
   if (x === "oc" || x === "opencode-main") return "opencode";
-  if (x === "ocproxy") return "oc-proxy";
+  // Legacy mesh-agents / switch id → canonical CPE extension kind (only alias map left)
+  if (x === "ocproxy" || x === "oc-proxy") return "opencode-cpe";
   return x;
 }
 
 export function isOpenCodeKind(kind: string): boolean {
   const k = normalizeAgentKind(kind);
-  return k === "opencode" || k === "oc-proxy";
+  return k === "opencode" || k === "opencode-cpe";
 }
 
 /** @deprecated prefer kind.launch via resolveAgentKinds — kept for dual-read without kinds map */
-export function defaultOcProxyRunner(): string {
+export function defaultOpenCodeCpeRunner(): string {
   return "scripts/opencode-cpe.sh";
 }
 
@@ -83,10 +84,10 @@ function wrapScriptLaunch(
   return `cd ${shellQuote(workspace)} && ${LAUNCH_PREFIX} ${run}`;
 }
 
-function ocProxyRunnerEntry(
+function cpeRunnerEntry(
   runners: Record<string, AgentRunnerEntry>,
 ): AgentRunnerEntry {
-  return runners["oc-proxy"] ?? runners.opencode ?? defaultOcProxyRunner();
+  return runners["opencode-cpe"] ?? runners.opencode ?? defaultOpenCodeCpeRunner();
 }
 
 /**
@@ -101,8 +102,8 @@ export function buildCustomKindLaunchCmd(
   const kind = normalizeAgentKind(kindRaw);
   if (!kind || kind === "empty") return null;
 
-  if (kind === "oc-proxy") {
-    const entry = ocProxyRunnerEntry(runners);
+  if (kind === "opencode-cpe") {
+    const entry = cpeRunnerEntry(runners);
     return wrapScriptLaunch(
       workspace,
       resolveRunnerScript(workspace, entry),
@@ -113,7 +114,7 @@ export function buildCustomKindLaunchCmd(
 
   if (BUILTIN_KINDS.has(kind)) return undefined;
 
-  const entry = runners[kind];
+  const entry = runners[kind] ?? runners["opencode-cpe"];
   if (!entry) return undefined;
 
   return wrapScriptLaunch(
@@ -173,14 +174,14 @@ export function buildKindLaunchCmd(
   return buildBuiltinLaunchCmd(kindRaw, workspace, resumeId);
 }
 
-/** Merge profile runners; `runners.opencode` aliases to oc-proxy when oc-proxy unset. */
+/** Merge profile runners onto opencode-cpe (accept legacy runners.oc-proxy key). */
 export function runnersFromProfile(
   profile: { agents?: AgentsConfigInput } | undefined,
 ): Record<string, AgentRunnerEntry> {
   const raw = profile?.agents?.runners ?? {};
   const runners = { ...raw };
-  if (runners.opencode && !runners["oc-proxy"]) {
-    runners["oc-proxy"] = runners.opencode;
-  }
+  const legacy = (raw as Record<string, AgentRunnerEntry>)["oc-proxy"];
+  const cpe = runners["opencode-cpe"] ?? legacy ?? runners.opencode;
+  if (cpe) runners["opencode-cpe"] = cpe;
   return runners;
 }

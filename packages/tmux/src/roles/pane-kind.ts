@@ -4,7 +4,7 @@ import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { seatAgentEntry } from "../agents/agents-state.js";
 import { kindsForLoaded } from "../agents/agent-launch.js";
-import { resolveOpenCodeHarnessType } from "../agents/oc-proxy-live.js";
+import { resolveOpenCodeHarnessType } from "../agents/opencode-cpe-live.js";
 
 export type PaneSurfaceKind = "agent" | "terminal" | "unknown";
 
@@ -99,7 +99,7 @@ export function inspectPaneKind(
   const cmd = snap.currentCommand || "?";
   const phase = composer.phase;
   const kind = classifyPaneSurface({
-    providerId: reportProvider === "oc-proxy" ? "opencode" : reportProvider,
+    providerId: reportProvider === "opencode-cpe" ? "opencode" : reportProvider,
     phase,
     cmd,
   });

@@ -42,14 +42,14 @@ providers:
   - cursor-agent
   - claude
   - opencode
-  - oc-proxy   # alias → enables the opencode provider for detect/inject
+  # opencode-cpe removed — use opencode + opencode-cpe kind   # alias → enables the opencode provider for detect/inject
   - empty
   # - kimi     # allowed in schema; inject works once a kimi provider exists
 ```
 
 | Entry | Enables provider id |
 |-------|---------------------|
-| `opencode`, `oc`, `oc-proxy` | `opencode` |
+| `opencode`, `oc`, `opencode-cpe` | `opencode` |
 | `agent`, `cursor`, `cursor-agent` | `cursor-agent` |
 | `claude`, `cc` | `claude` |
 | `kiro` | `kiro` |
@@ -63,15 +63,15 @@ Overrides how a **CliType** is pasted into a pane. See [ARCHITECTURE.md](ARCHITE
 ```yaml
 agents:
   runners:
-    oc-proxy: scripts/opencode-cpe.sh
+    opencode-cpe: scripts/opencode-cpe.sh
 ```
 
 | Key | Effect |
 |-----|--------|
-| `runners.oc-proxy` | `switch … oc-proxy` / `layout.base.cli: oc-proxy` pastes the CPE script |
+| `runners.opencode-cpe` | `switch … opencode-cpe` / `layout.base.cli: opencode-cpe` pastes the CPE script |
 | `runners.<custom>` | Launch line for that kind — peer/inject needs a matching Provider |
 
-`providers:` enables detect; `agents.runners` + `layout.base.cli` / `switch` pick the launch kind. List `oc-proxy` in both if you use CPE.
+`providers:` enables detect; `agents.runners` + `layout.base.cli` / `switch` pick the launch kind. List `opencode-cpe` in both if you use CPE.
 
 ## Layout
 

@@ -43,13 +43,13 @@ function resolveHarnessType(
   if (entryWantsProxyRecovery(saved, kinds)) {
     const byType = saved?.type ? lookupResolvedKind(kinds, saved.type) : undefined;
     if (byType?.recovery?.onProxyUp || byType?.prove) return byType.id;
-    return lookupResolvedKind(kinds, "oc-proxy")?.id ?? "oc-proxy";
+    return lookupResolvedKind(kinds, "opencode-cpe")?.id ?? "opencode-cpe";
   }
-  if (saved?.type === "oc-proxy" || isOpenCodeCpeResumeCmd(saved?.resume_cmd)) {
-    return "oc-proxy";
+  if (saved?.type === "opencode-cpe" || isOpenCodeCpeResumeCmd(saved?.resume_cmd)) {
+    return "opencode-cpe";
   }
-  if (liveType === "opencode" || liveType === "oc-proxy") {
-    return liveType === "oc-proxy" ? "oc-proxy" : "opencode";
+  if (liveType === "opencode" || liveType === "opencode-cpe") {
+    return liveType === "opencode-cpe" ? "opencode-cpe" : "opencode";
   }
   if (saved?.type && saved.type !== "empty") {
     return saved.type === "cursor-agent" ? "agent" : saved.type;
@@ -183,7 +183,7 @@ export function runPaneResume(
       paneId,
       target,
       sessionId,
-      harnessType: harnessType === "oc-proxy" ? "oc-proxy" : "opencode",
+      harnessType: harnessType === "opencode-cpe" ? "opencode-cpe" : "opencode",
       detail: `${cmd} (via ${source})`,
     };
   }

@@ -20,7 +20,7 @@ import { loadLaunchState, resolveLaunchCmd, type AgentsStateFile, type PaneAgent
 import { buildProfileLaunchCmd, kindsForLoaded } from "./agent-launch.js";
 import { tryLaunchPane, type LaunchResult } from "./launch.js";
 import { registryForProfile } from "./launch-verify.js";
-import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
+import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./opencode-cpe-live.js";
 
 export type CoordSyncTrigger = "reload" | "attach";
 
@@ -60,7 +60,7 @@ export function coordSyncEnabledOnAttach(
 /** Scrollback / pane vars hint a live agent when process-tree detect is ambiguous. */
 export function liveAgentUiVisible(snap: PaneSnapshot, profileCli: string): boolean {
   const tail = snap.captureTail;
-  if (profileCli === "opencode" || profileCli === "oc-proxy") {
+  if (profileCli === "opencode" || profileCli === "opencode-cpe") {
     return (
       /ctrl\+p commands|Build auto\s+·|OpenCode\s+\d/i.test(tail) ||
       Boolean(snap.options.mesh_oc_session?.trim())

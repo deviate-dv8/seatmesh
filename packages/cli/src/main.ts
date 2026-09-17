@@ -201,7 +201,7 @@ Setup
 
 Put an agent on a pane
   help human          ← cheat sheet (aliases: put-agent | panes)
-  switch <target> <opencode|oc-proxy|claude|agent|kiro|empty>
+  switch <target> <opencode|opencode-cpe|claude|agent|kiro|empty>
   launch <target|all>
   kind <target>
 
@@ -248,12 +248,12 @@ Setup (run once per project, by a human)
 
 Put an agent on a pane (human — most common)
   help human          ← full cheat sheet (aliases: put-agent | panes)
-  switch <target> <opencode|oc-proxy|claude|agent|kiro>   empty shell → agent CLI
+  switch <target> <opencode|opencode-cpe|claude|agent|kiro>   empty shell → agent CLI
   switch <target> empty                          agent → plain shell
   launch <target|all>                            resume configured CLI (no type pick)
   pane resume [target]                           autodetect session id → resume/relaunch
   kind <target>                                  agent vs terminal?
-  Examples: switch slot-1 opencode · switch secretary oc-proxy · pane resume here
+  Examples: switch slot-1 opencode · switch secretary opencode-cpe · pane resume here
 
 Give a seat a todo (human or base agent — contracts optional)
   todo give <target> "…"     ← FOCUS+TASK+inject+CB≥20m  (preferred)
@@ -1414,7 +1414,8 @@ async function main(): Promise<void> {
         "claude",
         "kiro",
         "opencode",
-        "oc-proxy",
+        "opencode-cpe",
+        "oc-proxy", // legacy alias → normalizeAgentKind → opencode-cpe
         "cursor-agent",
         "oc",
         "cursor",
@@ -1567,7 +1568,7 @@ async function main(): Promise<void> {
   Targets: here (default) | secretary | manager | slot-N | mini-N
 
   Live OpenCode: pastes resume [ses_…]
-  Shell / dead OC: relaunches oc-proxy|opencode|claude with that session`);
+  Shell / dead OC: relaunches opencode-cpe|opencode|claude with that session`);
       return;
     }
     if (action === "resume") {
@@ -2245,7 +2246,7 @@ async function main(): Promise<void> {
     if (sub === "reset") {
       const { spawnSync } = await import("node:child_process");
       const path = await import("node:path");
-      const script = path.join(loaded.workspace, "scripts/oc-proxy-reset.sh");
+      const script = path.join(loaded.workspace, "scripts/opencode-cpe-reset.sh");
       const r = spawnSync("bash", [script], {
         cwd: loaded.workspace,
         encoding: "utf8",

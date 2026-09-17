@@ -6,7 +6,7 @@ import { withPaneInputEnabled } from "../inject/inject.js";
 import { pasteHarnessLaunchCmd, pasteLaunchCmd } from "./launch.js";
 import { isOpenCodeLaunch, verifyHarnessAfterPaste } from "./launch-verify.js";
 import { isOpenCodeHarnessType, stopOpenCodeCli } from "./oc-stop.js";
-import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./oc-proxy-live.js";
+import { liveHarnessSatisfiesWanted, resolveOpenCodeHarnessType } from "./opencode-cpe-live.js";
 import { seatAgentEntry } from "./agents-state.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { injectAfterLaunch } from "../seats/cold-start-inject.js";

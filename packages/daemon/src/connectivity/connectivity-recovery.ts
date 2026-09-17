@@ -796,7 +796,7 @@ function maybeRunProxyUp(
  * OC-LIMIT V2: three notifies + atomics (not oc-reset / Proxy-SMART / wait-ip).
  *   1) OC Restart Initialized
  *   2) stuck >30m → Reboot button toast
- *   3) new IP → kill CPE OC + revive oc-proxy + CONTINUE
+ *   3) new IP → kill CPE OC + revive opencode-cpe + CONTINUE
  */
 function maybeRunOcLimitRecovery(
   loaded: LoadedProfile,

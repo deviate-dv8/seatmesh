@@ -1,46 +1,46 @@
 #!/usr/bin/env bash
-# Shadow oc-proxy-only sources onto the current working tree as UNTRACKED files.
+# Shadow opencode-cpe-only sources onto the current working tree as UNTRACKED files.
 # Not committed on main, not listed in .gitignore — they show as ?? and keep tsc/report alive.
 #
 # Usage:
-#   tools/shadow-oc-proxy.sh apply    # materialize from origin/oc-proxy (default)
-#   tools/shadow-oc-proxy.sh clear    # remove shadows (needed before: git checkout oc-proxy)
-#   tools/shadow-oc-proxy.sh status   # which shadows are present / dirty
-#   tools/shadow-oc-proxy.sh install  # local post-checkout hook → apply on main
+#   tools/shadow-opencode-cpe.sh apply    # materialize from origin/opencode-cpe (default)
+#   tools/shadow-opencode-cpe.sh clear    # remove shadows (needed before: git checkout opencode-cpe)
+#   tools/shadow-opencode-cpe.sh status   # which shadows are present / dirty
+#   tools/shadow-opencode-cpe.sh install  # local post-checkout hook → apply on main
 #
-# Tip: before switching to oc-proxy:  tools/shadow-oc-proxy.sh clear && git checkout oc-proxy
+# Tip: before switching to opencode-cpe:  tools/shadow-opencode-cpe.sh clear && git checkout opencode-cpe
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-REF="${OC_PROXY_REF:-origin/oc-proxy}"
+REF="${OC_PROXY_REF:-origin/opencode-cpe}"
 ACTION="${1:-apply}"
 
-# Added-on-oc-proxy paths only (skip files already tracked on main, e.g. oc-resume-broadcast.ts).
+# Added-on-opencode-cpe paths only (skip files already tracked on main, e.g. oc-resume-broadcast.ts).
 SHADOW_PATHS=(
   packages/daemon/src/connectivity/oc-limit-v2.ts
-  packages/daemon/src/connectivity/oc-proxy-atomics.ts
+  packages/daemon/src/connectivity/opencode-cpe-atomics.ts
   packages/daemon/src/connectivity/oc-relaunch.ts
   packages/daemon/src/connectivity/oc-resume-broadcast.eth.test.ts
-  packages/tmux/src/agents/oc-proxy-live.ts
-  packages/tmux/src/agents/oc-proxy-live.test.ts
+  packages/tmux/src/agents/opencode-cpe-live.ts
+  packages/tmux/src/agents/opencode-cpe-live.test.ts
   packages/tmux/src/agents/oc-stop.ts
   packages/tmux/src/agents/oc-stop.test.ts
   packages/tmux/src/agents/opencode-launch-sanitize.ts
   packages/tmux/src/agents/opencode-launch-sanitize.test.ts
   packages/tmux/src/agents/pane-resume.ts
   packages/tmux/src/agents/pane-resume.test.ts
-  docs/patterns/oc-proxy.md
-  packages/cli/templates/docs/cli/oc-proxy.md
-  scripts/oc-proxy-atomics.sh
-  scripts/oc-proxy-atomics.mjs
+  docs/patterns/opencode-cpe.md
+  packages/cli/templates/docs/cli/opencode-cpe.md
+  scripts/opencode-cpe-atomics.sh
+  scripts/opencode-cpe-atomics.mjs
 )
 
 die() { echo "FAIL: $*" >&2; exit 1; }
 
 ensure_ref() {
-  git rev-parse --verify "$REF" >/dev/null 2>&1 || git fetch origin oc-proxy 2>/dev/null || true
-  git rev-parse --verify "$REF" >/dev/null 2>&1 || die "missing $REF — run: git fetch origin oc-proxy"
+  git rev-parse --verify "$REF" >/dev/null 2>&1 || git fetch origin opencode-cpe 2>/dev/null || true
+  git rev-parse --verify "$REF" >/dev/null 2>&1 || die "missing $REF — run: git fetch origin opencode-cpe"
 }
 
 is_tracked_here() {
@@ -64,7 +64,7 @@ apply_shadows() {
     n=$((n + 1))
   done
   echo "OK: shadowed $n file(s) from $REF (skipped tracked=$skip)"
-  echo "note: untracked on this branch — do not git add (or use oc-proxy branch)"
+  echo "note: untracked on this branch — do not git add (or use opencode-cpe branch)"
 }
 
 clear_shadows() {
@@ -105,23 +105,23 @@ install_hook() {
   mkdir -p "$(dirname "$hook")"
   cat >"$hook" <<'HOOK'
 #!/usr/bin/env bash
-# Auto-shadow oc-proxy sources when landing on main (local hook — not committed).
+# Auto-shadow opencode-cpe sources when landing on main (local hook — not committed).
 prev=$1
 new=$2
 flag=$3
 [[ "$flag" == "1" ]] || exit 0
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 root=$(git rev-parse --show-toplevel 2>/dev/null || true)
-[[ -n "$root" && -x "$root/tools/shadow-oc-proxy.sh" ]] || exit 0
+[[ -n "$root" && -x "$root/tools/shadow-opencode-cpe.sh" ]] || exit 0
 case "$branch" in
   main|master)
-    "$root/tools/shadow-oc-proxy.sh" apply || true
+    "$root/tools/shadow-opencode-cpe.sh" apply || true
     ;;
 esac
 HOOK
   chmod +x "$hook"
   echo "OK: installed $hook (applies shadows after checkout → main)"
-  echo "before checkout oc-proxy: tools/shadow-oc-proxy.sh clear"
+  echo "before checkout opencode-cpe: tools/shadow-opencode-cpe.sh clear"
 }
 
 case "$ACTION" in

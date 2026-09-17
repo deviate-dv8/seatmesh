@@ -65,28 +65,29 @@ Humans and session ops only — not the pane default path:
 
 `session` · `session init <sm-name>` · `update` · `init` · `report` · `layout` · `save` · `inbox restart` · `target` · `switch` · `launch`
 
-## OpenCode via CPE (`oc-proxy` kind)
+## OpenCode CPE (`opencode-cpe` kind)
 
-**Kind** `oc-proxy` **extends** `opencode` (same provider; CPE launch + prove). Not a
-second detect/inject family.
+**NOW:** kind `opencode-cpe` **extends** `opencode` (same provider; CPE launch + prove).
+Not a second detect family. Legacy switch id `oc-proxy` still normalizes to this kind.
 
 ```bash
-sm switch <target> oc-proxy --keep-resume
-sm launch minis    # after miniDefaultCli: oc-proxy in mesh-agents.json
+sm switch <target> opencode-cpe --keep-resume
+sm launch minis    # after miniDefaultCli: opencode-cpe
 ```
 
 | Key | Purpose |
 |-----|---------|
-| `providers:` | Enable **provider classes** (`opencode`, `claude`, …). Listing `oc-proxy` still maps to the opencode provider. |
-| `layout.base.cli.<seat>` / mesh-agents `type` | **Kind id** (open string) — e.g. `oc-proxy` |
-| `agents.kinds.oc-proxy` | Optional overlay (launch / prove). Engine default already extends opencode → `scripts/opencode-cpe.sh` |
-| `agents.runners.oc-proxy` | Legacy shim → `kinds.oc-proxy.launch.command` |
+| `providers:` | Provider classes only — `opencode`, `claude`, … (do **not** list CPE as a provider) |
+| `layout.base.cli.<seat>` / mesh-agents `type` | Kind id — use **`opencode-cpe`** |
+| `agents.kinds.opencode-cpe` | Optional overlay (engine already emits extends + CPE launch) |
+| `agents.runners.opencode-cpe` | Legacy shim → kind launch.command |
 
-Also need CPE proxy up: `./scripts/cpe-proxy-up.sh` (`127.0.0.1:18887`).
+CPE proxy: `./scripts/cpe-proxy-up.sh` (`127.0.0.1:18887`).
 
-Prove CPE: cmdline / `resumeCmd` match kind `prove` (default: `opencode-cpe.sh`, `HTTPS_PROXY=…18887`). Bare `opencode --auto` = kind `opencode`, not `oc-proxy`.
+Prove: cmdline / `resumeCmd` match kind prove (`opencode-cpe.sh`, `HTTPS_PROXY=…18887`).
+Bare `opencode --auto` = kind `opencode`.
 
-Stuck: Esc×3 → `sm agent whoami`. See docs under kinds / CPE on each mesh.
+Stuck: Esc×3 → `sm agent whoami`.
 
 ## Hard rules
 

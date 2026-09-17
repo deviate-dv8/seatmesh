@@ -43,9 +43,9 @@ export function pasteWelcomeScript(
     mode: 0o755,
   });
 
-  const ocProxy = /opencode-cpe\.sh/i.test(script);
+  const ocCpe = /opencode-cpe\.sh/i.test(script);
   withPaneInputEnabled(paneId, () => {
-    if (ocProxy) {
+    if (ocCpe) {
       prepareOpenCodeForPaste(paneId, capturePaneSnapshot);
     } else {
       tmux(["send-keys", "-t", paneId, "C-c"]);

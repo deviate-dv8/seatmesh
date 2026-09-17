@@ -11,7 +11,7 @@ export function normalizeHarnessType(type: string): string {
 
 export function isOpenCodeLaunch(type: string, cmd: string | null | undefined): boolean {
   const t = normalizeHarnessType(type);
-  return t === "opencode" || t === "oc-proxy" || Boolean(cmd?.includes("opencode-cpe.sh"));
+  return t === "opencode" || t === "opencode-cpe" || Boolean(cmd?.includes("opencode-cpe.sh"));
 }
 
 function sleepMs(ms: number): void {

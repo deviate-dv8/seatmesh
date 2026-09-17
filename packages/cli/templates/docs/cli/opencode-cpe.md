@@ -1,14 +1,14 @@
-# sm oc-proxy
+# sm opencode-cpe
 
 ```text
 OpenCode via CPE proxy — spawn / relaunch any seat
 
-  sm switch <target> oc-proxy [--keep-resume|--fresh] [--queue]
+  sm switch <target> opencode-cpe [--keep-resume|--fresh] [--queue]
   sm launch minis | launch secretary | launch <slot-N>
 
   <target> = secretary | manager | mini-N | slot-N | here
 
-  oc-proxy  ≠  oc / opencode  (direct, no CPE script)
+  opencode-cpe  ≠  oc / opencode  (direct, no CPE script)
 ```
 
 ## Config (once)
@@ -16,7 +16,7 @@ OpenCode via CPE proxy — spawn / relaunch any seat
 ```yaml
 agents:
   runners:
-    oc-proxy: scripts/opencode-cpe.sh
+    opencode-cpe: scripts/opencode-cpe.sh
 connectivity:
   driver: cpe
   proxyPort: 18887
@@ -24,17 +24,17 @@ connectivity:
 
 | Default for… | Where |
 |--------------|--------|
-| Base columns | `layout.base.cli.<id>: oc-proxy` |
-| Minis / workers | `.sm/mesh-agents.json` → `conventions.miniDefaultCli: oc-proxy` |
+| Base columns | `layout.base.cli.<id>: opencode-cpe` |
+| Minis / workers | `.sm/mesh-agents.json` → `conventions.miniDefaultCli: opencode-cpe` |
 
 `sm config check`
 
 ## Examples
 
 ```bash
-sm switch secretary oc-proxy --keep-resume
-sm switch mini-3 oc-proxy --keep-resume
-sm launch minis                    # after miniDefaultCli = oc-proxy
+sm switch secretary opencode-cpe --keep-resume
+sm switch mini-3 opencode-cpe --keep-resume
+sm launch minis                    # after miniDefaultCli = opencode-cpe
 env -u TMUX_PANE sm switch …       # from plain shell (stale TMUX_PANE)
 ```
 
@@ -42,7 +42,7 @@ env -u TMUX_PANE sm switch …       # from plain shell (stale TMUX_PANE)
 
 Esc×3 → composer idle → `sm agent whoami`. Full relaunch only if needed: `--fresh`.
 
-All oc-proxy panes stuck / need CONTINUE without typing it: `./scripts/oc-proxy-atomics.sh`
+All opencode-cpe panes stuck / need CONTINUE without typing it: `./scripts/opencode-cpe-atomics.sh`
 (record → kill CPE OC → revive → CONTINUE across pia/zsign/seatmesh).
 
 - CLI: `sm switch --help` · `sm launch --help`

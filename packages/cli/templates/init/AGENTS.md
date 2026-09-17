@@ -93,23 +93,23 @@ Aliases: `notify info` · `notify md` · `notify details`
 
 Lead-only extras (manager/secretary) appear on your `agent` card — spawn/assign/inbox restart are not universal.
 
-## OpenCode via CPE (`oc-proxy` kind)
+## OpenCode via CPE (`opencode-cpe` kind)
 
-**Kind** `oc-proxy` **extends** `opencode` — same inject provider, CPE launch wrapper.
+**Kind** `opencode-cpe` **extends** `opencode` — same inject provider, CPE launch wrapper.
 Not bare `opencode` (`oc` / `opencode` = direct).
 
 ### Config (once per mesh)
 
 ```yaml
-# mesh.config.yaml — engine already emits oc-proxy extends opencode;
+# mesh.config.yaml — engine already emits opencode-cpe extends opencode;
 # overlay only if you diverge:
 agents:
   kinds:
-    oc-proxy:
+    opencode-cpe:
       launch: { command: scripts/opencode-cpe.sh }
   # legacy also works:
   # runners:
-  #   oc-proxy: scripts/opencode-cpe.sh
+  #   opencode-cpe: scripts/opencode-cpe.sh
 connectivity:
   driver: cpe
   proxyPort: 18887
@@ -117,8 +117,8 @@ connectivity:
 
 | Default for… | Where |
 |--------------|--------|
-| Base columns (manager, secretary, …) | `layout.base.cli.<column-id>: oc-proxy` |
-| Minis / workers (launch default) | `.sm/mesh-agents.json` → `conventions.miniDefaultCli: oc-proxy` |
+| Base columns (manager, secretary, …) | `layout.base.cli.<column-id>: opencode-cpe` |
+| Minis / workers (launch default) | `.sm/mesh-agents.json` → `conventions.miniDefaultCli: opencode-cpe` |
 
 Validate: `sm config check`
 
@@ -127,8 +127,8 @@ Validate: `sm config check`
 **One path for every seat** — secretary, manager, `mini-N`, `slot-N`:
 
 ```bash
-sm switch <target> oc-proxy --keep-resume   # keep saved session
-sm switch <target> oc-proxy --fresh          # new session
+sm switch <target> opencode-cpe --keep-resume   # keep saved session
+sm switch <target> opencode-cpe --fresh          # new session
 sm launch minis                              # all minis (after miniDefaultCli set)
 sm launch secretary                          # coord (uses layout.base.cli)
 ```
@@ -140,7 +140,7 @@ Queue (inbox drains): add `--queue`.
 ### Stuck mid-build (`esc interrupt` / Build bar)
 
 **Do not** full pane restart. **Esc×3** → wait for composer idle → `sm agent whoami` or inbox cold-start.  
-Full relaunch only when you need a new session: `sm switch <target> oc-proxy --fresh`.
+Full relaunch only when you need a new session: `sm switch <target> opencode-cpe --fresh`.
 
 ## Outside `agent` (operator / shared)
 

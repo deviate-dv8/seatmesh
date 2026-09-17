@@ -300,12 +300,12 @@ hub [contexts|todos|acks|cbs|chat|room|shared|sessions]
 human — put an agent CLI on a pane (operator)
 
   Empty terminal → agent:
-    switch <target> <opencode|oc-proxy|claude|agent|kiro>
+    switch <target> <opencode|opencode-cpe|claude|agent|kiro>
     Examples:
       seatmesh switch slot-1 opencode
-      seatmesh switch secretary oc-proxy --keep-resume
+      seatmesh switch secretary opencode-cpe --keep-resume
       seatmesh switch here agent          # this pane (Cursor)
-      seatmesh switch mini-1 oc-proxy --keep-resume
+      seatmesh switch mini-1 opencode-cpe --keep-resume
 
   Back to plain shell:
     switch <target> empty
@@ -523,7 +523,7 @@ ops list|clear
 pane resume [target]
   Autodetect original session id on the pane and resume it.
   Sources: live cmdline → @mesh_oc_session → scrollback → mesh-agents.
-  Live OpenCode: paste resume [ses_…]. Else relaunch oc-proxy/opencode/claude with that id.
+  Live OpenCode: paste resume [ses_…]. Else relaunch opencode-cpe/opencode/claude with that id.
   Default target: here. Examples: pane resume · pane resume secretary
 ```
 

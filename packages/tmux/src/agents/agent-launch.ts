@@ -96,7 +96,7 @@ export function resolveSeatLaunchCmd(
   if (
     !resumeId &&
     !clearResume &&
-    (harnessType === "opencode" || harnessType === "oc-proxy")
+    (harnessType === "opencode" || harnessType === "opencode-cpe")
   ) {
     const stored = tmux(["display-message", "-t", paneId, "-p", "#{@mesh_oc_session}"]).out.trim();
     if (stored) resumeId = stored;

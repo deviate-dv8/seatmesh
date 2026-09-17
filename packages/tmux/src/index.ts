@@ -49,7 +49,7 @@ export * from "./session/reload.js";
 export * from "./comms/inbox-bridge.js";
 export * from "./roles/secretary.js";
 export * from "./agents/oc-stop.js";
-export * from "./agents/oc-proxy-live.js";
+export * from "./agents/opencode-cpe-live.js";
 export * from "./agents/pane-resume.js";
 export * from "./smoke-test.js";
 export * from "./comms/peer-send.js";

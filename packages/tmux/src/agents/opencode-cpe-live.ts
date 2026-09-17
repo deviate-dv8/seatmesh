@@ -11,7 +11,7 @@ import { cmdlines } from "@seat-mesh/providers";
  * historical API and optional kinds map from the profile.
  */
 
-export function cmdlineLooksLikeOcProxy(snap: PaneSnapshot | null | undefined): boolean {
+export function cmdlineLooksLikeOpenCodeCpe(snap: PaneSnapshot | null | undefined): boolean {
   if (!snap) return false;
   return cmdlines(snap).some((l) =>
     /opencode-cpe\.sh|HTTPS_PROXY=.*18887|HTTP_PROXY=.*18887/i.test(l),

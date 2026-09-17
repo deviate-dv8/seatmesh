@@ -1,20 +1,20 @@
 # seatmesh NOW
 
-**Updated:** 2026-09-13 15:15
+**Updated:** 2026-09-17
 
-**Slice:** **5.8 sm preview** — mdview publish wrapper.
+**Design NOW:** open agent kinds — providers emit `kindBase` / `kindExtensions`.
+CPE OpenCode = kind **`opencode-cpe`** (`extends: opencode`). Legacy name `oc-proxy`
+is only a normalize alias (not a CliType / not a provider).
 
-**Read:** [docs/ONE-PATH.md](docs/ONE-PATH.md) · [docs/SMFUNCTIONS-SPEC.md](docs/SMFUNCTIONS-SPEC.md)
+**Read:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [TODO.md](TODO.md) P6
 
-## Done this session
+## Done
 
-- **5.8** — `sm preview <file...> [--set 1-30] [--notify]` wraps `scripts/publish-mdview.sh`; `ok preview <file> <url>`; `preview-mdview.test.ts`
-- **5.7** (prior) — `sm notify` @0.1.18
+- Open kinds + prove/satisfy/recovery (`1.2.4`)
+- Canonical CPE kind rename: `opencode-cpe` (oc-proxy alias only)
 
-## Next (one at a time)
+## Next
 
-1. **4.1** — mesh-agents json engine polish
-2. **5.2** — inbox list/resolve CLI parity
-3. **4.6** — surpass gate A (health + inbox CLI)
-
-**Tracker:** [TODO.md](TODO.md) · [IMPLEMENT-CHECK.md](../tasks/seat-mesh/IMPLEMENT-CHECK.md)
+1. **P6.1** `.sm/providers/` drop-in (Kimi without fork)
+2. **P6.2** `sm kind list|show`
+3. Delete `origin/oc-proxy` git branch when ready

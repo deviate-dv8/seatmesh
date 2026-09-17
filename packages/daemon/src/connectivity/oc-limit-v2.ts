@@ -3,8 +3,8 @@
  *   1) OC Restart Initialized
  *   2) If no new IP after 30m → node-notifier with Reboot button
  *   3) Same IP after 1st post-reboot wait → silent second CPE reboot
- *   4) Same IP again (2nd time, old=old) → notify, then kill→revive oc-proxy + CONTINUE
- *   5) Successful new IP → kill CPE OC + revive oc-proxy + CONTINUE
+ *   4) Same IP again (2nd time, old=old) → notify, then kill→revive opencode-cpe + CONTINUE
+ *   5) Successful new IP → kill CPE OC + revive opencode-cpe + CONTINUE
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -23,9 +23,9 @@ import {
   continueOcProxySeats,
   killOcProxySeats,
   recordAllMeshesOcProxySeats,
-  reviveOcProxySeats,
-  type OcProxyAtomicSeat,
-} from "./oc-proxy-atomics.js";
+  reviveOpenCodeCpeSeats,
+  type OcCpeAtomicSeat,
+} from "./opencode-cpe-atomics.js";
 import { syncCarrierIpProbe } from "./oc-resume-broadcast.js";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 
@@ -213,7 +213,7 @@ export interface OcLimitV2Episode {
    * 1 → silent second reboot; 2+ → notify + atomics.
    */
   sameIpAfterRebootCount: number;
-  seats: OcProxyAtomicSeat[];
+  seats: OcCpeAtomicSeat[];
   rebootRunning: boolean;
   pollTimer: ReturnType<typeof setInterval> | null;
   finished: boolean;
@@ -229,7 +229,7 @@ export function ocLimitV2EpisodeActive(): boolean {
 function resolveAtomicsRunner(workspace: string): string | null {
   let dir = workspace;
   for (let i = 0; i < 8; i++) {
-    const cand = path.join(dir, "scripts", "oc-proxy-atomics.mjs");
+    const cand = path.join(dir, "scripts", "opencode-cpe-atomics.mjs");
     if (fs.existsSync(cand)) return cand;
     const parent = path.dirname(dir);
     if (parent === dir) break;
@@ -237,7 +237,7 @@ function resolveAtomicsRunner(workspace: string): string | null {
   }
   const homeCand = path.join(
     process.env.HOME || "",
-    "Desktop/Projects/seatmesh/scripts/oc-proxy-atomics.mjs",
+    "Desktop/Projects/seatmesh/scripts/opencode-cpe-atomics.mjs",
   );
   return fs.existsSync(homeCand) ? homeCand : null;
 }
@@ -263,7 +263,7 @@ function notify1Initialized(workspace: string, fromIp: string | null, seatCount:
     topic: "OC Restart Initialized",
     phase: "starting",
     sessionAbout:
-      `Carrier ${fromIp ?? "?"}. Rebooting CPE; on new IP kill→revive oc-proxy + CONTINUE ` +
+      `Carrier ${fromIp ?? "?"}. Rebooting CPE; on new IP kill→revive opencode-cpe + CONTINUE ` +
       `across pia+zsign+seatmesh (${seatCount} seats).`,
     check: "Toast 2 = stuck >30m (Reboot). Same-IP #1 = silent 2nd reboot; #2 = same-IP notify + atomics. New IP = atomics.",
   });
@@ -301,9 +301,9 @@ function notify3Success(
     topic: "OC Restart",
     phase: "complete",
     sessionAbout:
-      `New IP ${fmtIp(fromIp)} → ${fmtIp(toIp)}. Killing CPE OpenCode, reviving oc-proxy, CONTINUE ` +
+      `New IP ${fmtIp(fromIp)} → ${fmtIp(toIp)}. Killing CPE OpenCode, reviving opencode-cpe, CONTINUE ` +
       `(revived=${revived} continue=${continued}).`,
-    check: "Ack automatic when limit screens clear. Stay on oc-proxy (:18887).",
+    check: "Ack automatic when limit screens clear. Stay on opencode-cpe (:18887).",
   });
 }
 
@@ -323,7 +323,7 @@ function notifySameIpSecondTime(
     sessionAbout:
       `Same IP again after CPE reboot #${hit}: ${oldEqOld}. ` +
       `Carrier did not rotate. Support toast next; atomics (kill→revive→CONTINUE) follow.`,
-    check: "Man-1: note same carrier IP — stay on oc-proxy (:18887).",
+    check: "Man-1: note same carrier IP — stay on opencode-cpe (:18887).",
   });
   // 2) Support
   runInboxDesktopNotifySync(workspace, {
@@ -331,8 +331,8 @@ function notifySameIpSecondTime(
     phase: "incomplete",
     sessionAbout:
       `Still ${fmtIp(stillIp)} after CPE reboot #${hit} (was ${fmtIp(fromIp)} — old = old). ` +
-      `Man-1 already informed. Proceeding with kill→revive oc-proxy + CONTINUE anyway.`,
-    check: "Support: carrier did not rotate. Atomics running; stay on oc-proxy (:18887).",
+      `Man-1 already informed. Proceeding with kill→revive opencode-cpe + CONTINUE anyway.`,
+    check: "Support: carrier did not rotate. Atomics running; stay on opencode-cpe (:18887).",
   });
 }
 
@@ -396,7 +396,7 @@ function finishWithAtomics(
   }
   clearInflight();
 
-  // pia + zsign + seatmesh — shared CPE, all must revive oc-proxy + CONTINUE
+  // pia + zsign + seatmesh — shared CPE, all must revive opencode-cpe + CONTINUE
   const seats = recordAllMeshesOcProxySeats(ctx.loaded, log);
   ep.seats = seats;
 
@@ -467,7 +467,7 @@ function finishWithAtomics(
     // Fallback: inline (blocks event loop — only if runner script not found).
     log("OC-V2 atomics runner not found — falling back to inline (blocks event loop)");
     setTimeout(() => {
-      const { revived, paneIds, failed } = reviveOcProxySeats(ctx.loaded, seats, log);
+      const { revived, paneIds, failed } = reviveOpenCodeCpeSeats(ctx.loaded, seats, log);
       if (failed.length) log(`OC-V2 revive failed: ${failed.join(", ")}`);
       if (paneIds.length === 0) { ctx.state.recoveryRunning = false; return; }
       setTimeout(() => {

@@ -3,7 +3,7 @@ import { isOpenCodeHarnessType, openCodePaneBusy } from "./oc-stop.js";
 
 describe("oc-stop", () => {
   it("recognizes opencode harness kinds", () => {
-    expect(isOpenCodeHarnessType("oc-proxy")).toBe(true);
+    expect(isOpenCodeHarnessType("opencode-cpe")).toBe(true);
     expect(isOpenCodeHarnessType("opencode")).toBe(true);
     expect(isOpenCodeHarnessType("claude")).toBe(false);
   });

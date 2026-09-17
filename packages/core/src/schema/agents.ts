@@ -16,7 +16,7 @@ import { expandColumnAlias } from "./seat-kind.js";
  */
 
 /**
- * Seat harness kind id (`opencode`, `oc-proxy`, custom extends…).
+ * Seat harness kind id (`opencode`, `opencode-cpe`, custom extends…).
  * Open string — validated at switch/launch against resolved agent kinds, not a closed enum.
  * Legacy enum values remain valid; custom kinds (extends) are allowed.
  */
@@ -30,7 +30,7 @@ export const BUILTIN_CLI_TYPE_IDS = [
   "claude",
   "kiro",
   "opencode",
-  "oc-proxy",
+  "opencode-cpe",
   "empty",
 ] as const;
 

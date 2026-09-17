@@ -219,7 +219,7 @@ separate layers must agree.
 # Engine default (from opencode.kindExtensions) — mesh may overlay
 agents:
   kinds:
-    oc-proxy:
+    opencode-cpe:
       extends: opencode
       launch: { command: scripts/opencode-cpe.sh }
       prove: { cmdline: [opencode-cpe\.sh], resumeCmd: [opencode-cpe\.sh] }
@@ -252,7 +252,7 @@ needs a provider module with `kindBase()`.
 ### Legacy `agents.runners` (shim)
 
 Still supported: `runners.X` → overlays `kinds.X.launch.command`. Prefer `agents.kinds`
-for new meshes. `runners.opencode` alone also overlays `oc-proxy` launch (compat).
+for new meshes. `runners.opencode` alone also overlays `opencode-cpe` launch (compat).
 
 | Code path | Uses kinds? |
 |-----------|-------------|
@@ -269,7 +269,7 @@ for new meshes. `runners.opencode` alone also overlays `oc-proxy` launch (compat
 | `claude`, `cc` | — | `claude --permission-mode auto …` | `claude` |
 | `kiro` | — | `kiro-cli chat …` | `kiro` |
 | `oc`, `opencode` | — | `opencode --auto …` | `opencode` |
-| `oc-proxy` | **opencode** | `scripts/opencode-cpe.sh` | `opencode` |
+| `opencode-cpe` | **opencode** | `scripts/opencode-cpe.sh` | `opencode` |
 | `empty` | — | (plain shell) | `empty` |
 
 Implementation: `packages/core/src/agents/kinds.ts`, `harness-satisfy.ts`,

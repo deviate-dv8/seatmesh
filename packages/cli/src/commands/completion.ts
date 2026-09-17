@@ -10,7 +10,7 @@ const CLI_TYPES = [
   "agent",
   "claude",
   "opencode",
-  "oc-proxy",
+  "opencode-cpe",
   "kiro",
   "empty",
   "cc",

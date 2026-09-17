@@ -43,7 +43,7 @@ export const AgentKindRecoverySchema = z
   .optional();
 
 /**
- * One agent kind document (JSON). Map key is the kind id (`opencode`, `oc-proxy`, …).
+ * One agent kind document (JSON). Map key is the kind id (`opencode`, `opencode-cpe`, …).
  * Extensions set `extends` and inherit provider/launch/prove from the parent chain.
  */
 export const AgentKindDefSchema = z
@@ -149,14 +149,15 @@ export function applyRunnersShim(
       },
     };
   }
-  // Compat: runners.opencode alone also overlays oc-proxy when oc-proxy unset in runners
-  if (runners.opencode && !runners["oc-proxy"] && out["oc-proxy"]) {
-    const entry = runners.opencode;
-    const command = typeof entry === "string" ? entry : entry.command;
+  // Compat: runners.opencode / runners["oc-proxy"] / runners.opencode-cpe → kinds.opencode-cpe.launch
+  const legacyOcProxy = runners["oc-proxy" as string];
+  const cpeSrc = runners["opencode-cpe"] ?? legacyOcProxy ?? runners.opencode;
+  if (cpeSrc && out["opencode-cpe"]) {
+    const command = typeof cpeSrc === "string" ? cpeSrc : cpeSrc.command;
     const sessionFlag =
-      typeof entry === "object" && entry.sessionFlag ? entry.sessionFlag : undefined;
-    out["oc-proxy"] = {
-      ...out["oc-proxy"],
+      typeof cpeSrc === "object" && cpeSrc.sessionFlag ? cpeSrc.sessionFlag : undefined;
+    out["opencode-cpe"] = {
+      ...out["opencode-cpe"],
       launch: {
         command,
         ...(sessionFlag ? { sessionFlag } : {}),

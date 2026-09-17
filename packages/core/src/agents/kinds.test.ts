@@ -12,7 +12,7 @@ const PROVIDER_KINDS: Record<string, AgentKindDef> = {
     aliases: ["oc"],
     launch: { builtin: "opencode" },
   },
-  "oc-proxy": {
+  "opencode-cpe": {
     extends: "opencode",
     launch: { command: "scripts/opencode-cpe.sh", sessionFlag: "--session" },
     prove: { cmdline: ["opencode-cpe\\.sh"] },
@@ -28,11 +28,11 @@ const PROVIDER_KINDS: Record<string, AgentKindDef> = {
 };
 
 describe("resolveAgentKinds", () => {
-  it("flattens oc-proxy as extended opencode", () => {
+  it("flattens opencode-cpe as extended opencode", () => {
     const kinds = resolveAgentKinds({ fromProviders: PROVIDER_KINDS });
-    expect(kinds["oc-proxy"].provider).toBe("opencode");
-    expect(kinds["oc-proxy"].extends).toBeUndefined();
-    expect(kinds["oc-proxy"].launch).toEqual({
+    expect(kinds["opencode-cpe"].provider).toBe("opencode");
+    expect(kinds["opencode-cpe"].extends).toBeUndefined();
+    expect(kinds["opencode-cpe"].launch).toEqual({
       command: "scripts/opencode-cpe.sh",
       sessionFlag: "--session",
     });
@@ -43,35 +43,35 @@ describe("resolveAgentKinds", () => {
     const kinds = resolveAgentKinds({
       fromProviders: PROVIDER_KINDS,
       fromProfile: {
-        "oc-proxy": { launch: { command: "scripts/my-cpe.sh" } },
+        "opencode-cpe": { launch: { command: "scripts/my-cpe.sh" } },
       },
     });
-    expect(kinds["oc-proxy"].launch).toEqual({ command: "scripts/my-cpe.sh" });
-    expect(kinds["oc-proxy"].provider).toBe("opencode");
+    expect(kinds["opencode-cpe"].launch).toEqual({ command: "scripts/my-cpe.sh" });
+    expect(kinds["opencode-cpe"].provider).toBe("opencode");
   });
 
   it("runners shim overlays launch.command", () => {
     const kinds = resolveAgentKinds({
       fromProviders: PROVIDER_KINDS,
-      runners: { "oc-proxy": "scripts/from-runners.sh" },
+      runners: { "opencode-cpe": "scripts/from-runners.sh" },
     });
-    expect(kinds["oc-proxy"].launch).toEqual({ command: "scripts/from-runners.sh" });
+    expect(kinds["opencode-cpe"].launch).toEqual({ command: "scripts/from-runners.sh" });
   });
 
   it("aliases resolve via knownAgentKindIds", () => {
     const kinds = resolveAgentKinds({ fromProviders: PROVIDER_KINDS });
     const known = knownAgentKindIds(kinds);
     expect(known.has("oc")).toBe(true);
-    expect(known.has("oc-proxy")).toBe(true);
+    expect(known.has("opencode-cpe")).toBe(true);
   });
 });
 
 describe("launchCmdFromKind", () => {
   const ws = "/tmp/pia";
 
-  it("launches CPE wrapper for resolved oc-proxy", () => {
+  it("launches CPE wrapper for resolved opencode-cpe", () => {
     const kinds = resolveAgentKinds({ fromProviders: PROVIDER_KINDS });
-    const cmd = launchCmdFromKind(kinds["oc-proxy"], ws, "ses_abc");
+    const cmd = launchCmdFromKind(kinds["opencode-cpe"], ws, "ses_abc");
     expect(cmd).toContain("opencode-cpe.sh");
     expect(cmd).toContain("--session ses_abc");
     expect(cmd).toMatch(/^cd /);

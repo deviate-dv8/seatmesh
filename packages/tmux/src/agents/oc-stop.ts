@@ -15,7 +15,7 @@ export function isOpenCodeHarnessType(type: string): boolean {
   return (
     t === "opencode" ||
     t === "oc" ||
-    t === "oc-proxy" ||
+    t === "opencode-cpe" ||
     t === "opencode-main" ||
     t === "ocproxy"
   );

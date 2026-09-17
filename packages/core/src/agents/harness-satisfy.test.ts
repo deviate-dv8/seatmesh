@@ -15,7 +15,7 @@ const PROVIDER_KINDS: Record<string, AgentKindDef> = {
     aliases: ["oc"],
     launch: { builtin: "opencode" },
   },
-  "oc-proxy": {
+  "opencode-cpe": {
     extends: "opencode",
     launch: { command: "scripts/opencode-cpe.sh", sessionFlag: "--session" },
     prove: {
@@ -47,26 +47,26 @@ describe("harness-satisfy", () => {
 
   it("prove matches CPE resumeCmd", () => {
     expect(
-      kindProveMatches(kinds["oc-proxy"], {
+      kindProveMatches(kinds["opencode-cpe"], {
         resumeCmd: "/ws/scripts/opencode-cpe.sh --session ses_x",
       }),
     ).toBe(true);
-    expect(kindProveMatches(kinds["oc-proxy"], { resumeCmd: "opencode --auto" })).toBe(false);
+    expect(kindProveMatches(kinds["opencode-cpe"], { resumeCmd: "opencode --auto" })).toBe(false);
   });
 
   it("resolveLiveHarnessKind prefers prove over bare detect", () => {
     expect(
       resolveLiveHarnessKind({
         detectId: "opencode",
-        savedType: "oc-proxy",
+        savedType: "opencode-cpe",
         resumeCmd: "opencode-cpe.sh --session ses_x",
         kinds,
       }),
-    ).toBe("oc-proxy");
+    ).toBe("opencode-cpe");
     expect(resolveLiveHarnessKind({ detectId: "opencode", kinds })).toBe("opencode");
   });
 
-  it("liveKindSatisfiesWanted: CPE UI + saved oc-proxy", () => {
+  it("liveKindSatisfiesWanted: CPE UI + saved opencode-cpe", () => {
     const s = snap({
       paneId: "%1",
       captureTail: "Build auto · Big Pickle\nctrl+p commands",
@@ -75,21 +75,21 @@ describe("harness-satisfy", () => {
     expect(
       liveKindSatisfiesWanted(
         "opencode",
-        "oc-proxy",
+        "opencode-cpe",
         { snap: s },
         kinds,
-        { savedType: "oc-proxy", resumeCmd: "opencode-cpe.sh --session ses_abc" },
+        { savedType: "opencode-cpe", resumeCmd: "opencode-cpe.sh --session ses_abc" },
       ),
     ).toBe(true);
   });
 
-  it("liveKindSatisfiesWanted: bare OC does not satisfy oc-proxy", () => {
+  it("liveKindSatisfiesWanted: bare OC does not satisfy opencode-cpe", () => {
     const s = snap({ paneId: "%1", captureTail: "zsh" });
-    expect(liveKindSatisfiesWanted("opencode", "oc-proxy", { snap: s }, kinds)).toBe(false);
+    expect(liveKindSatisfiesWanted("opencode", "opencode-cpe", { snap: s }, kinds)).toBe(false);
   });
 
   it("entryWantsProxyRecovery uses kind.recovery.onProxyUp", () => {
-    expect(entryWantsProxyRecovery({ type: "oc-proxy" }, kinds)).toBe(true);
+    expect(entryWantsProxyRecovery({ type: "opencode-cpe" }, kinds)).toBe(true);
     expect(
       entryWantsProxyRecovery(
         { type: "opencode", resume_cmd: "scripts/opencode-cpe.sh --session x" },

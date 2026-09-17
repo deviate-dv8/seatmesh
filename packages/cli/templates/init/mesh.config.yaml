@@ -52,13 +52,12 @@ providers:
   - cursor-agent
   - claude
   - opencode
-  - oc-proxy
   - empty
 
-# CPE OpenCode: layout.base.cli.<seat>: oc-proxy + this runner
+# CPE = kind opencode-cpe (extends opencode), not a providers[] entry
 agents:
   runners:
-    oc-proxy: scripts/opencode-cpe.sh
+    opencode-cpe: scripts/opencode-cpe.sh
 
 seats:
   root: {{seatsRoot}}
