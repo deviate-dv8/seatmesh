@@ -1,10 +1,12 @@
 # npm release schedule
 
-**Gate:** `seatmesh@1.2.0` cutover — Adonis hub on `:3190` is the operator console; daemon `/act/card` + `/ui` proxy to hub. See [NOW.md](../NOW.md).
-
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
-| **2026-09-15** | `seatmesh@1.2.0` | Operator hub cutover: Adonis 7 + Nuxt UI; act/card hub proxy; SessionChrome; mobile drawer; agent forum/golf; contract simplify; LAN/QR; terminals preview-first |
+| **2026-09-18** | `seatmesh@1.2.5` | CLI declares `yaml` dep — fixes npx/global `ERR_MODULE_NOT_FOUND` on merge-mesh-config |
+| **2026-09-17** | `seatmesh@1.2.4` | Open agent kinds (`kindBase`/`extends`); opencode-cpe extends opencode; prove/satisfy/recovery; act/card hub; wave OC relaunch; Orca credit CONTINUE; cross-mesh inbox restart |
+| **2026-09-17** | `seatmesh@1.2.3` | Republish after connectivity@1.2.2 npm staging E409; same surface as 1.2.2 |
+| **2026-09-17** | `seatmesh@1.2.2` | `npx seatmesh web up\|down\|restart\|status`; `agent mds hosted\|agent-self\|agent <kind>`; hub `/mds` live; OC-V2 supervisor health rescue + oc-credit CONTINUE |
+| **2026-09-16** | `seatmesh@1.2.0` | opencode-cpe CliType + runners; `sm pane resume`; OC-LIMIT `scripts/oc-reset.sh` + daemon relaunch; todo-check remaining TASKS DIGEST bulk; `sm web status\|open\|url`; `config upgrade` (npm i -g first); human help + patterns modular `docs/patterns/` |
 | **2026-09-15** | `seatmesh@1.1.5` | Notify Info/Yes/No native buttons; local Info cards GFM+Mermaid (zoom/pan/expand); session check/repair; CB workspace scope; policy config; agent help/COMMANDS |
 | **2026-09-15** | `seatmesh@1.1.4` | Early-adopter UX: `start` idempotent create-or-attach; `session down`; manager terminal welcome (whoami/switch); `sessions` documented |
 | **2026-09-15** | `seatmesh@1.1.3` | Cursor/Claude respawn prove: agent --trust; composer-ready verify+retry (OC parity); fresh whoami on success expected |
@@ -28,5 +30,9 @@ Installed CLI compares to `npm view seatmesh version` (6h cache). When outdated,
 Skip check: `SEATMESH_SKIP_VERSION_CHECK=1`.
 
 Publish: `bash scripts/publish-npm.sh` from repo root (after `npm login`).
+
+**GitHub Releases:** yes — notes in `docs/releases/vX.Y.Z.md` + row in this file.
+Create/update: `bash scripts/gh-release.sh 1.2.0` (needs `gh auth login`).
+Optional: `bash scripts/gh-release.sh 1.2.0 --publish` (npm then release).
 
 Inbox blips (2026-09-13 prove): daemon `/health` flaps and `checkback ack` 404 while inbox is up (cancel still works). Drain can wedge on `peer_unsent` if coord holds are not backlogged. Not a ship blocker after `seatmesh@1.0.0`; cancel orphan checkbacks instead of retrying ack.

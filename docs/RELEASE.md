@@ -2,6 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-18** | `seatmesh@1.2.5` | CLI declares `yaml` dep — fixes npx/global `ERR_MODULE_NOT_FOUND` on merge-mesh-config |
 | **2026-09-17** | `seatmesh@1.2.4` | Open agent kinds (`kindBase`/`extends`); opencode-cpe extends opencode; prove/satisfy/recovery; act/card hub; wave OC relaunch; Orca credit CONTINUE; cross-mesh inbox restart |
 | **2026-09-17** | `seatmesh@1.2.3` | Republish after connectivity@1.2.2 npm staging E409; same surface as 1.2.2 |
 | **2026-09-17** | `seatmesh@1.2.2` | `npx seatmesh web up\|down\|restart\|status`; `agent mds hosted\|agent-self\|agent <kind>`; hub `/mds` live; OC-V2 supervisor health rescue + oc-credit CONTINUE |
