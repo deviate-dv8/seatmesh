@@ -58,6 +58,10 @@ export interface MeshRuntimePaths {
   targetJsonl: string;
   paneOpsJsonl: string;
   callsJsonl: string;
+  /** Persisted operator notify rows (survive inbox restart / reboot). */
+  notificationsJsonl: string;
+  /** Persisted act cards + tokens for Yes/No restore after daemon bounce. */
+  actCardsJsonl: string;
   meshInboxMeta: string;
   meshInboxStop: string;
   meshInboxLog: string;
@@ -87,6 +91,8 @@ export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
     targetJsonl: path.join(daemonDir, "TARGET.jsonl"),
     paneOpsJsonl: path.join(daemonDir, "PANE_OPS.jsonl"),
     callsJsonl: path.join(daemonDir, "CALLS.jsonl"),
+    notificationsJsonl: path.join(daemonDir, "NOTIFICATIONS.jsonl"),
+    actCardsJsonl: path.join(daemonDir, "ACT-CARDS.jsonl"),
     meshInboxMeta: path.join(daemonDir, "mesh-inbox.json"),
     meshInboxStop: path.join(daemonDir, "mesh-inbox.stop"),
     meshInboxLog: path.join(daemonDir, "mesh-inbox.log"),

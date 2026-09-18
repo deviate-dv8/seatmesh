@@ -97,4 +97,51 @@ describe("notify-act registry", () => {
     expect(String(yes?.params.msg)).toContain("target=manager");
     expect(String(yes?.params.msg)).toContain("session=mesh-c87d62");
   });
+
+  it("run-cmd executes under workspace and refuses escape cwd", async () => {
+    const reg = createNotifyActRegistry();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "notify-run-"));
+    fs.writeFileSync(path.join(dir, "marker.txt"), "ok\n");
+    const links = reg.register(
+      [
+        {
+          label: "Run",
+          type: "run-cmd",
+          params: { cmd: "cat marker.txt", cwd: "" },
+        },
+      ],
+      300,
+      "http://127.0.0.1:31670",
+    );
+    const store = new JsonlStore(dir);
+    const row = reg.take(links[0]!.token)!;
+    const ok = await executeNotifyAct(row, {
+      loaded: { workspace: dir, profileDir: dir, profilePath: dir, profile: {} } as never,
+      store,
+      log: () => {},
+      onPeerEnqueued: async () => {},
+    });
+    expect(ok.ok).toBe(true);
+    expect(ok.summary).toContain("marker.txt");
+    expect(ok.summary).toMatch(/\bok\b/);
+
+    const bad = await executeNotifyAct(
+      {
+        token: "x",
+        label: "Run",
+        type: "run-cmd",
+        params: { cmd: "echo no", cwd: "/tmp" },
+        expiresAt: Date.now() + 60_000,
+        used: false,
+      },
+      {
+        loaded: { workspace: dir, profileDir: dir, profilePath: dir, profile: {} } as never,
+        store,
+        log: () => {},
+        onPeerEnqueued: async () => {},
+      },
+    );
+    expect(bad.ok).toBe(false);
+    expect(bad.summary).toMatch(/cwd must stay under workspace/);
+  });
 });

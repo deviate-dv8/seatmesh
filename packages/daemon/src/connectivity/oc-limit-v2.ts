@@ -5,6 +5,10 @@
  *   3) Same IP after 1st post-reboot wait → silent second CPE reboot
  *   4) Same IP again (2nd time, old=old) → notify, then kill→revive opencode-cpe + CONTINUE
  *   5) Successful new IP → kill CPE OC + revive opencode-cpe + CONTINUE
+ *
+ * CPE reboot = scripts/cpe-reboot.sh → POST /api/system/fun type=0.
+ * Prefers USB RNDIS eth (192.168.42.x); not fixed WAN eth (254.x) or WiFi-first.
+ * Prove waits for 05c6:9024 + RNDIS when possible (9091 = flaky red→green class).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -215,6 +219,8 @@ export interface OcLimitV2Episode {
   sameIpAfterRebootCount: number;
   seats: OcCpeAtomicSeat[];
   rebootRunning: boolean;
+  /** Last time wait-ip ran cpe-proxy-up (RNDIS→wifi rebind after migrate). */
+  lastProxyRebindAt: number;
   pollTimer: ReturnType<typeof setInterval> | null;
   finished: boolean;
 }
@@ -263,9 +269,9 @@ function notify1Initialized(workspace: string, fromIp: string | null, seatCount:
     topic: "OC Restart Initialized",
     phase: "starting",
     sessionAbout:
-      `Carrier ${fromIp ?? "?"}. Rebooting CPE; on new IP kill→revive opencode-cpe + CONTINUE ` +
+      `Carrier ${fromIp ?? "?"}. Rebooting CPE via USB RNDIS (type=0); on new IP kill→revive opencode-cpe + CONTINUE ` +
       `across pia+zsign+seatmesh (${seatCount} seats).`,
-    check: "Toast 2 = stuck >30m (Reboot). Same-IP #1 = silent 2nd reboot; #2 = same-IP notify + atomics. New IP = atomics.",
+    check: "Toast 2 = stuck >30m (Reboot). Same-IP #1 = silent 2nd reboot; #2 = same-IP notify + atomics. New IP = atomics. Reboot proves 9024/RNDIS when possible.",
   });
 }
 
@@ -275,7 +281,7 @@ function notify2Stuck(ep: OcLimitV2Episode, log: (line: string) => void): void {
   const title = "inbox · OC Restart stuck (30m+)";
   const body =
     `Still no new carrier IP after ${ageMin}m (was ${ep.fromIp ?? "?"}). ` +
-    `Press Reboot to run cpe-reboot again.`;
+    `Press Reboot to run cpe-reboot again (RNDIS-first type=0).`;
 
   if (shouldSkipDesktopNotify(ep.workspace)) {
     log("OC-V2 stuck notify skipped (desktop mute)");
@@ -333,6 +339,51 @@ function notifySameIpSecondTime(
       `Still ${fmtIp(stillIp)} after CPE reboot #${hit} (was ${fmtIp(fromIp)} — old = old). ` +
       `Man-1 already informed. Proceeding with kill→revive opencode-cpe + CONTINUE anyway.`,
     check: "Support: carrier did not rotate. Atomics running; stay on opencode-cpe (:18887).",
+  });
+}
+
+function resolveCpeProxyUpScript(workspace: string): string | null {
+  let dir = workspace;
+  for (let i = 0; i < 8; i++) {
+    const cand = path.join(dir, "scripts", "cpe-proxy-up.sh");
+    if (fs.existsSync(cand)) return cand;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/** Rebind gost when RNDIS lost IPv4 / detect moved to wifi — wait-ip was stuck on 503. */
+const WAIT_IP_PROXY_REBIND_MS = 60_000;
+
+function maybeRebindProxyDuringWaitIp(
+  workspace: string,
+  log: (line: string) => void,
+): void {
+  const ep = active;
+  if (!ep || ep.finished) return;
+  const now = Date.now();
+  if (now - ep.lastProxyRebindAt < WAIT_IP_PROXY_REBIND_MS) return;
+  const script = resolveCpeProxyUpScript(workspace);
+  if (!script) return;
+  ep.lastProxyRebindAt = now;
+  log(`OC-V2 wait-ip: carrier probe empty — running ${path.basename(script)} (iface rebind)`);
+  const child = spawn("bash", [script], {
+    cwd: workspace,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env },
+  });
+  const pump = (chunk: Buffer) => {
+    for (const line of chunk.toString("utf8").split(/\r?\n/)) {
+      const t = line.trim();
+      if (t) log(`OC-V2 proxy-up: ${t}`);
+    }
+  };
+  child.stdout?.on("data", pump);
+  child.stderr?.on("data", pump);
+  child.on("close", (code) => {
+    log(`OC-V2 proxy-up exit=${code ?? "?"}`);
   });
 }
 
@@ -489,6 +540,11 @@ function tickWaitIp(log: (line: string) => void): void {
 
   const now = Date.now();
   const ip = syncCarrierIpProbe(ep.workspace, ep.proxyPort);
+  if (!ip) {
+    // After RNDIS migrate, gost often stays on a dead USB iface (CONNECT 503).
+    // Re-run cpe-proxy-up so detect can move to wifi/working iface — else new-IP never fires.
+    maybeRebindProxyDuringWaitIp(ep.workspace, log);
+  }
   if (ip && ep.fromIp && !sameCarrierIp(ep.fromIp, ip)) {
     log(`OC-V2 new IP detected ${fmtIp(ep.fromIp)} -> ${fmtIp(ip)}`);
     finishWithAtomics(ctx, ip, log);
@@ -590,6 +646,7 @@ export function startOcLimitV2Episode(input: OcLimitV2StartInput): boolean {
     rebootCompletedAt: null,
     sameIpAfterRebootCount: 0,
     rebootRunning: false,
+    lastProxyRebindAt: 0,
     pollTimer: null,
     finished: false,
   };

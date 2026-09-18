@@ -80,7 +80,7 @@ Build auto · Big Pickle OpenCode Zen
   });
 
   it("reports typing when OpenCode footer has a human draft", () => {
-    const tail = `hello from human draft
+    const tail = `┃ hello from human draft
 Build auto · Big Pickle OpenCode Zen
 ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
                               0.0K (0%)  ctrl+p commands`;

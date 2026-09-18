@@ -1,11 +1,10 @@
 # seatmesh switch
 
 ```text
-switch <target> <agent|claude|opencode|kiro|empty> [flags] [reason...]
-  HUMAN: empty terminal → agent CLI (or empty = back to shell).
-  Alias: handoff. See: seatmesh help human
-  Examples: switch slot-1 opencode · switch here claude · switch mini-2 empty
-  Flags: --keep-resume --resume ID --queue
+switch <target|1..4> <agent|claude|opencode|kiro|empty> [flags] [reason...]
+  Replace a LIVE agent CLI (or → empty). Empty pane → prefer spawn (--fast).
+  Alias: handoff. Flags: --fast (skip verify) --slow --keep-resume --resume ID --queue
+  Examples: switch slot-1 claude · switch here agent --fast
 ```
 
 - CLI: `seatmesh switch --help`

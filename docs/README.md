@@ -1,47 +1,118 @@
 # seatmesh documentation
 
-Product documentation for the engine. Paths and defaults are **profile-driven**
-(`mesh.config.yaml` or project `.sm/mesh.config.yaml`); examples use placeholders
-like `{data.root}` and `{seats.root}` unless noted.
+Job-grouped guide — not an API dump. One path per need.
+
+Hosted gallery: [`.sm/mds` INDEX](../.sm/mds/INDEX.md) · hub `/mds`
+
+Paths are **profile-driven** (`mesh.config.yaml` / `.sm/mesh.config.yaml`).
+
+---
 
 ## Start here
 
-1. [QUICKSTART.md](QUICKSTART.md) — init, attach, reload, cold start behavior
-2. [ONE-PATH.md](ONE-PATH.md) — pick one command per task
-3. [FEATURES.md](FEATURES.md) — what the engine provides
+| Need | Doc |
+|------|-----|
+| Init / attach / cold start | [QUICKSTART](QUICKSTART.md) |
+| One command per job | [ONE-PATH](ONE-PATH.md) |
+| Golf / SM function rules | [SMFUNCTIONS-SPEC](SMFUNCTIONS-SPEC.md) |
+| What the engine provides | [FEATURES](FEATURES.md) |
+| Put a CLI on a pane | [cli/human](cli/human.md) |
+| Layout / columns | [cli/layout](cli/layout.md) |
+| Contracts | [cli/contract](cli/contract.md) |
+| Config / kinds | [CONFIG](CONFIG.md) |
 
-## Reference
+---
 
-| Doc | Topic |
-|-----|--------|
-| [COMMANDS.md](COMMANDS.md) · [cli/](cli/) | **All CLI verbs** — greppable (`rg "^## " docs/COMMANDS.md`) |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Tmux layout, daemon, providers, queues |
-| [CONFIG.md](CONFIG.md) | Profile schema and keys |
-| [SLOTS.md](SLOTS.md) | Manager, secretary, workers, minis |
-| [STATE.md](STATE.md) | Persisted CLI/resume state |
-| [COMMS.md](COMMS.md) | Enqueue → drain → inject |
-| [CHATROOM.md](CHATROOM.md) | Parallel agent room ledger |
-| [CHATFILE.md](CHATFILE.md) | Append-only shared files |
-| [PORTABILITY.md](PORTABILITY.md) | Custom proxy, hooks, runtime data dir |
-| [PORTS.md](PORTS.md) | Inbox HTTP ports (`:31670` mesh, `:31699` harness) |
-| [PROXY-NOTIFICATIONS.md](PROXY-NOTIFICATIONS.md) | CPE/proxy desktop toast budget |
+## Agent path (`sm agent …`)
+
+Pane gateway. Prefer **one** verb per job. Full map: [cli/README](cli/README.md).
+
+| Need | Prefer | Doc |
+|------|--------|-----|
+| Who / can | `whoami` · bare `agent` | [cli/whoami](cli/whoami.md) · [cli/agent](cli/agent.md) |
+| Give work | `todo give` | [cli/todo](cli/todo.md) |
+| Tell a seat | **`peer`** | [cli/peer](cli/peer.md) |
+| Close ask | `ack` | [cli/ack](cli/ack.md) |
+| Poll later | `cb` | [cli/cb](cli/cb.md) |
+| Shared ledger | `room` | [cli/room](cli/room.md) |
+| Operator eyes | `notify` | [cli/notify](cli/notify.md) |
+| Prompt log | `chat` · `hub chat` | [cli/chat](cli/chat.md) |
+
+Background: [COMMS](COMMS.md) · [CHATFILE](CHATFILE.md) · [CHATROOM](CHATROOM.md)
+
+---
+
+## Operator path (outside `agent`)
+
+Humans / session ops — not the pane default.
+
+| Need | Prefer | Doc |
+|------|--------|-----|
+| Session | `session` · `reload` · `verify` | [cli/session](cli/session.md) |
+| Grid | `layout` | [cli/layout](cli/layout.md) |
+| Put CLI on pane | `switch` · `launch` | [cli/switch](cli/switch.md) · [cli/launch](cli/launch.md) |
+| Persist map | `save` | [cli/save](cli/save.md) |
+| Inbox daemon | `inbox` | [cli/inbox](cli/inbox.md) |
+| Hub UI | `web` | [cli/web](cli/web.md) |
+| Update / init | `update` · `init` | [cli/update](cli/update.md) · [cli/init](cli/init.md) |
+
+Deep: [ARCHITECTURE](ARCHITECTURE.md) · [DOTDIR](DOTDIR.md) · [STATE](STATE.md)
+
+---
+
+## Concepts
+
+| Topic | Doc |
+|-------|-----|
+| Profiles | [PROFILES](PROFILES.md) |
+| Roles | [ROLE-YAML](ROLE-YAML.md) · [SLOTS](SLOTS.md) |
+| Ports | [PORTS](PORTS.md) |
+| Storage | [STORAGE](STORAGE.md) |
+| Portability | [PORTABILITY](PORTABILITY.md) |
+| Peer backlog | [PEER-BACKLOG-SPEC](PEER-BACKLOG-SPEC.md) |
+| Supervise / manager-2 | [SUPERVISOR-MANAGER2](SUPERVISOR-MANAGER2.md) |
+| Proxy toasts | [PROXY-NOTIFICATIONS](PROXY-NOTIFICATIONS.md) |
+| Patterns | [patterns/](patterns/README.md) |
+| Releases | [RELEASE](RELEASE.md) |
+
+---
+
+## Collapse / legacy (golf)
+
+Prefer the left. Do not teach aliases as first choice.
+
+| Prefer | Instead of |
+|--------|------------|
+| `peer` | `ask` · `msg` · `tell` · `prompt` · `to-slot` · `to-mini` |
+| `peer --ack` | `ackmsg` |
+| `todo give` | `assign` |
+| `cb` | `checkback` · `patience` |
+| `hub chat` | `read-history` |
+| `room` / chat | `to-master` (DEPRECATED) |
+
+---
+
+## Grep / full catalog
+
+When you already know the verb name:
+
+```bash
+rg "^## peer$" docs/COMMANDS.md
+seatmesh help peer
+```
+
+- Job-grouped CLI stubs: [cli/README](cli/README.md)
+- A–Z dump (last resort): [COMMANDS](COMMANDS.md)
+
+---
 
 ## Shipped profiles
 
 | Profile | Purpose |
 |---------|---------|
-| `profiles/minimal/` | Smallest demo (connectivity off, default paths) |
-| `profiles/consumer/` | Full layout for the consumer workspace consumer |
-
-Profile READMEs describe checkout-specific wiring only.
+| `profiles/minimal/` | Smallest demo |
+| `profiles/consumer/` | Full consumer layout |
 
 ## Internal / planning
 
-Not required for day-to-day use:
-
-- [../TODO.md](../TODO.md) — parity and implementation checklist
-- [../NOW.md](../NOW.md) — current slice
-- [PARALLEL.md](PARALLEL.md) — coexistence with other tmux harnesses (historical)
-- [SURPASS.md](SURPASS.md) — migration notes
-- [SM-JSON-ENGINE-DRAFT.md](SM-JSON-ENGINE-DRAFT.md) — config engine proposal
-- [SMFUNCTIONS-SPEC.md](SMFUNCTIONS-SPEC.md) — CLI surface conventions
+Not day-to-day: [../TODO.md](../TODO.md) · [../NOW.md](../NOW.md) · [PARALLEL](PARALLEL.md) · [SURPASS](SURPASS.md) · [SM-JSON-ENGINE-DRAFT](SM-JSON-ENGINE-DRAFT.md)

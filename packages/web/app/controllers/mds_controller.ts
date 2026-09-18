@@ -55,7 +55,7 @@ export default class MdsController {
     items.sort((a, b) => (a.when < b.when ? 1 : -1))
 
     return inertia.render('mds/index', {
-      note: `Local .sm/mds gallery — drop files or: seatmesh agent mds hosted host <file.md>. Hub ${defaultHubOrigin()}/mds`,
+      note: `Job-grouped docs — start at INDEX. Mirror: .sm/mds/docs/. ${defaultHubOrigin()}/mds`,
       items,
     })
   }

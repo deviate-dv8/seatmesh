@@ -22,10 +22,10 @@ export function hubRetrievalWhoamiLines(): string[] {
     `mutate_peer=${m('ask|msg <t> "…"')} | ${m('ackmsg <t> "…"')} | ${m('peer <t> "…"')}`,
     `mutate_cbs=${m('cb start <dur> --expect "…"')} | ${m("cb cancel <id>")}`,
     `mutate_room=${m('room say [-r slug] "…"')}`,
-    `mutate_notify=${m('notify yesno "<title>" "<blurb>" --body "…"')} | ${m('notify info "…" --body "…"')} | ${m("help notify")}`,
+    `mutate_notify=${m('notify yesno "<title>" "<blurb>" --body "…"')} | ${m('notify info "…" --body "…"')} | ${m('notify run "…" --cmd "…"')} | ${m("help notify")}`,
     `mutate_remote=${m('remote <alias> <seat> "…"')} | ${m('peer @alias:seat "…"')}`,
     "hub_hint=whoami = dump this turn; hub = fetch/CRUD map — chat prose does NOT clear ack/cb",
-    "operator_eyes=need human look/decide → notify (not chat). shapes: eyes-only | info | yesno — run help notify",
+    "operator_eyes=need human look/decide → notify (not chat). shapes: eyes-only | info | yesno | run — run help notify",
     `help_cmds=${m("help <cmd>")} | ${m("help peer")} | <cmd> --help | docs/COMMANDS.md | docs/cli/<verb>.md`,
   ];
 }

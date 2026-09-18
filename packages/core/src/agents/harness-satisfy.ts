@@ -79,8 +79,10 @@ export function resolveLiveHarnessKind(input: {
       const saved = lookupResolvedKind(kinds, input.savedType);
       if (saved?.prove) {
         if (kindProveMatches(saved, evidence)) return saved.id;
+        // Soft UI without prove → base provider label (not prove-kind).
+        // Returning saved.id here made liveType===wantedType and skipped atomics kill.
         if (saved.satisfy?.whenProvider === "opencode" && openCodeUiLive(input.snap)) {
-          return saved.id;
+          return "opencode";
         }
       } else if (saved && input.savedType !== "opencode") {
         // Non-prove extension with saved type wins when detect is opencode/empty
@@ -92,10 +94,8 @@ export function resolveLiveHarnessKind(input: {
       if (kind.prove && kindProveMatches(kind, evidence)) return kind.id;
     }
   } else {
-    // No kinds map — legacy CPE heuristics
+    // No kinds map — legacy CPE heuristics (prove only — not savedType alone)
     if (
-      input.savedType === "opencode-cpe" ||
-      input.savedType === "opencode-cpe" ||
       (input.resumeCmd && /opencode-cpe\.sh/i.test(input.resumeCmd)) ||
       (input.cmdlines?.some((l) => /opencode-cpe\.sh|HTTPS_PROXY=.*18887|HTTP_PROXY=.*18887/i.test(l)) ??
         false)
@@ -136,11 +136,16 @@ export function liveKindSatisfiesWanted(
       };
       if (wanted.satisfy.requireProve) {
         if (kindProveMatches(wanted, ev)) return true;
-        // Soft: configured for this kind + UI live (child is bare OC under CPE)
-        const savedOk =
-          opts?.savedType === wanted.id ||
-          (opts?.resumeCmd != null && kindProveMatches(wanted, { resumeCmd: opts.resumeCmd }));
-        if (savedOk && when === "opencode" && openCodeUiLive(evidence.snap)) return true;
+        // Soft: resumeCmd itself is the CPE wrapper (child may be bare `opencode` under proxy).
+        // Do NOT soft-accept on savedType alone — that blocked atomics kill after type→opencode-cpe.
+        if (
+          opts?.resumeCmd != null &&
+          kindProveMatches(wanted, { resumeCmd: opts.resumeCmd }) &&
+          when === "opencode" &&
+          openCodeUiLive(evidence.snap)
+        ) {
+          return true;
+        }
         return false;
       }
       return true;
@@ -148,17 +153,12 @@ export function liveKindSatisfiesWanted(
   }
 
   // Legacy without kinds map
-  if (
-    !kinds &&
-    (wantedType === "opencode-cpe" || wantedType === "opencode-cpe") &&
-    liveType === "opencode"
-  ) {
+  if (!kinds && wantedType === "opencode-cpe" && liveType === "opencode") {
     const cmdlines = evidence.cmdlines ?? [];
     if (cmdlines.some((l) => /opencode-cpe\.sh|HTTPS_PROXY=.*18887/i.test(l))) return true;
     if (
-      (opts?.savedType === "opencode-cpe" ||
-        opts?.savedType === "opencode-cpe" ||
-        (opts?.resumeCmd != null && /opencode-cpe\.sh/i.test(opts.resumeCmd))) &&
+      opts?.resumeCmd != null &&
+      /opencode-cpe\.sh/i.test(opts.resumeCmd) &&
       openCodeUiLive(evidence.snap)
     ) {
       return true;
@@ -170,11 +170,7 @@ export function liveKindSatisfiesWanted(
     const liveKind = kinds ? lookupResolvedKind(kinds, liveType) : undefined;
     if (liveKind?.prove && liveKind.provider === wanted.provider) return false;
   }
-  if (
-    !kinds &&
-    wantedType === "opencode" &&
-    (liveType === "opencode-cpe" || liveType === "opencode-cpe")
-  ) {
+  if (!kinds && wantedType === "opencode" && liveType === "opencode-cpe") {
     return false;
   }
 

@@ -18,6 +18,7 @@
   "dependencies": {
     "@seat-mesh/core": "file:../core",
     "@seat-mesh/providers": "file:../providers",
+    "@seat-mesh/connectivity": "file:../connectivity",
     "node-notifier": "^10.0.1"
   },
   "publishConfig": {

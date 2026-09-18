@@ -1,22 +1,120 @@
-# seatmesh CLI verbs (one md each)
+# seatmesh CLI — by job
 
-Greppable per-command docs. Generated from `packages/cli/src/commands/help-text.ts`.
+Not an A–Z API list. One command per need. Grep stubs when you know the name.
 
 ```bash
-ls docs/cli | rg peer
-rg -n . docs/cli/peer.md
-rg -n "^## " docs/COMMANDS.md
-seatmesh help peer
+seatmesh help <verb>
+rg "^## peer$" docs/COMMANDS.md
 ```
 
-Full catalog: [../COMMANDS.md](../COMMANDS.md)
+Full dump (last resort): [../COMMANDS.md](../COMMANDS.md)
+
+---
+
+## Agent (`sm agent …`)
+
+### Identity & map
+
+| Verb | File |
+|------|------|
+| `agent` | [agent.md](agent.md) |
+| `whoami` | [whoami.md](whoami.md) |
+| `contexts` | [contexts.md](contexts.md) |
+| `hub` | [hub.md](hub.md) |
+| `kind` | [kind.md](kind.md) |
+| `peek` | [peek.md](peek.md) |
+| `ppa` | [ppa.md](ppa.md) |
+
+### Work
+
+| Verb | File |
+|------|------|
+| `todo` | [todo.md](todo.md) |
+| `seat` | [seat.md](seat.md) |
+| `assign` | [assign.md](assign.md) — prefer `todo give` |
+
+### Comms (inject)
+
+| Verb | File |
+|------|------|
+| `peer` | [peer.md](peer.md) — prefer this |
+| `ack` | [ack.md](ack.md) |
+| `cb` | [cb.md](cb.md) |
+| `room` | [room.md](room.md) |
+| `notify` | [notify.md](notify.md) |
+| `remote` | [remote.md](remote.md) |
+| `sessions` | [sessions.md](sessions.md) |
+| `reply` | [reply.md](reply.md) |
+
+### Read (not inject)
+
+| Verb | File |
+|------|------|
+| `chat` | [chat.md](chat.md) |
+| `mds` | [mds.md](mds.md) |
+| `preview` | [preview.md](preview.md) |
+| `read-history` | [read-history.md](read-history.md) — prefer `hub chat` |
+
+### Shorthands → collapse to `peer` / `todo`
+
+| Verb | Prefer |
+|------|--------|
+| [ask](ask.md) · [msg](msg.md) · [tell](tell.md) | `peer` |
+| [ackmsg](ackmsg.md) | `peer --ack` |
+| [prompt](prompt.md) | `peer` |
+| [to-slot](to-slot.md) · [to-mini](to-mini.md) | `peer slot-N` / `peer mini-N` |
+| [to-master](to-master.md) | DEPRECATED — `room` / chat |
+
+---
+
+## Operator (outside `agent`)
+
+| Verb | File |
+|------|------|
+| `human` | [human.md](human.md) — cheat sheet |
+| `session` | [session.md](session.md) |
+| `layout` | [layout.md](layout.md) |
+| `spawn` | [spawn.md](spawn.md) — empty→CLI |
+| `switch` | [switch.md](switch.md) — replace live |
+| `launch` | [launch.md](launch.md) |
+| `pane` | [pane.md](pane.md) |
+| `save` · `auto` | [save.md](save.md) · [auto.md](auto.md) |
+| `reload` · `rebuild` · `verify` · `realign` | [reload.md](reload.md) · [rebuild.md](rebuild.md) · [verify.md](verify.md) · [realign.md](realign.md) |
+| `inbox` | [inbox.md](inbox.md) |
+| `web` | [web.md](web.md) |
+| `contract` | [contract.md](contract.md) |
+| `balance` | [balance.md](balance.md) |
+| `init` · `update` | [init.md](init.md) · [update.md](update.md) |
+| `config` · `providers` | [config.md](config.md) · [providers.md](providers.md) |
+| `target` | [target.md](target.md) |
+
+### Occasional / niche
+
+| Verb | File |
+|------|------|
+| `mini` · `secretary` | [mini.md](mini.md) · [secretary.md](secretary.md) |
+| `base` · `stack` · `labels` | [base.md](base.md) · [stack.md](stack.md) · [labels.md](labels.md) |
+| `set` · `tag` · `swap` · `title` | [set.md](set.md) · [tag.md](tag.md) · [swap.md](swap.md) · [title.md](title.md) |
+| `ops` · `limit` · `proxy` | [ops.md](ops.md) · [limit.md](limit.md) · [proxy.md](proxy.md) |
+| `night` · `continue` · `flush` · `remind` | [night.md](night.md) · [continue.md](continue.md) · [flush.md](flush.md) · [remind.md](remind.md) |
+| `slot-advice` | [slot-advice.md](slot-advice.md) |
+| `cold-start` · `completion` · `migrate-runtime` | [cold-start.md](cold-start.md) · [completion.md](completion.md) · [migrate-runtime.md](migrate-runtime.md) |
+| `func` · `profile` · `roles` · `report` · `status` · `start` · `test` · `version` · `help` · `index` · `pane-meta` | see files |
+
+---
+
+## A–Z (grep only)
+
+When you already know the name — do not browse this as the guide.
+
+<details>
+<summary>All stubs</summary>
 
 | Verb | File |
 |------|------|
 | `ack` | [ack.md](ack.md) |
 | `ackmsg` | [ackmsg.md](ackmsg.md) |
 | `agent` | [agent.md](agent.md) |
-| `apply` | [apply.md](apply.md) |
 | `ask` | [ask.md](ask.md) |
 | `assign` | [assign.md](assign.md) |
 | `auto` | [auto.md](auto.md) |
@@ -31,9 +129,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `continue` | [continue.md](continue.md) |
 | `contract` | [contract.md](contract.md) |
 | `flush` | [flush.md](flush.md) |
-| `forum` | [forum.md](forum.md) |
 | `func` | [func.md](func.md) |
-| `golf` | [golf.md](golf.md) |
 | `help` | [help.md](help.md) |
 | `hub` | [hub.md](hub.md) |
 | `human` | [human.md](human.md) |
@@ -45,11 +141,13 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `launch` | [launch.md](launch.md) |
 | `layout` | [layout.md](layout.md) |
 | `limit` | [limit.md](limit.md) |
+| `mds` | [mds.md](mds.md) |
 | `migrate-runtime` | [migrate-runtime.md](migrate-runtime.md) |
 | `mini` | [mini.md](mini.md) |
 | `night` | [night.md](night.md) |
 | `notify` | [notify.md](notify.md) |
 | `ops` | [ops.md](ops.md) |
+| `pane` | [pane.md](pane.md) |
 | `pane-meta` | [pane-meta.md](pane-meta.md) |
 | `peek` | [peek.md](peek.md) |
 | `peer` | [peer.md](peer.md) |
@@ -68,7 +166,6 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `report` | [report.md](report.md) |
 | `roles` | [roles.md](roles.md) |
 | `room` | [room.md](room.md) |
-| `run` | [run.md](run.md) |
 | `save` | [save.md](save.md) |
 | `seat` | [seat.md](seat.md) |
 | `secretary` | [secretary.md](secretary.md) |
@@ -92,5 +189,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `update` | [update.md](update.md) |
 | `verify` | [verify.md](verify.md) |
 | `version` | [version.md](version.md) |
+| `web` | [web.md](web.md) |
 | `whoami` | [whoami.md](whoami.md) |
 
+</details>

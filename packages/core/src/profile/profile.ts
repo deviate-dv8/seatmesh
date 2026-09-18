@@ -97,6 +97,18 @@ export function loadProfile(explicit?: string): LoadedProfile {
   return loaded;
 }
 
+/** Fast path: same parse, skip paths.json write (spawn/switch --fast). */
+export function loadProfileFast(explicit?: string): LoadedProfile {
+  const profilePath = findProfilePath(explicit);
+  const profileDir = path.dirname(profilePath);
+  const raw = YAML.parse(fs.readFileSync(profilePath, "utf8"));
+  const profile = MeshProfileSchema.parse(raw);
+  const workspace = resolveWorkspace(profile.workspace, profileDir);
+  const workspaceId = workspaceScopeId(workspace);
+  const sessionName = resolveSessionName(profile, workspace);
+  return { profile, profileDir, profilePath, workspace, workspaceId, sessionName };
+}
+
 export function profilePaths(loaded: LoadedProfile) {
   const { profile } = loaded;
   const resolved = buildResolvedPaths(loaded);

@@ -35,6 +35,7 @@ seatmesh peer --help
 - `checkback` → [`cb`](#cb) · [cli/cb.md](cli/cb.md)
 - `coldstart` → [`cold-start`](#cold-start) · [cli/cold-start.md](cli/cold-start.md)
 - `dc` → [`stack`](#stack) · [cli/stack.md](cli/stack.md)
+- `empty` → [`kill`](#kill) · [cli/kill.md](cli/kill.md)
 - `get` → [`hub`](#hub) · [cli/hub.md](cli/hub.md)
 - `handoff` → [`switch`](#switch) · [cli/switch.md](cli/switch.md)
 - `history` → [`read-history`](#read-history) · [cli/read-history.md](cli/read-history.md)
@@ -46,6 +47,7 @@ seatmesh peer --help
 - `patience` → [`cb`](#cb) · [cli/cb.md](cli/cb.md)
 - `put-agent` → [`human`](#human) · [cli/human.md](cli/human.md)
 - `readhistory` → [`read-history`](#read-history) · [cli/read-history.md](cli/read-history.md)
+- `rebuild` → [`reload`](#reload) · [cli/reload.md](cli/reload.md)
 - `reply` → [`reply`](#reply) · [cli/reply.md](cli/reply.md)
 - `seats` → [`contexts`](#contexts) · [cli/contexts.md](cli/contexts.md)
 - `targets` → [`target`](#target) · [cli/target.md](cli/target.md)
@@ -236,13 +238,28 @@ continue <slot|all> [note...]
 ## contract
 
 ```text
-contract …
-  Contract lock apply/on/off
+contract [status]
+  contract show <id>
+  contract on|off <id> [--agent <seat>]
+  contract create|open <slug>
+  Easy locks: status = vendor + ON/off. on/off default agent from yaml
+  (supervise→secretary, balance→balance_lead). No --agent needed.
 ```
 
 - Run: `seatmesh contract --help`
 - Agent: `seatmesh agent help contract`
 - File: [cli/contract.md](cli/contract.md)
+
+## empty
+
+```text
+empty <target|1..4|slot-N|mini-N|here>
+  Alias of kill — pane → plain terminal, mesh-agents saved empty
+```
+
+- Run: `seatmesh empty --help`
+- Agent: `seatmesh agent help empty`
+- File: [cli/empty.md](cli/empty.md)
 
 ## flush
 
@@ -255,6 +272,18 @@ flush <slot|all|manager|mini-N>
 - Agent: `seatmesh agent help flush`
 - File: [cli/flush.md](cli/flush.md)
 
+## forum
+
+```text
+forum | golf
+  Print the real shorthand table (Ruby ranges + one verb per job).
+  Alias: golf. Also: sm agent forum
+```
+
+- Run: `seatmesh forum --help`
+- Agent: `seatmesh agent help forum`
+- File: [cli/forum.md](cli/forum.md)
+
 ## func
 
 ```text
@@ -265,6 +294,17 @@ func <id> <args...>
 - Run: `seatmesh func --help`
 - Agent: `seatmesh agent help func`
 - File: [cli/func.md](cli/func.md)
+
+## golf
+
+```text
+golf
+  Alias for forum — shorthand table (no repo spelunk)
+```
+
+- Run: `seatmesh golf --help`
+- Agent: `seatmesh agent help golf`
+- File: [cli/golf.md](cli/golf.md)
 
 ## help
 
@@ -299,16 +339,20 @@ hub [contexts|todos|acks|cbs|chat|room|shared|sessions]
 ```text
 human — put an agent CLI on a pane (operator)
 
-  Empty terminal → agent:
-    switch <target> <opencode|opencode-cpe|claude|agent|kiro>
+  Empty terminal → agent (prefer spawn; **fast by default**):
+    spawn <target|1..4> <opencode|opencode-cpe|claude|agent|kiro>
     Examples:
-      seatmesh switch slot-1 opencode
-      seatmesh switch secretary opencode-cpe --keep-resume
-      seatmesh switch here agent          # this pane (Cursor)
-      seatmesh switch mini-1 opencode-cpe --keep-resume
+      seatmesh spawn slot-1 opencode
+      seatmesh spawn 1..3 opencode-cpe
+      seatmesh spawn here agent --slow   # wait verify + FRESH SUMMON
 
-  Back to plain shell:
-    switch <target> empty
+  Replace a live agent:
+    switch <target> <cli> [--fast] [reason...]
+      seatmesh switch here agent --fast
+
+  Back to plain shell (saves empty in mesh-agents.json):
+    kill <target>     # alias: empty
+    switch <target> empty --fast
 
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
@@ -319,7 +363,7 @@ human — put an agent CLI on a pane (operator)
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
 
-  Give the seat WORK / a todo (does NOT install a CLI — different from switch):
+  Give the seat WORK / a todo (does NOT install a CLI — different from spawn/switch):
     todo give <target> "do the thing"     # preferred
     todo <target> "do the thing"          # shorthand
     assign <target> "do the thing"        # same engine
@@ -367,6 +411,17 @@ init [--force] [--seats-root PATH] [--name NAME]
 - Agent: `seatmesh agent help init`
 - File: [cli/init.md](cli/init.md)
 
+## kill
+
+```text
+kill <target|1..4|slot-N|mini-N|here>
+  Alias: empty. Respawn pane to plain terminal + save type=empty in mesh-agents.json
+```
+
+- Run: `seatmesh kill --help`
+- Agent: `seatmesh agent help kill`
+- File: [cli/kill.md](cli/kill.md)
+
 ## kind
 
 ```text
@@ -394,7 +449,7 @@ labels
 ```text
 launch [targets...]
   Start/resume the seat's already-configured CLI (no type pick).
-  To choose opencode/claude/agent on an empty pane: switch (help human)
+  Empty pane → pick type with spawn. Replace live → switch.
   Examples: launch slot-1 · launch all · launch manager secretary
 ```
 
@@ -406,8 +461,11 @@ launch [targets...]
 
 ```text
 layout [--no-leads] [--dry-run] [--yes]
+  layout reload [--yes] [--no-leads] [--no-resume]
+  layout scale workers|minis up|down|<N> [--yes] [--dry-run]
   layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
-  Workers/minis grid + N base columns
+  Relayout + repair panes from mesh-agents.json (resume). Scale + columns.
+  Auto: layout.autoScale.enabled in mesh.config.yaml
 ```
 
 - Run: `seatmesh layout --help`
@@ -486,6 +544,7 @@ notify "<session>" "<check>" [--url <link>]
   notify info|md "<title>" --md <file>|--body "…" [--image path] [--url https://…]
   notify yesno "<title>" "<blurb>" [--md file|--body "…"] [--image path] [--url https://…]
            [--target seat] [--yes-msg "…"] [--no-msg "…"]
+  notify run|cmd "<title>" --cmd "…" [--body "…"] [--cwd rel]
   Operator eyes (beta) — prefer over asking chat for a toast.
 
   Pick one shape:
@@ -493,10 +552,13 @@ notify "<session>" "<check>" [--url <link>]
     Info only   notify info "Brief" --body "## Why\n\n…" [--url https://mdview.io/s/…]
                 → hub /act/card (:3190). [--url] = Open button (clickable).
                   Bare https:// in body also autolinks. [label](url) works.
-                Mermaid → local Info card renders ```mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
+                  Mermaid → local Info card renders ```mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
     Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\n…" [--url https://…]
                 → toast buttons Info · Yes · No; card Open if --url.
                 Agents may still put links in --body/--md; toast body stays blurb-only.
+    Run cmd     notify run "Reload layout" --cmd "sm layout reload"
+                → toast **Review** → card shows exact command → **Run** | **Decline**
+                  Run never on the toast — only after you see the command on the card.
 
   yesno args: <title>=decision name · <blurb>=short toast line
   Full recipe: seatmesh agent help notify
@@ -666,11 +728,25 @@ realign
 - Agent: `seatmesh agent help realign`
 - File: [cli/realign.md](cli/realign.md)
 
+## rebuild
+
+```text
+rebuild [--layout]
+  Alias of reload — rebuild engine + labels (not "reload config JSON").
+```
+
+- Run: `seatmesh rebuild --help`
+- Agent: `seatmesh agent help rebuild`
+- File: [cli/rebuild.md](cli/rebuild.md)
+
 ## reload
 
 ```text
-reload [--layout]
-  Rebuild engine + labels (no session kill). --layout re-grids
+reload|rebuild [--layout]
+  Rebuild seatmesh packages (npm build) + refresh labels/borders/inbox.
+  Does NOT re-read config into live agents / does NOT replace pane CLIs
+  (that is spawn/switch/coordSync). --layout re-grids (disruptive).
+  Prefer vocal: rebuild
 ```
 
 - Run: `seatmesh reload --help`
@@ -835,6 +911,19 @@ slot-advice <slot|slot-N> [--send] [note...]
 - Agent: `seatmesh agent help slot-advice`
 - File: [cli/slot-advice.md](cli/slot-advice.md)
 
+## spawn
+
+```text
+spawn <target|1..4> <agent|claude|opencode|kiro> [flags]
+  Empty shell → agent CLI (preferred). Default --fast (paste like typing opencode).
+  Replace live: switch. Thorough waits: --slow. Ranges: 1..4 · slot-2..5 · mini-1..3
+  Examples: spawn slot-1 opencode · spawn 1..3 opencode-cpe · spawn here agent --slow
+```
+
+- Run: `seatmesh spawn --help`
+- Agent: `seatmesh agent help spawn`
+- File: [cli/spawn.md](cli/spawn.md)
+
 ## stack
 
 ```text
@@ -882,11 +971,10 @@ swap <a> <b> [--identity]
 ## switch
 
 ```text
-switch <target> <agent|claude|opencode|kiro|empty> [flags] [reason...]
-  HUMAN: empty terminal → agent CLI (or empty = back to shell).
-  Alias: handoff. See: seatmesh help human
-  Examples: switch slot-1 opencode · switch here claude · switch mini-2 empty
-  Flags: --keep-resume --resume ID --queue
+switch <target|1..4> <agent|claude|opencode|kiro|empty> [flags] [reason...]
+  Replace a LIVE agent CLI (or → empty). Empty pane → prefer spawn (--fast).
+  Alias: handoff. Flags: --fast (skip verify) --slow --keep-resume --resume ID --queue
+  Examples: switch slot-1 claude · switch here agent --fast
 ```
 
 - Run: `seatmesh switch --help`

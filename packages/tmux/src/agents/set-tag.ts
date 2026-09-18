@@ -200,7 +200,7 @@ function currentTypeFromMesh(mesh: MeshAgents, row: PaneRow): CliType | null {
   return null;
 }
 
-function persistPatched(
+export function persistPatched(
   loaded: LoadedProfile,
   mesh: MeshAgents,
 ): string {

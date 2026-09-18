@@ -25,6 +25,7 @@ import {
   primarySecretaryColumn,
   normalizeMinisLeads,
   portsForSlot,
+  gridPaneCapacity,
 } from "@seat-mesh/core";
 import type { ProviderRegistry } from "@seat-mesh/core";
 import { kindsForLoaded } from "../agents/agent-launch.js";
@@ -52,6 +53,7 @@ import {
 } from "../lib/pane-meta.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
+import { resolveLiveTmuxSession } from "../lib/live-session.js";
 import { listWindowPaneIds } from "./window-panes.js";
 import { runWhoami } from "../agents/whoami.js";
 
@@ -324,7 +326,7 @@ export function scrapeMeshAgents(
   loaded: LoadedProfile,
   registry: ProviderRegistry,
 ): MeshAgents {
-  const session = loaded.sessionName;
+  const session = resolveLiveTmuxSession(loaded);
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {
@@ -385,6 +387,23 @@ export function scrapeMeshAgents(
   const secPane = meshSecretaryPane(session, layout.base.window);
   const manager = mgrPane
     ? (() => {
+        const liveCmd = tmux([
+          "display-message",
+          "-t",
+          mgrPane,
+          "-p",
+          "#{pane_current_command}",
+        ]).out.trim();
+        // Operator terminal: never persist OC/agent from scrollback / preserved when shell is live.
+        // (auto-revive + post-launch brief were spamming zsign manager)
+        if (/^(zsh|bash|sh|fish|dash)$/i.test(liveCmd) || !liveCmd) {
+          return {
+            type: "empty" as CliType,
+            name: "manager",
+            resumeId: null,
+            resumeCmd: null,
+          };
+        }
         const det = detectPane(mgrPane, registry, loaded.workspace, runners, existing?.manager, kinds);
         return {
           type: det.type,
@@ -461,22 +480,47 @@ export function scrapeMeshAgents(
     secretary,
     workers,
     minis,
-    layout: {
-      nvim: {
-        enabled: listWindowPaneIds(session, layout.nvim.window).length > 0,
-      },
-      workers: {
-        enabled: workerMeta.length > 0,
-        grid: "3x2",
-        slots: loaded.profile.session.workerCount,
-      },
-      minis: {
-        enabled: miniMeta.length > 0,
-        grid: minisLayout.grid,
-        max: minisLayout.max,
-        leads: minisLayout.leads,
-      },
-    },
+    layout: (() => {
+      const liveWorkerSlots = workerMeta.length;
+      const profileGrid = layout.workers.grid ?? "3x2";
+      const profileSlots = layout.workers.slots ?? loaded.profile.session.workerCount;
+      const prevGrid = existing?.layout?.workers?.grid;
+      const prevSlots = existing?.layout?.workers?.slots;
+      let workersGrid = profileGrid;
+      let workersSlots = profileSlots;
+      if (liveWorkerSlots > 0) {
+        workersSlots = liveWorkerSlots;
+        // Prefer a grid whose capacity matches live panes (heal poisoned 3x2+slots=1).
+        if (prevGrid && gridPaneCapacity(prevGrid) === liveWorkerSlots) {
+          workersGrid = prevGrid;
+        } else if (gridPaneCapacity(profileGrid) === liveWorkerSlots) {
+          workersGrid = profileGrid;
+        } else {
+          workersGrid = profileGrid;
+        }
+      } else if (prevGrid && typeof prevSlots === "number") {
+        workersGrid = prevGrid;
+        workersSlots = prevSlots;
+      }
+      return {
+        ...(existing?.layout?.base ? { base: existing.layout.base } : {}),
+        nvim: {
+          enabled: listWindowPaneIds(session, layout.nvim.window).length > 0,
+        },
+        workers: {
+          enabled: liveWorkerSlots > 0 || Boolean(layout.workers.enabled),
+          grid: workersGrid,
+          slots: workersSlots,
+        },
+        minis: {
+          enabled: miniMeta.length > 0 || Boolean(layout.minis.enabled),
+          grid: existing?.layout?.minis?.grid ?? minisLayout.grid,
+          max: existing?.layout?.minis?.max ?? minisLayout.max,
+          leads: existing?.layout?.minis?.leads ?? minisLayout.leads,
+        },
+        ...(existing?.layout?.logs ? { logs: existing.layout.logs } : {}),
+      };
+    })(),
     conventions: existing?.conventions ?? meshConventionsFromProfile(loaded),
     updatedAt: new Date().toISOString(),
   });

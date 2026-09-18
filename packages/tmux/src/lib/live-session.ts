@@ -1,4 +1,4 @@
-import type { LoadedProfile } from "@seat-mesh/core";
+import type { LoadedProfile } from "@seat-mesh/core/profile";
 import { tmux, tmuxHasSession } from "./tmux-run.js";
 
 function sessionEnvValue(session: string, key: string): string | null {

@@ -173,6 +173,85 @@ export function yesNoNotifyActActions(input: {
   ];
 }
 
+/** Run / Decline — Run executes shell in workspace after Review card. */
+export function runCmdNotifyActActions(input: {
+  cmd: string;
+  cwd?: string;
+}): NotifyActRegisterAction[] {
+  const cmd = input.cmd.trim();
+  return [
+    {
+      label: "Run",
+      type: "run-cmd",
+      params: {
+        cmd,
+        ...(input.cwd?.trim() ? { cwd: input.cwd.trim() } : {}),
+      },
+    },
+    {
+      label: "Decline",
+      type: "ping",
+      params: { note: "operator declined run-cmd" },
+    },
+  ];
+}
+
+/** Markdown body for the Review step — command is always visible. */
+export function formatRunCmdCardBody(input: {
+  cmd: string;
+  blurb?: string;
+  cwd?: string;
+}): string {
+  const parts: string[] = [];
+  const blurb = unescapeNotifyMarkdown(input.blurb ?? "").trim();
+  if (blurb) parts.push(blurb);
+  parts.push("## Command to run");
+  if (input.cwd?.trim()) {
+    parts.push(`Working directory: \`${input.cwd.trim()}\``);
+  }
+  parts.push("```bash", input.cmd.trim(), "```");
+  parts.push(
+    "_Step 2 of 2 — **Run** executes this under the mesh workspace. **Decline** cancels (one-shot)._",
+  );
+  return parts.join("\n\n");
+}
+
+/**
+ * Shell `--body "## Why\\n\\n…"` arrives with literal backslash-n (help documents this).
+ * Turn common escapes into real whitespace so hub markdown renders.
+ */
+export function unescapeNotifyMarkdown(s: string): string {
+  if (!s.includes("\\")) return s;
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === "\\" && i + 1 < s.length) {
+      const n = s[i + 1]!;
+      if (n === "n") {
+        out += "\n";
+        i++;
+        continue;
+      }
+      if (n === "t") {
+        out += "\t";
+        i++;
+        continue;
+      }
+      if (n === "r") {
+        out += "\r";
+        i++;
+        continue;
+      }
+      if (n === "\\") {
+        out += "\\";
+        i++;
+        continue;
+      }
+    }
+    out += s[i]!;
+  }
+  return out;
+}
+
 function escapeHtmlText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

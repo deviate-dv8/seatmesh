@@ -132,7 +132,11 @@ export const SavedLogsLayoutSchema = z.object({
 
 export const SavedWorkersLayoutSchema = z.object({
   enabled: z.boolean(),
-  grid: z.literal("3x2").default("3x2"),
+  /** Same as profile `layout.workers.grid` — not locked to 3x2. */
+  grid: z
+    .string()
+    .regex(/^\d+x\d+$/, "grid must be COLSxROWS e.g. 3x2")
+    .default("3x2"),
   slots: z.number().int().min(1).max(12).optional(),
 });
 

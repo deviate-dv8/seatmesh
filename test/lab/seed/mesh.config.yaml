@@ -1,0 +1,111 @@
+# Lab-only mesh — isolated from host pia/zsign/seatmesh sessions.
+name: lab
+workspace: ..
+
+paths:
+  scope: profile
+
+storage:
+  backend: sqlite
+  sqlite:
+    path: runtime/mesh.sqlite
+
+session:
+  name: lab
+  workerCount: 2
+  miniMax: 2
+  launchOnCreate: false
+
+layout:
+  nvim:
+    window: nvim
+    enabled: false
+  base:
+    window: base
+    columns: [manager, secretary]
+    managerStack: [manager]
+    humanCoTyped: [manager, secretary]
+    cli:
+      manager: empty
+      secretary: empty
+    coordSync:
+      reload: false
+      attach: true
+  workers:
+    window: workers
+    grid: 2x1
+    slots: 2
+    enabled: false
+  minis:
+    window: minis
+    grid: 2x1
+    max: 2
+    leads: [1]
+    enabled: false
+  logs:
+    window: logs
+    index: 9
+    enabled: true
+
+providers:
+  - empty
+  - opencode
+  - claude
+  - cursor-agent
+
+agents:
+  runners:
+    opencode-cpe: scripts/opencode-cpe.sh
+
+seats:
+  root: seats
+  templates: [FOCUS, TASKS, REMINDER]
+  dirs:
+    manager: manager
+    secretary: secretary
+    worker: "slot-{n}"
+    mini: "mini-{n}"
+
+state:
+  meshAgentsJson: mesh-agents.json
+  agentsJson: mesh-agents.json
+  autoScrapeIntervalMs: 60000
+
+data:
+  root: runtime
+
+roles:
+  dir: roles
+
+daemon:
+  autoScrape: true
+  # Fixed port — mapped on host as 31691. Do not use workspace hash here.
+  port: 31691
+  portScope: profile
+  autoStart: true
+  watch: true
+  autoRevive: false
+  pollMs: 4000
+  idleSettleSec: 5
+  managerPromptPrefix: "[agent-manager]"
+
+connectivity:
+  enabled: false
+
+ports:
+  worker: "30{n}0/30{n}1"
+
+chatRooms:
+  root: chat-rooms
+  globalSlug: global
+  checkback:
+    duration: 5m
+    renew: 3m
+    maxFires: 3
+
+todos:
+  reportTo: manager
+  checkback:
+    duration: 20m
+    renew: 10m
+    min: 20m

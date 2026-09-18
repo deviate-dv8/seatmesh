@@ -6,6 +6,8 @@ import {
   managerPaneWelcomeShell,
   meshInboxSuperviseStatus,
   MESH_INBOX_TAG,
+  providerInjectHint,
+  freshSummonWhoamiPrompt,
   stripMeshOwnedLines,
 } from "./mesh-copy.js";
 
@@ -79,14 +81,26 @@ describe("logsPaneWelcomeShell", () => {
 });
 
 describe("managerPaneWelcomeShell", () => {
-  it("prints whoami + switch + start/sessions/down for early adopters", () => {
+  it("prints whoami + spawn + start/sessions/down for early adopters", () => {
     const sh = managerPaneWelcomeShell();
     expect(sh).toMatch(/whoami/);
-    expect(sh).toContain("switch here agent");
-    expect(sh).toContain("switch here claude");
-    expect(sh).toContain("switch here opencode");
+    expect(sh).toContain("spawn here agent");
+    expect(sh).toContain("spawn here claude");
+    expect(sh).toContain("spawn here opencode");
     expect(sh).toContain("npx seatmesh start");
     expect(sh).toContain("npx seatmesh sessions");
     expect(sh).toContain("npx seatmesh session down");
+  });
+});
+
+describe("provider inject brief", () => {
+  it("adds Cursor alwaysApply tip for cursor-agent", () => {
+    expect(providerInjectHint("cursor-agent")).toMatch(/alwaysApply/);
+    expect(freshSummonWhoamiPrompt("manager", "cursor-agent")).toMatch(/alwaysApply/);
+  });
+
+  it("adds Esc tip for opencode", () => {
+    expect(providerInjectHint("opencode")).toMatch(/Esc/);
+    expect(freshSummonWhoamiPrompt("worker", "opencode")).toMatch(/Esc/);
   });
 });

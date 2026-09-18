@@ -15,10 +15,11 @@ describe("runInit", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "sm-init-"));
     const r = runInit({ workspace: tmp, name: "demo" });
     expect(fs.existsSync(r.configPath)).toBe(true);
-    expect(fs.existsSync(path.join(r.smDir, "roles", "common.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(r.smDir, "roles", "_vendor", "common.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(r.smDir, "roles", "common.extend.yaml"))).toBe(true);
     const yaml = fs.readFileSync(r.configPath, "utf8");
     expect(yaml).toContain("name: demo");
-    expect(yaml).toContain("root: .sm/seats");
+    expect(yaml).toContain("root: seats");
   });
 
   it("refuses overwrite without force", () => {

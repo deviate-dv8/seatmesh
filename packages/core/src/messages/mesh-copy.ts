@@ -148,20 +148,53 @@ export function assignPrompt(target: string, text: string): string {
   );
 }
 
-/** First inject on every fresh launch / switch / restart. Agent runs whoami itself. */
-export function freshSummonWhoamiPrompt(role?: string): string {
+/**
+ * Per-provider inject tip — how THIS harness should use `sm agent` effectively.
+ * Keep short; never paste patterns.md.
+ */
+export function providerInjectHint(providerId?: string | null): string {
+  switch (providerId) {
+    case "cursor-agent":
+      return (
+        "Cursor: every turn run whoami then bare agent (can/cannot). " +
+        "Mesh skill/rule alwaysApply. Enqueue only — never raw tmux send-keys for mesh mail."
+      );
+    case "opencode":
+      return (
+        "OpenCode: if Shell mode Esc×3 first. Then whoami. Mesh only via sm agent — peer not chat for mail."
+      );
+    case "claude":
+      return (
+        "Claude: first whoami (no flags). Mesh only via sm agent. Chat prose does not clear ACK/cb."
+      );
+    case "kiro":
+      return (
+        "Kiro: first whoami. Mesh only via sm agent. Prefer peer for injects."
+      );
+    default:
+      return "";
+  }
+}
+
+/** First inject on every fresh launch / spawn / switch / restart. Agent runs whoami itself. */
+export function freshSummonWhoamiPrompt(
+  role?: string,
+  providerId?: string | null,
+): string {
   const who = role ? ` You are ${role}.` : "";
+  const tip = providerInjectHint(providerId);
   return (
     `FRESH SUMMON.${who} First action: run ${seatmeshCmd("whoami")} (no flags). ` +
     "That dump is your role, seat files, FOCUS, TASKS, and hub. Then do that hub. " +
-    "A later peer is a task — you already know the seat. Do not ask the operator who you are."
+    "A later peer is a task — you already know the seat. Do not ask the operator who you are." +
+    (tip ? ` ${tip}` : "")
   );
 }
 
 /** Restart / first-paint brief — keep short so OpenCode does not enter Shell with a novel. */
-export function secretaryColdStartBrief(): string {
+export function secretaryColdStartBrief(providerId?: string | null): string {
   return (
-    `${freshSummonWhoamiPrompt("SECRETARY")} ` +
+    `${freshSummonWhoamiPrompt("SECRETARY", providerId)} ` +
     "Seats=.sm/seats/<column-id> (every profile base column). " +
     "Shared=.sm/seats/_shared/ (NOTES.md — HQ+workers+minis; use during supervise/redirect). " +
     `Tick: ${seatmeshCmd("contexts")}; if a lead is idle with open TASKS, ${seatmeshCmd("peer <lead> CONTINUE one checkbox")}. ` +
@@ -193,13 +226,13 @@ export function logsPaneWelcomeShell(): string {
 
 /**
  * Printed into the manager pane on fresh `session up` / `start` (plain shell).
- * Operator runs whoami + switch from here — no agent CLI auto-launched on manager.
+ * Operator runs whoami + spawn from here — no agent CLI auto-launched on manager.
  */
 export function managerPaneWelcomeShell(): string {
   const who = seatmeshCmd("whoami");
-  const swAgent = seatmeshCmd("switch here agent");
-  const swClaude = seatmeshCmd("switch here claude");
-  const swOc = seatmeshCmd("switch here opencode");
+  const spAgent = seatmeshCmd("spawn here agent");
+  const spClaude = seatmeshCmd("spawn here claude");
+  const spOc = seatmeshCmd("spawn here opencode");
   return [
     "echo ''",
     "echo '══════════════════════════════════════════════════════'",
@@ -207,10 +240,10 @@ export function managerPaneWelcomeShell(): string {
     "echo '══════════════════════════════════════════════════════'",
     "echo ' Run your agents HERE.'",
     `echo '  1) ${who}'`,
-    "echo '  2) switch CLI on this pane:'",
-    `echo '       ${swAgent}      # Cursor'`,
-    `echo '       ${swClaude}'`,
-    `echo '       ${swOc}'`,
+    "echo '  2) spawn CLI on empty pane (switch = replace live):'",
+    `echo '       ${spAgent}      # Cursor'`,
+    `echo '       ${spClaude}'`,
+    `echo '       ${spOc}'`,
     "echo ' Global pick / resume any mesh:'",
     "echo '       npx seatmesh sessions'",
     "echo ' Next time (fresh or existing):'",

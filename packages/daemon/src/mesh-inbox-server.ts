@@ -15,6 +15,10 @@ import {
   resolveDaemonPort,
   resolveUxConfig,
   hubActCardUrl,
+  listNotifications,
+  summarizeNotifications,
+  recordNotification,
+  markNotificationActed,
 } from "@seat-mesh/core";
 import { createRegistryForProfile } from "@seat-mesh/providers";
 import {
@@ -29,6 +33,7 @@ import {
 } from "@seat-mesh/tmux";
 import { configureInboxTypingGate } from "./inject/compose-gate.js";
 import { createQueueStore } from "./store/create-queue-store.js";
+import { reconcileCheckbacksFromJsonl } from "./store/reconcile-checkbacks.js";
 import { openAckForPeerRow } from "./ack/ack-open.js";
 import { countPeerPendingGlobal } from "./peer/peer-pending.js";
 import { findDupInbox, findDupPeer, type CheckbackRow } from "./store/jsonl-store.js";
@@ -91,6 +96,7 @@ import {
   createNotifyActRegistry,
   executeNotifyAct,
 } from "./notify/notify-act.js";
+import { restoreActRegistry, saveActRegistry } from "./notify/act-persist.js";
 import {
   htmlActPage,
   htmlDecideCardPage,
@@ -164,8 +170,11 @@ async function main(): Promise<void> {
   }
 
   const store = createQueueStore(loaded, log);
+  reconcileCheckbacksFromJsonl(store, rt.daemonDir, log);
   reclaimStaleRunningPaneOps(store, log, 0);
   const actRegistry = createNotifyActRegistry();
+  const restoredActs = restoreActRegistry(rt.actCardsJsonl, actRegistry);
+  if (restoredActs) log(`ACT restore cards=${restoredActs} from ${rt.actCardsJsonl}`);
   const registry = createRegistryForProfile(profile);
 
   // Terminal-pool PTY pool — concurrency from mesh.config.yaml daemon.terminalPool.concurrency
@@ -585,6 +594,35 @@ async function main(): Promise<void> {
         let rows = store.readCheckbacks();
         if (!all) rows = rows.filter((r) => r.status === "active");
         return json(res, 200, { entries: rows });
+      }
+
+      if (req.method === "GET" && url.pathname === "/notifications") {
+        const all = url.searchParams.get("all") === "1";
+        const kind = url.searchParams.get("kind") || undefined;
+        const limitRaw = url.searchParams.get("limit");
+        const limit = limitRaw ? Number(limitRaw) : undefined;
+        const notifications = listNotifications(rt.notificationsJsonl, {
+          all,
+          kind: kind as "link" | "eyes" | "info" | "yesno" | "desktop" | undefined,
+          limit: Number.isFinite(limit) ? limit : undefined,
+        });
+        const summary = summarizeNotifications(
+          listNotifications(rt.notificationsJsonl, { all: true }),
+        );
+        return json(res, 200, { ok: true, notifications, summary });
+      }
+
+      if (req.method === "POST" && url.pathname === "/repair") {
+        const imported = reconcileCheckbacksFromJsonl(store, rt.daemonDir, log);
+        const acts = restoreActRegistry(rt.actCardsJsonl, actRegistry);
+        const activeCbs = store.readCheckbacks().filter((r) => r.status === "active").length;
+        log(`REPAIR checkbacks_imported=${imported} acts_restored=${acts} active_cbs=${activeCbs}`);
+        return json(res, 200, {
+          ok: true,
+          checkbacksImported: imported,
+          actsRestored: acts,
+          activeCheckbacks: activeCbs,
+        });
       }
 
       if (req.method === "GET" && url.pathname === "/targets") {
@@ -1073,6 +1111,22 @@ async function main(): Promise<void> {
           });
         }
         log(`NOTIFY-ACT register n=${links.length}${card ? ` card=${card.id} info=${infoUrl}` : ""}`);
+        try {
+          recordNotification(rt.notificationsJsonl, {
+            sessionId: loaded.workspaceId,
+            sessionName: session,
+            kind: actions.some((a) => /yes|no/i.test(String(a.label ?? ""))) ? "yesno" : hasCard ? "info" : "link",
+            title: String(body.card?.title ?? links[0]?.label ?? "Notify"),
+            body: body.card?.body,
+            cardId: card?.id,
+            infoUrl,
+            links: links.map((l) => ({ label: l.label, token: l.token || undefined, url: l.url })),
+            expiresAt: card ? new Date(card.expiresAt).toISOString() : undefined,
+          });
+          saveActRegistry(rt.actCardsJsonl, actRegistry);
+        } catch (e) {
+          log(`NOTIFY persist failed: ${(e as Error).message}`);
+        }
         return json(res, 200, { ok: true, links, card, infoUrl });
       }
 
@@ -1144,10 +1198,31 @@ async function main(): Promise<void> {
       }
 
       const actMatch = /^\/act\/v1\/([^/]+)$/.exec(url.pathname);
-      if (req.method === "GET" && actMatch) {
+      if ((req.method === "GET" || req.method === "HEAD") && actMatch) {
         const token = actMatch[1]!;
+        const wantJson =
+          url.searchParams.get("format") === "json" ||
+          (req.headers.accept ?? "").includes("application/json");
+        // Prefetch/HEAD must not consume one-shot tokens.
+        if (req.method === "HEAD") {
+          if (wantJson) {
+            res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+            res.end();
+            return;
+          }
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+          res.end();
+          return;
+        }
         const row = actRegistry.take(token);
         if (!row) {
+          if (wantJson) {
+            return json(res, 404, {
+              ok: false,
+              error: "expired_or_used",
+              summary: "This link was already used or has expired.",
+            });
+          }
           return html(
             res,
             404,
@@ -1163,6 +1238,23 @@ async function main(): Promise<void> {
             await enqueueAfterAppend("peer", peerRow.id);
           },
         });
+        try {
+          markNotificationActed(rt.notificationsJsonl, {
+            actToken: token,
+            label: row.label,
+          });
+          saveActRegistry(rt.actCardsJsonl, actRegistry);
+        } catch (e) {
+          log(`NOTIFY mark-acted failed: ${(e as Error).message}`);
+        }
+        if (wantJson) {
+          return json(res, result.ok ? 200 : 500, {
+            ok: result.ok,
+            label: row.label,
+            summary: result.summary,
+            error: result.ok ? undefined : result.summary,
+          });
+        }
         const title = result.ok ? row.label : "Action failed";
         return html(res, result.ok ? 200 : 500, htmlActPage(title, result.summary, result.ok));
       }
@@ -1369,6 +1461,12 @@ async function main(): Promise<void> {
     console.log(
       `mesh-inbox: listening http://127.0.0.1:${port} session=${session} storage=${rt.storageBackend}`,
     );
+    try {
+      const activeCbs = store.readCheckbacks().filter((r) => r.status === "active").length;
+      log(`REPAIR-ON-START active_cbs=${activeCbs} acts=${restoredActs}`);
+    } catch {
+      /* ignore */
+    }
     // Survive SIGKILL/HMR mid OC-V2: reclaim orphan stamp or resume atomics/wait-ip.
     try {
       const proxyPort = loaded.profile.connectivity?.proxyPort ?? 18887;

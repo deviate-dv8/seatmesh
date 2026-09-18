@@ -38,6 +38,11 @@ for a in "$@"; do
     PROFILE="${a#--profile=}"
     continue
   fi
+  # Global boolean flags (main.ts strips these itself) — skip in ARGS so
+  # is_attach_cmd/allow_outside_mesh see the real command, e.g. `--agents help`.
+  if [[ "$a" == "--agents" || "$a" == "--agent-help" ]]; then
+    continue
+  fi
   ARGS+=("$a")
 done
 [[ -n "$prev" ]] && ARGS+=("$prev")

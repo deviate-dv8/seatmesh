@@ -1,0 +1,20 @@
+# Keep docker build contexts small — mirrors .gitignore, plus VCS/lab noise.
+.git/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.tsbuildinfo
+coverage/
+.vitest/
+.sm/
+.sm-*/
+**/.sm/
+**/.sm-*/
+.env
+.env.local
+*.log
+.agent/
+.agents/
+.cursor/
+test/lab/keys/

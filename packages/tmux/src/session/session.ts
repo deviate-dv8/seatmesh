@@ -15,6 +15,7 @@ import { createRegistryForProfile } from "@seat-mesh/providers";
 import { inboxHealth, meshInboxPort, meshInboxStatusLine } from "../comms/inbox-bridge.js";
 import { tmux, tmuxHasSession } from "../lib/tmux-run.js";
 import { meshManagerPane } from "../lib/pane-meta.js";
+import { resolveLiveTmuxSession } from "../lib/live-session.js";
 import { assertRelayoutSafe } from "./layout-guard.js";
 import {
   applyMinisLeadsFromProfile,
@@ -268,7 +269,7 @@ export function relayoutMeshSession(
   loaded: LoadedProfile,
   opts: RelayoutOptions = {},
 ): void {
-  const session = loaded.sessionName;
+  const session = resolveLiveTmuxSession(loaded);
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
   if (!tmuxHasSession(session)) {

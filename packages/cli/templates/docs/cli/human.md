@@ -3,13 +3,17 @@
 ```text
 human — put an agent CLI on a pane (operator)
 
-  Empty terminal → agent:
-    switch <target> <opencode|claude|agent|kiro>
+  Empty terminal → agent (prefer spawn):
+    spawn <target> <opencode|opencode-cpe|claude|agent|kiro>
     Examples:
-      seatmesh switch slot-1 opencode
-      seatmesh switch secretary claude
-      seatmesh switch here agent          # this pane (Cursor)
-      npx seatmesh switch mini-1 opencode
+      seatmesh spawn slot-1 opencode
+      seatmesh spawn secretary opencode-cpe --keep-resume
+      seatmesh spawn here agent          # this pane (Cursor)
+      seatmesh spawn mini-1 opencode-cpe --keep-resume
+
+  Replace a live agent with another CLI:
+    switch <target> <opencode|opencode-cpe|claude|agent|kiro> [reason...]
+    Alias: handoff
 
   Back to plain shell:
     switch <target> empty
@@ -17,15 +21,19 @@ human — put an agent CLI on a pane (operator)
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
 
+  Resume known session on a pane (autodetect ses_* / resume id):
+    pane resume [here|secretary|slot-N|…]
+
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
 
-  Give the seat WORK / a todo (does NOT install a CLI — different from switch):
+  Give the seat WORK / a todo (does NOT install a CLI — different from spawn/switch):
     todo give <target> "do the thing"     # preferred
     todo <target> "do the thing"          # shorthand
     assign <target> "do the thing"        # same engine
 
   Targets: manager | secretary | slot-N | mini-N | here
+  Operator help: seatmesh help (human) · seatmesh --agents help (full)
   Aliases for this topic: help put-agent | help panes | help operator
 ```
 

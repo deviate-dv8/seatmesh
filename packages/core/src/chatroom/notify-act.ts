@@ -1,6 +1,12 @@
 /** One-shot notification link → inbox daemon side effect (GET /act/v1/:token). */
 
-export type NotifyActType = "peer" | "inbox-resolve" | "checkback-ack" | "ping";
+export type NotifyActType =
+  | "peer"
+  | "inbox-resolve"
+  | "checkback-ack"
+  | "ping"
+  /** Operator-approved shell in workspace (after Review card). */
+  | "run-cmd";
 
 export interface NotifyActRegisterAction {
   label: string;

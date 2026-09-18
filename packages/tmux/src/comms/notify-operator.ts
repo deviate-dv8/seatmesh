@@ -10,6 +10,8 @@ import {
   readMarkdownFile,
   registerNotifyActLinks,
   yesNoNotifyActActions,
+  runCmdNotifyActActions,
+  formatRunCmdCardBody,
   type LoadedProfile,
   type NotifyActRegisterAction,
 } from "@seat-mesh/core";
@@ -646,6 +648,73 @@ export async function sendYesNoToast(
     target,
     infoUrl: result.infoUrl,
   };
+}
+
+export interface SendRunCmdToastResult {
+  ok: boolean;
+  infoUrl?: string;
+  error?: string;
+}
+
+/**
+ * Two-step operator command:
+ * 1) Toast **Review** → hub card with the exact command visible
+ * 2) Card **Run** executes (workspace shell) / **Decline** cancels
+ * Run is never on the toast — only after the operator sees the command.
+ */
+export async function sendRunCmdToast(
+  loaded: LoadedProfile,
+  title: string,
+  opts: {
+    cmd: string;
+    /** Toast blurb + optional card prose above the command. */
+    body?: string;
+    cwd?: string;
+    days?: number;
+  },
+): Promise<SendRunCmdToastResult> {
+  const cmd = opts.cmd.trim();
+  if (!cmd) return { ok: false, error: "need --cmd" };
+  const blurb = (opts.body?.trim() || "Review the command, then Run or Decline.").trim();
+  const cardBody = formatRunCmdCardBody({
+    cmd,
+    blurb,
+    cwd: opts.cwd?.trim(),
+  });
+  const actions = runCmdNotifyActActions({
+    cmd,
+    cwd: opts.cwd?.trim(),
+  });
+  const ttlSec = Math.min(86_400, Math.max(60, (opts.days ?? 7) * 86_400));
+  const port = meshInboxPort(loaded);
+  const base = inboxBaseFromPort(port);
+  const registered = await registerNotifyActLinks(
+    base,
+    actions,
+    ttlSec,
+    { title: title.trim() || "Run command", body: cardBody },
+  );
+  const infoUrl = registered.infoUrl?.trim();
+  if (!infoUrl || !registered.links.length) {
+    return { ok: false, error: "inbox did not register run-cmd card (is inbox up?)" };
+  }
+
+  const toastBody = `${blurb}\n\nCheck: Review command on the card, then Run or Decline.`;
+  let toasted = false;
+  if (process.platform === "linux" && !shouldSkipDesktopNotify(loaded.workspace)) {
+    toasted = spawnLinuxOpenUrlToast({
+      title: title.trim() || "Run command",
+      body: toastBody,
+      openUrl: infoUrl,
+      actionLabel: "Review",
+    });
+  }
+  if (!toasted) {
+    toasted = sendDesktopToastSync(loaded.workspace, title.trim() || "Run command", toastBody, {
+      openUrl: infoUrl,
+    });
+  }
+  return { ok: toasted || Boolean(infoUrl), infoUrl };
 }
 
 function tmuxMini(paneId: string | null): string {

@@ -143,7 +143,7 @@ describe("formatRoomCommsCheckback", () => {
         { role: "manager" },
         "manager-2",
       ),
-    ).toContain('seatmesh agent peer manager-2 "<msg>"');
+    ).toContain('sm agent peer manager-2 "<msg>"');
     expect(parseRoomCommsExpect("chat-room:supervise peer update (claim)")?.slug).toBe(
       "supervise",
     );
@@ -184,7 +184,7 @@ describe("formatRoomCoordNotify", () => {
     expect(msg).toContain("[mesh-inbox-room] supervise | mini-5 | claim");
     expect(msg).toContain("CLAIMED: proxy-restart lead slice");
     expect(msg).toContain("(+14 more unseen)");
-    expect(msg).toContain('seatmesh agent peer mini-5 "<msg>"');
+    expect(msg).toContain('sm agent peer mini-5 "<msg>"');
     expect(msg).not.toContain("room tail");
   });
 });
@@ -200,8 +200,8 @@ describe("formatRoomPeerNotify", () => {
       { unseen: 2 },
     );
     expect(msg).toContain("[mesh-inbox-room] team-room | worker-3 | fyi 2 unseen");
-    expect(msg).toContain("seatmesh agent room tail -r team-room -n 15");
-    expect(msg).toContain('seatmesh agent peer slot-3 "<msg>"');
+    expect(msg).toContain("sm agent room tail -r team-room -n 15");
+    expect(msg).toContain('sm agent peer slot-3 "<msg>"');
     expect(msg).not.toContain("long body that must not appear");
     expect(msg).not.toContain("standing:");
   });
@@ -218,7 +218,7 @@ describe("formatRoomDirectPm", () => {
       { role: "worker", slot: 6 },
     );
     expect(msg).toContain("[agent-worker-slot-3] room peer-3-6-abc");
-    expect(msg).toContain('seatmesh agent peer slot-3 "<msg>"');
+    expect(msg).toContain('sm agent peer slot-3 "<msg>"');
   });
 });
 

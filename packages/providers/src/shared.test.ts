@@ -180,6 +180,23 @@ describe("agentInputDraft (cursor ghost-text / placeholders)", () => {
     });
   });
 
+  it("OpenCode free-tier Console error is oc-limit even with ctrl+p chrome", () => {
+    const tail =
+      "Error from provider (Console): OpenCode's free tier can only be used from within OpenCode\n" +
+      "\n" +
+      "     ▣  Compaction · Big Pickle\n" +
+      "\n" +
+      "  Build auto · Big Pickle OpenCode Zen\n" +
+      "ctrl+p commands\n";
+    const pane = { captureTail: tail, currentCommand: "opencode" } as Parameters<
+      typeof composerFromCapture
+    >[0];
+    expect(composerFromCapture(pane, "opencode")).toEqual({
+      phase: "limit",
+      limitKind: "oc-limit",
+    });
+  });
+
   it("oc-credit still wins when error sits above a tall scrollback band", () => {
     const filler = Array.from({ length: 40 }, (_, i) => `line ${i}`).join("\n");
     const tail =

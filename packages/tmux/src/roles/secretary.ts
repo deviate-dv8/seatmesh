@@ -173,93 +173,29 @@ export function secretaryMeshWatch(
   if (created) console.log(JSON.stringify(created, null, 2));
 }
 
-interface CheckbackRowLocal {
-  id: string;
-  kind: string;
-  status: "active" | "cancelled";
-  renewSec?: number;
-  expect?: string;
-  ownerPane?: string;
-  expiresAt?: string;
-  senderLabel?: string;
-  recipientLabel?: string;
-  ownerLabel?: string;
-  workspaceId?: string;
-  sessionName?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-function checkbackPath(loaded: LoadedProfile): string {
-  return meshRuntimePaths(loaded).checkbackJsonl;
-}
-
-function readCheckbacksLocal(loaded: LoadedProfile): CheckbackRowLocal[] {
-  const p = checkbackPath(loaded);
-  if (!fs.existsSync(p)) return [];
-  return fs
-    .readFileSync(p, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as CheckbackRowLocal);
-}
-
-function writeCheckbacksLocal(loaded: LoadedProfile, rows: CheckbackRowLocal[]): void {
-  const p = checkbackPath(loaded);
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
-}
-
-function upsertCheckbackLocal(loaded: LoadedProfile, row: CheckbackRowLocal): void {
-  const rows = readCheckbacksLocal(loaded).filter((r) => r.id !== row.id);
-  rows.push(row);
-  writeCheckbacksLocal(loaded, rows);
-}
-
-function cancelCheckbackLocal(loaded: LoadedProfile, id: string): void {
-  const now = new Date().toISOString();
-  const rows = readCheckbacksLocal(loaded);
-  let hit = false;
-  for (const r of rows) {
-    if (r.id === id || r.id.startsWith(id)) {
-      r.status = "cancelled";
-      r.updatedAt = now;
-      hit = true;
-    }
-  }
-  if (hit) writeCheckbacksLocal(loaded, rows);
-}
-
-function armPatienceLocal(
-  loaded: LoadedProfile,
-  body: Omit<CheckbackRowLocal, "createdAt" | "updatedAt" | "status">,
-): void {
-  const now = new Date().toISOString();
-  upsertCheckbackLocal(loaded, {
-    ...body,
-    workspaceId: body.workspaceId ?? loaded.workspaceId,
-    sessionName: body.sessionName ?? resolveLiveTmuxSession(loaded),
-    ownerLabel:
-      body.ownerLabel ??
-      body.recipientLabel ??
-      undefined,
-    status: "active",
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
+/** Arm via daemon HTTP — never write CHECKBACK.jsonl directly (sqlite split-brain). */
 function armPatience(
   loaded: LoadedProfile,
   body: Record<string, unknown>,
 ): Record<string, unknown> | null {
-  const row = body as Omit<CheckbackRowLocal, "createdAt" | "updatedAt" | "status">;
-  armPatienceLocal(loaded, row);
-  return { ok: true, entry: row };
+  ensureMeshInbox(loaded);
+  const created = curlJson("POST", `${inboxBase(loaded)}/patience`, {
+    ...body,
+    workspaceId: body.workspaceId ?? loaded.workspaceId,
+    sessionName: body.sessionName ?? resolveLiveTmuxSession(loaded),
+    ownerLabel: body.ownerLabel ?? body.recipientLabel,
+  });
+  if (!created || created.ok === false) {
+    throw new Error(
+      `patience arm failed for ${String(body.id ?? "?")} — is mesh-inbox up? (${inboxPort(loaded)})`,
+    );
+  }
+  return created;
 }
 
 function cancelPatience(loaded: LoadedProfile, id: string): void {
-  cancelCheckbackLocal(loaded, id);
+  ensureMeshInbox(loaded);
+  curlJson("POST", `${inboxBase(loaded)}/patience/${encodeURIComponent(id)}/cancel`);
 }
 
 /** Operator-assigned: secretary + daemon keep manager moving without operator "continue". */

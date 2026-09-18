@@ -72,7 +72,7 @@ describe("opencode-cpe-live harness label", () => {
     expect(liveHarnessSatisfiesWanted("opencode", "opencode-cpe", s, { kinds })).toBe(false);
   });
 
-  it("legacy path without kinds still works", () => {
+  it("legacy path without kinds: resumeCmd proves CPE; savedType alone does not", () => {
     expect(
       resolveOpenCodeHarnessType({
         detectId: "opencode",
@@ -80,5 +80,12 @@ describe("opencode-cpe-live harness label", () => {
         resumeCmd: "opencode-cpe.sh",
       }),
     ).toBe("opencode-cpe");
+    expect(
+      resolveOpenCodeHarnessType({
+        detectId: "opencode",
+        savedType: "opencode-cpe",
+        resumeCmd: "opencode --auto",
+      }),
+    ).toBe("opencode");
   });
 });

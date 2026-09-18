@@ -335,7 +335,7 @@ export function kiroInputDraft(captureTail: string): string {
 }
 
 const OC_LIMIT_RE =
-  /rate\s*limit|usage\s*limit|quota\s*exceed|hit your.*limit|limit reached|too many requests|\b429\b|free[ -]?tier.*limit|plan limit|zen.*limit|session\s*(expired|limit|ended)|expired\s*session|provider\s*limit|free\s*usage\s*exceed|usage\s*exceeded|subscribe to go/i;
+  /rate\s*limit|usage\s*limit|quota\s*exceed|hit your.*limit|limit reached|too many requests|\b429\b|free[ -]?tier|plan limit|zen.*limit|session\s*(expired|limit|ended)|expired\s*session|provider\s*limit|free\s*usage\s*exceed|usage\s*exceeded|subscribe to go/i;
 const OC_CONNECT_RE =
   /cannot\s+connect\s+to\s+api|unable\s+to\s+connect|service\s+unavailable|connection\s+error|ECONNREFUSED|socket\s+connection\s+was\s+closed/i;
 /**
@@ -397,20 +397,32 @@ export function composerFromCapture(
     const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-8);
     const bottom = bottomLines.join("\n");
     const bottom28 = tail.split("\n").slice(-28).join("\n");
-    // Credit gate: scan a wide band — error often sits above ctrl+p chrome.
+    // Credit / free-tier gates: scan a wide band — error often sits above ctrl+p chrome.
     const creditBand = tail.split("\n").slice(-80).join("\n");
-    if (
-      OC_CREDIT_RE.test(bottom) ||
-      OC_CREDIT_RE.test(bottom28) ||
-      OC_CREDIT_RE.test(creditBand)
-    ) {
-      return { phase: "limit", limitKind: "oc-credit" };
-    }
     const atComposer =
       /ctrl\+p commands/i.test(bottom) || OC_COMPOSER_RE.test(bottom);
-    // Live composer wins over stale limit/connect lines left in scrollback after resume.
-    // Must return here on busy too — otherwise bottom8 still matches "Cannot connect" while
-    // tokens stream and sticky PROXY-DOWN never clears.
+    // A rule/divider line among the recent lines marks a redraw boundary — a prior
+    // frame's error sitting above it is stale scrollback, not the live error state.
+    // Without a divider, an error line right above a live composer is still current
+    // (e.g. a free-tier/credit banner rendered in the same frame as ctrl+p chrome).
+    const hasStaleDivider =
+      atComposer &&
+      bottomLines.some((l) => RULE_LINE_RE.test(l.trim()) || /^[┃│╹▀\s]{3,}$/.test(l.trim()));
+    if (!hasStaleDivider) {
+      if (
+        OC_CREDIT_RE.test(bottom) ||
+        OC_CREDIT_RE.test(bottom28) ||
+        OC_CREDIT_RE.test(creditBand)
+      ) {
+        return { phase: "limit", limitKind: "oc-credit" };
+      }
+      if (OC_LIMIT_RE.test(creditBand) || OC_LIMIT_RE.test(bottom28) || OC_LIMIT_RE.test(bottom)) {
+        return { phase: "limit", limitKind: "oc-limit" };
+      }
+    }
+    // Live composer wins over stale limit/credit/connect lines left in scrollback after
+    // resume. Must return here on busy too — otherwise bottom8 still matches "Cannot
+    // connect" while tokens stream and sticky PROXY-DOWN never clears.
     if (atComposer) {
       const recentBusy =
         /⠏|⠋|⠙|⠹|⠸|⠼|⠴|⠦|⠧|⠇|esc interrupt/i.test(bottom) ||
@@ -428,9 +440,6 @@ export function composerFromCapture(
     const bottom8 = bottom;
     if (OC_CONNECT_RE.test(bottom8) && !OC_LIMIT_RE.test(bottom8)) {
       return { phase: "limit", limitKind: "oc-connect" };
-    }
-    if (OC_LIMIT_RE.test(bottom8) || OC_LIMIT_RE.test(bottom28)) {
-      return { phase: "limit", limitKind: "oc-limit" };
     }
   }
   if (providerId === "claude") {

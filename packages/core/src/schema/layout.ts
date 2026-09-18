@@ -128,6 +128,28 @@ export const LayoutSchema = z.object({
       enabled: z.boolean().default(true),
     })
     .default({ window: "logs", index: 9, enabled: true }),
+  /**
+   * Auto grow/shrink worker + mini grids (daemon tick).
+   * Up when no free empty shells; down when high slots idle empty (layout-guard safe).
+   */
+  autoScale: z
+    .object({
+      enabled: z.boolean().default(false),
+      cooldownSec: z.number().int().min(30).max(3600).default(120),
+      workers: z
+        .object({
+          min: z.number().int().min(1).max(12).default(1),
+          max: z.number().int().min(1).max(12).default(6),
+        })
+        .default({ min: 1, max: 6 }),
+      minis: z
+        .object({
+          min: z.number().int().min(1).max(16).default(1),
+          max: z.number().int().min(1).max(16).default(4),
+        })
+        .default({ min: 1, max: 4 }),
+    })
+    .default({ enabled: false, cooldownSec: 120 }),
 });
 
 export type MeshLayout = z.infer<typeof LayoutSchema>;

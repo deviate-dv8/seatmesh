@@ -256,8 +256,9 @@ function record(meshKey, which) {
 }
 
 function killCpeOpencodeForPanes(rows) {
-  // Pane-scoped: only kill CPE OC whose --session matches a stamped ses,
-  // or whose tty is this pane's tty. Never wipe the whole mesh.
+  // Pane-scoped: kill OC whose --session matches stamped ses.
+  // After type→opencode-cpe migration, do NOT require 18887 in environ —
+  // bare OC labeled opencode-cpe must still die so revive can paste the wrapper.
   const wantSes = new Set(rows.map((r) => r.ses).filter(Boolean));
   const wantWorkspaces = new Set(rows.map((r) => r.workspace).filter(Boolean));
   let killed = 0;
@@ -274,19 +275,20 @@ function killCpeOpencodeForPanes(rows) {
     } catch {
       continue;
     }
-    if (!env.includes(PORT)) continue;
     const ses = (cmd.match(/ses_[A-Za-z0-9]+/) || [])[0];
-    const inWorkspace = [...wantWorkspaces].some((w) => cmd.includes(w));
     const sesMatch = ses && wantSes.has(ses);
-    if (!sesMatch && !(inWorkspace && wantSes.size === 0)) {
-      // When we have explicit ses list, require match. Skip others.
-      if (wantSes.size > 0 && !sesMatch) continue;
+    const proxied = env.includes(PORT) || env.includes(`:${PORT}`);
+    const inWorkspace = [...wantWorkspaces].some((w) => cmd.includes(w));
+    // Prefer ses match. If stamp has ses list, require it. Proxy env optional.
+    if (wantSes.size > 0) {
+      if (!sesMatch) continue;
+    } else if (!proxied && !inWorkspace) {
+      continue;
     }
-    if (wantSes.size > 0 && !sesMatch) continue;
     try {
       process.kill(Number(pid), "SIGTERM");
       killed += 1;
-      console.log(`KILL pid=${pid} ses=${ses ?? "?"}`);
+      console.log(`KILL pid=${pid} ses=${ses ?? "?"} proxied=${proxied}`);
     } catch {
       /* */
     }
@@ -413,11 +415,37 @@ function reviveFromStamp(stampPath) {
       row.paneId,
       "#{pane_current_command}",
     ]).stdout?.trim();
-    // Already live OC — do NOT C-c / printf / re-paste (that dumps CSI into zsh or OC).
-    if (/opencode/i.test(cmdNow || "")) {
+    // Already live CPE-proven OC — do NOT C-c / re-paste.
+    // Mesh type / resume_cmd saying opencode-cpe is NOT enough (bare OC after type migration).
+    const cpeProven = (() => {
+      if (!row.ses || !/opencode/i.test(cmdNow || "")) return false;
+      try {
+        const pids = (spawnSync("pgrep", ["-f", "[o]pencode"], { encoding: "utf8" }).stdout || "")
+          .trim()
+          .split("\n")
+          .filter(Boolean);
+        for (const pid of pids) {
+          const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ");
+          if (!cmdline.includes(row.ses)) continue;
+          const env = fs.readFileSync(`/proc/${pid}/environ`, "utf8");
+          if (env.includes(PORT) || env.includes(`:${PORT}`) || /opencode-cpe\.sh/i.test(cmdline)) {
+            return true;
+          }
+        }
+      } catch {
+        /* */
+      }
+      return false;
+    })();
+    if (/opencode/i.test(cmdNow || "") && cpeProven) {
       tmux(["set-option", "-p", "-t", row.paneId, "@mesh_oc_session", row.ses]);
-      console.log(`ALREADY ${row.mesh}/${row.label} ${row.paneId} cmd=${cmdNow}`);
+      console.log(`ALREADY ${row.mesh}/${row.label} ${row.paneId} cmd=${cmdNow} cpe-proven`);
       return true;
+    }
+    if (/opencode/i.test(cmdNow || "") && !cpeProven) {
+      console.log(
+        `REWRAP ${row.mesh}/${row.label} ${row.paneId}: live opencode but not CPE-proven (type=${row.type})`,
+      );
     }
     // Reset mouse/focus modes first — OC leave leaves SGR reports that poison zsh.
     resetPaneShell(row.paneId);
@@ -425,7 +453,8 @@ function reviveFromStamp(stampPath) {
     tmux(["send-keys", "-t", row.paneId, "Enter"]);
     tmux(["set-option", "-p", "-t", row.paneId, "@mesh_oc_session", row.ses]);
     console.log(`REVIVE ${row.mesh}/${row.label} ${row.paneId} ses=${row.ses}`);
-    sleepSec(0.25);
+    // Stagger launches — parallel Bun/OC --version + boot OOMs under swap pressure.
+    sleepSec(Number(process.env.OC_CPE_REVIVE_STAGGER_SEC || 2));
     return true;
   }
 

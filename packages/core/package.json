@@ -8,6 +8,26 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./profile": {
+      "types": "./dist/profile/profile.d.ts",
+      "import": "./dist/profile/profile.js"
+    },
+    "./target-range": {
+      "types": "./dist/comms/target-range.d.ts",
+      "import": "./dist/comms/target-range.js"
+    },
+    "./runners": {
+      "types": "./dist/agents/runners.d.ts",
+      "import": "./dist/agents/runners.js"
+    },
+    "./paths": {
+      "types": "./dist/paths/paths.d.ts",
+      "import": "./dist/paths/paths.js"
+    },
+    "./seat-kind": {
+      "types": "./dist/schema/seat-kind.d.ts",
+      "import": "./dist/schema/seat-kind.js"
     }
   },
   "scripts": {

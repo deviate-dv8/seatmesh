@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   armContractLock,
   balanceLeadBrief,
@@ -9,68 +10,14 @@ import {
   disarmContractLock,
   isBalanceContractOn,
   loadBalanceVendorContract,
-  meshRuntimePaths,
   type LoadedProfile,
   type ProviderRegistry,
 } from "@seat-mesh/core";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { enqueuePrompt } from "../inject/prompt.js";
+import { ensureMeshInbox, meshInboxPort } from "../comms/inbox-bridge.js";
 import { runBalanceAutoActions } from "./balance-actions.js";
 import { runBalanceTick } from "./balance-tick.js";
-
-interface CheckbackRowLocal {
-  id: string;
-  kind: string;
-  status: "active" | "cancelled";
-  renewSec?: number;
-  expect?: string;
-  ownerPane?: string;
-  expiresAt?: string;
-  senderLabel?: string;
-  recipientLabel?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-function checkbackPath(loaded: LoadedProfile): string {
-  return meshRuntimePaths(loaded).checkbackJsonl;
-}
-
-function readCheckbacksLocal(loaded: LoadedProfile): CheckbackRowLocal[] {
-  const p = checkbackPath(loaded);
-  if (!fs.existsSync(p)) return [];
-  return fs
-    .readFileSync(p, "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as CheckbackRowLocal);
-}
-
-function writeCheckbacksLocal(loaded: LoadedProfile, rows: CheckbackRowLocal[]): void {
-  const p = checkbackPath(loaded);
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length ? "\n" : ""));
-}
-
-function upsertCheckbackLocal(loaded: LoadedProfile, row: CheckbackRowLocal): void {
-  const rows = readCheckbacksLocal(loaded).filter((r) => r.id !== row.id);
-  rows.push(row);
-  writeCheckbacksLocal(loaded, rows);
-}
-
-function cancelCheckbackLocal(loaded: LoadedProfile, id: string): void {
-  const now = new Date().toISOString();
-  const rows = readCheckbacksLocal(loaded);
-  let hit = false;
-  for (const r of rows) {
-    if (r.id === id || r.id.startsWith(id)) {
-      r.status = "cancelled";
-      r.updatedAt = now;
-      hit = true;
-    }
-  }
-  if (hit) writeCheckbacksLocal(loaded, rows);
-}
 
 const BALANCE_LEAD_TICK_ID = "mesh-balance-lead-tick";
 
@@ -92,17 +39,37 @@ function balanceMarkerPath(loaded: LoadedProfile): string {
   }
 }
 
+function inboxBase(loaded: LoadedProfile): string {
+  return `http://127.0.0.1:${meshInboxPort(loaded)}`;
+}
+
+function curlJson(method: string, url: string, body?: unknown): Record<string, unknown> | null {
+  const args = ["-sS", "-m", "5", "-X", method, url];
+  if (body !== undefined) {
+    args.push("-H", "Content-Type: application/json", "-d", JSON.stringify(body));
+  }
+  const r = spawnSync("curl", args, { encoding: "utf8" });
+  if (r.status !== 0) return null;
+  try {
+    return JSON.parse(r.stdout || "{}") as Record<string, unknown>;
+  } catch {
+    return { raw: r.stdout };
+  }
+}
+
+/** Arm via daemon HTTP — never write CHECKBACK.jsonl directly (sqlite split-brain). */
 function armBalanceTickCheckback(
   loaded: LoadedProfile,
   leadPane: string,
   interval: string,
   leadLabel: string,
 ): void {
+  ensureMeshInbox(loaded);
   const secs = parseDurationSeconds(interval);
   const expires = new Date(Date.now() + secs * 1000).toISOString();
-  cancelCheckbackLocal(loaded, BALANCE_LEAD_TICK_ID);
-  const now = new Date().toISOString();
-  const body: Omit<CheckbackRowLocal, "createdAt" | "updatedAt" | "status"> = {
+  const base = inboxBase(loaded);
+  curlJson("POST", `${base}/patience/${encodeURIComponent(BALANCE_LEAD_TICK_ID)}/cancel`);
+  const created = curlJson("POST", `${base}/patience`, {
     id: BALANCE_LEAD_TICK_ID,
     kind: "balance-lead-tick",
     renewSec: secs,
@@ -111,13 +78,18 @@ function armBalanceTickCheckback(
     expiresAt: expires,
     senderLabel: "daemon",
     recipientLabel: leadLabel,
-  };
-  upsertCheckbackLocal(loaded, {
-    ...body,
-    status: "active",
-    createdAt: now,
-    updatedAt: now,
   });
+  if (!created || created.ok === false) {
+    throw new Error(`patience arm failed for ${BALANCE_LEAD_TICK_ID} — is mesh-inbox up?`);
+  }
+}
+
+function cancelBalanceTick(loaded: LoadedProfile): void {
+  ensureMeshInbox(loaded);
+  curlJson(
+    "POST",
+    `${inboxBase(loaded)}/patience/${encodeURIComponent(BALANCE_LEAD_TICK_ID)}/cancel`,
+  );
 }
 
 export function balanceLeadCommand(
@@ -138,7 +110,9 @@ export function balanceLeadCommand(
     if (r.wroteLedger) console.log(`OK: ledger ${r.lastPath}`);
     if (auto.roomStatusPosted) console.log("OK: room STATUS posted (balance + managers)");
     if (auto.autoPullAssigned) console.log(`OK: auto-assign -> ${doc.balance_lead}`);
-    if (auto.balanceeAssigned.length) console.log(`OK: auto-assign balancees: ${auto.balanceeAssigned.join(", ")}`);
+    if (auto.balanceeAssigned.length) {
+      console.log(`OK: auto-assign balancees: ${auto.balanceeAssigned.join(", ")}`);
+    }
     if (r.rebalanceHint) console.log("hint: rebalance skew across balancees");
     return;
   }
@@ -150,20 +124,23 @@ export function balanceLeadCommand(
 
   if (sub === "status") {
     const on = isBalanceContractOn(loaded) || fs.existsSync(balanceMarkerPath(loaded));
-    const rows = readCheckbacksLocal(loaded).filter(
-      (r) => r.id === BALANCE_LEAD_TICK_ID && r.status === "active",
-    );
+    ensureMeshInbox(loaded);
+    const listed = curlJson("GET", `${inboxBase(loaded)}/patience?all=1`);
+    const entries = Array.isArray((listed as { entries?: unknown })?.entries)
+      ? ((listed as { entries: Array<{ id?: string; status?: string; ownerPane?: string }> }).entries)
+      : [];
+    const row = entries.find((r) => r.id === BALANCE_LEAD_TICK_ID && r.status === "active");
     console.log(`balance: ${on ? "ON" : "OFF"}`);
     console.log(`  lead: ${doc.balance_lead}`);
     console.log(`  main: ${doc.main_lead}`);
     console.log(`  balancees: ${doc.balancees.join(", ")}`);
     console.log(`  interval: ${interval}`);
-    if (rows[0]?.ownerPane) console.log(`  tick pane: ${rows[0].ownerPane}`);
+    if (row?.ownerPane) console.log(`  tick pane: ${row.ownerPane}`);
     return;
   }
 
   if (sub === "off") {
-    cancelCheckbackLocal(loaded, BALANCE_LEAD_TICK_ID);
+    cancelBalanceTick(loaded);
     disarmContractLock(contractsDir, doc.id, doc.balance_lead);
     console.log("OK: balance OFF (tick cancelled, contract lock removed)");
     return;

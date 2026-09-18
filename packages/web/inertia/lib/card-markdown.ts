@@ -3,6 +3,7 @@
  * Mirrors packages/daemon/src/notify/simple-markdown.ts for hub parity.
  */
 import { Marked } from 'marked'
+import { unescapeNotifyMarkdown } from '@seat-mesh/core'
 
 const marked = new Marked({
   gfm: true,
@@ -40,7 +41,8 @@ marked.use({
 })
 
 export function renderCardMarkdown(src: string): string {
-  const text = src.replace(/\r\n/g, '\n').trim()
+  // CLI `--body "## Why\\n\\n…"` often stores literal \n — unescape so GFM can parse headings.
+  const text = unescapeNotifyMarkdown(src.replace(/\r\n/g, '\n')).trim()
   if (!text) return ''
   const html = marked.parse(text, { async: false })
   return typeof html === 'string' ? html : ''

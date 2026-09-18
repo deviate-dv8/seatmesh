@@ -77,6 +77,8 @@ import {
 } from "../ack/ack-sweep.js";
 import { notePaneDeliveryHold } from "../inject/pane-hold.js";
 import { pollSecretaryAutoRestart } from "../recovery/secretary-auto-restart.js";
+import { pollPaneAutoRevive } from "../recovery/pane-auto-revive.js";
+import { pollLayoutAutoScale } from "../recovery/layout-auto-scale.js";
 
 export interface MeshOrchestratorCtx {
   loaded: LoadedProfile;
@@ -725,6 +727,15 @@ export function orchestratorDrainTick(ctx: MeshOrchestratorCtx): DrainTickResult
     baseWindow: ctx.baseWindow,
     log: ctx.log,
   });
+  pollPaneAutoRevive({
+    loaded: ctx.loaded,
+    registry: ctx.registry,
+    log: ctx.log,
+  });
+  pollLayoutAutoScale({
+    loaded: ctx.loaded,
+    log: ctx.log,
+  });
   if (ctx.paneOps) {
     drainPaneOpsOnce(ctx.paneOps);
   }
@@ -759,6 +770,15 @@ export async function orchestratorDrainTickAsync(ctx: MeshOrchestratorCtx): Prom
     registry: ctx.registry,
     session: ctx.session,
     baseWindow: ctx.baseWindow,
+    log: ctx.log,
+  });
+  pollPaneAutoRevive({
+    loaded: ctx.loaded,
+    registry: ctx.registry,
+    log: ctx.log,
+  });
+  pollLayoutAutoScale({
+    loaded: ctx.loaded,
     log: ctx.log,
   });
   if (ctx.paneOps) {

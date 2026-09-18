@@ -92,6 +92,7 @@ daemon:
   portRange: 90
   autoStart: true
   watch: true
+  autoRevive: false
   pollMs: 4000
   idleSettleSec: 5
   managerPromptPrefix: "[agent-manager]"

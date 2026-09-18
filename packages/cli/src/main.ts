@@ -19,6 +19,8 @@ import {
   chatRoomConfigForLoaded,
   clearAckEndedSync,
   resolveAckRedirectDefaults,
+  expandTargetSpec,
+  targetRangeOptsFromProfile,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
 import { createRegistryForProfile } from "@seat-mesh/providers";
@@ -48,6 +50,8 @@ import {
   tmuxHasSession,
   relayoutMeshSession,
   realignAllLayouts,
+  scaleLayout,
+  layoutReload,
   reloadMesh,
   ensureMeshInbox,
   startMeshInbox,
@@ -100,6 +104,7 @@ import {
   runFlush,
   printFlushResults,
   runSwitch,
+  runSwitchFast,
   runPaneResume,
   runSeatSwap,
   runSet,
@@ -201,8 +206,10 @@ Setup
 
 Put an agent on a pane
   help human          ← cheat sheet (aliases: put-agent | panes)
-  switch <target> <opencode|opencode-cpe|claude|agent|kiro|empty>
-  launch <target|all>
+  spawn <target> <opencode|opencode-cpe|claude|agent|kiro>   empty → CLI
+  switch <target> <…|empty>   replace live agent (or → shell)
+  kill|empty <target>         pane → plain terminal (+ save empty)
+  launch <target|all>         resume configured CLI
   kind <target>
 
 Work / status
@@ -212,7 +219,9 @@ Work / status
   report | verify | test | save|auto | inbox […] | labels
 
 Session shape
-  reload [--layout] | layout […] | realign | ops list|clear
+  rebuild|reload [--layout]   npm build + labels (not config→pane)
+  layout reload               re-grid + resume from mesh-agents.json
+  layout […] | realign | ops list|clear
 
 Agent panes use the gateway (not listed here by default):
   seatmesh agent …          · seatmesh agent help
@@ -828,14 +837,14 @@ async function main(): Promise<void> {
     process.exit(layoutOk && inboxOk ? 0 : 1);
   }
 
-  if (cmd === "reload") {
+  if (cmd === "reload" || cmd === "rebuild") {
     const loaded = meshLoaded(profileArg);
     const layout = rest.includes("--layout");
     reloadMesh(loaded, { layout });
     console.log(
       layout
-        ? `OK: reload + relayout session ${loaded.sessionName}`
-        : `OK: reload (build + labels) session ${loaded.sessionName}`,
+        ? `OK: rebuild + relayout session ${loaded.sessionName}`
+        : `OK: rebuild (npm build + labels) session ${loaded.sessionName} — not config→pane`,
     );
     printMeshInboxStatus(loaded);
     return;
@@ -850,6 +859,97 @@ async function main(): Promise<void> {
       console.log(
         `OK: realign base=${fmt(r.base)} workers=${fmt(r.workers)} minis=${fmt(r.minis)} secretaryWidthPct=${loaded.profile.layout?.base.secretaryWidthPct ?? 50}`,
       );
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "layout" && sub === "scale") {
+    const loaded = meshLoaded(profileArg);
+    const kindRaw = (tail[0] ?? "").toLowerCase();
+    const kind =
+      kindRaw === "workers" || kindRaw === "worker" || kindRaw === "w"
+        ? "workers"
+        : kindRaw === "minis" || kindRaw === "mini" || kindRaw === "m"
+          ? "minis"
+          : null;
+    const action = (tail[1] ?? "").toLowerCase();
+    const force = rest.includes("--yes");
+    const dryRun = rest.includes("--dry-run");
+    if (!kind || !action) {
+      console.error(
+        "usage: layout scale workers|minis up|down|<N> [--yes] [--dry-run]",
+      );
+      process.exit(2);
+    }
+    requireCoordRole(loaded, "layout scale");
+    if (action !== "up" && action !== "down") {
+      const n = Number(action);
+      if (!Number.isInteger(n) || n < 1) {
+        console.error("usage: layout scale workers|minis up|down|<N> [--yes] [--dry-run]");
+        process.exit(2);
+      }
+    }
+    try {
+      const r =
+        action === "up" || action === "down"
+          ? scaleLayout(loaded, {
+              kind,
+              dir: action,
+              force,
+              dryRun,
+            })
+          : scaleLayout(loaded, {
+              kind,
+              to: Number(action),
+              force,
+              dryRun,
+            });
+      if (r.dryRun) {
+        console.log(
+          `dry-run: scale ${r.kind} ${r.from} → ${r.to} (${r.grid})`,
+        );
+        return;
+      }
+      if (r.from === r.to) {
+        console.log(`OK: scale ${r.kind} already ${r.to} (${r.grid})`);
+        return;
+      }
+      console.log(
+        `OK: scale ${r.kind} ${r.from} → ${r.to} (${r.grid})${r.saved ? ` saved ${r.saved}` : ""}`,
+      );
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "layout" && sub === "reload") {
+    const loaded = meshLoaded(profileArg);
+    const force = rest.includes("--yes");
+    const skipLeads = rest.includes("--no-leads");
+    const noResume = rest.includes("--no-resume");
+    requireCoordRole(loaded, "layout reload");
+    try {
+      const r = layoutReload(loaded, {
+        force,
+        skipMinisLeads: skipLeads,
+        noResume,
+      });
+      const launched = r.repaired.filter((x) => x.status === "launched");
+      const failed = r.repaired.filter((x) => x.status === "failed");
+      console.log(
+        `OK: layout reload ${loaded.sessionName} repaired=${launched.length}${r.saved ? ` saved ${r.saved}` : ""}`,
+      );
+      for (const x of launched) {
+        console.log(`  resume ${x.label} ${x.paneId}`);
+      }
+      for (const x of failed) {
+        console.warn(`  fail ${x.label}: ${x.reason ?? x.status}`);
+      }
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
@@ -935,7 +1035,7 @@ async function main(): Promise<void> {
             ? ""
             : ` leads=[${Array.isArray(m.leads) ? m.leads.join(",") : "1,2"}]`;
         console.log(
-          `OK: relayout ${loaded.sessionName} (workers 3x2, minis ${grid}${leadNote})`,
+          `OK: relayout ${loaded.sessionName} (workers ${loaded.profile.layout?.workers.grid ?? "?"}, minis ${grid}${leadNote})`,
         );
         console.log(`OK: layout saved ${saved}`);
       },
@@ -1164,16 +1264,56 @@ async function main(): Promise<void> {
       printPeerVerify(r);
       process.exit(r.pass ? 0 : 1);
     }
-    const [target, ...textParts] = args;
+    const [targetRaw, ...textParts] = args;
     const rawMsg = textParts.join(" ").trim();
-    if (!target || !rawMsg) {
+    if (!targetRaw || !rawMsg) {
       console.error(
         "usage: peer verify [target] | peer [--direct] [--ended|--ack [ack-id]] [--redirect-from <seat>] <target> <msg...>\n" +
+          "  target: seat | 1..4 | slot-1..3 | mini-1..2 | 1,3,5  (Ruby-style fanout)\n" +
           "  --ack / --ended [id]  close open ask (id optional = auto-match from target)\n" +
           "  ack-class msg (ACK/FYI/PASS) auto-closes matching open ask\n" +
           "  or: agent ack reply <id> [msg]  (peer back + close in one shot)",
       );
       process.exit(2);
+    }
+    const peerTargets = expandTargetSpec(
+      targetRaw,
+      targetRangeOptsFromProfile(loaded.profile),
+    );
+    if (peerTargets.length > 1 && endedId) {
+      console.error("WARN: --ack/--ended ignored on range fanout (send-only)");
+      endedId = undefined;
+    }
+    const target = peerTargets[0]!;
+    if (peerTargets.length > 1) {
+      for (const t of peerTargets) {
+        try {
+          runPeer(loaded, t, rawMsg);
+        } catch (e) {
+          if ((e as Error).message !== "__peer_coord__") {
+            console.error(`FAIL peer ${t}: ${(e as Error).message}`);
+            continue;
+          }
+          requireCoordRole(loaded, "peer");
+          if (direct) {
+            const reg = createRegistryForProfile(loaded.profile);
+            injectPromptDirect(loaded, reg, t, rawMsg, { manager: true, force: true });
+            console.log(`SENT: peer --direct -> ${t}`);
+          } else {
+            const { paneId, targetLabel, token, via } = enqueuePrompt(loaded, t, rawMsg, {
+              manager: true,
+              armCheckback: false,
+            });
+            console.log(
+              via === "queued"
+                ? `QUEUED: peer -> ${targetLabel} pane=${paneId} token=${token ?? "-"}`
+                : `SENT: peer -> ${targetLabel} pane=${paneId}`,
+            );
+          }
+        }
+      }
+      console.log(`ok fanout peer → ${peerTargets.join(",")} (${peerTargets.length})`);
+      return;
     }
     if (shouldAutoAckReply(rawMsg, endedId)) {
       endedId = "__auto__";
@@ -1719,12 +1859,16 @@ async function main(): Promise<void> {
     const rawArgs = [sub, ...tail].filter(
       (a): a is string => Boolean(a) && a !== "--",
     );
-    const launchNow = rawArgs.includes("--now");
-    const targets = rawArgs.filter((a) => a !== "--now");
-    const label = targets.length ? targets.join(",") : "all";
+    const launchNow = rawArgs.includes("--now") || rawArgs.includes("--fast");
+    const targetsRaw = rawArgs.filter((a) => a !== "--now" && a !== "--fast");
+    const rangeOpts = targetRangeOptsFromProfile(loaded.profile);
+    const targets = targetsRaw.length
+      ? targetsRaw.flatMap((t) => expandTargetSpec(t, rangeOpts))
+      : undefined;
+    const label = targets?.length ? targets.join(",") : "all";
     const runLaunch = () => {
       const results = launchSession(loaded, {
-        targets: targets.length ? targets : undefined,
+        targets,
       });
       printLaunchResults(results);
       if (results.some((r) => r.status === "failed")) process.exit(1);
@@ -1736,7 +1880,7 @@ async function main(): Promise<void> {
     submitPaneOp(
       loaded,
       "launch",
-      { targets: targets.length ? targets : undefined },
+      { targets },
       `launch ${label}`,
       runLaunch,
     );
@@ -1870,21 +2014,51 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (cmd === "switch" || cmd === "handoff") {
+  if (cmd === "kill" || cmd === "empty") {
     const loaded = meshLoaded(profileArg);
-    requireCoordRole(loaded, cmd);
-    const reg = createRegistryForProfile(loaded.profile);
+    requireCoordRole(loaded, "switch");
+    const targetRaw = sub;
+    if (!targetRaw) {
+      console.error(`usage: ${cmd} <target|1..4|slot-N|mini-N|here>`);
+      console.error("  → plain terminal (respawn-pane -k) + save empty in mesh-agents.json");
+      process.exit(2);
+    }
+    const targets = expandTargetSpec(
+      targetRaw,
+      targetRangeOptsFromProfile(loaded.profile),
+    );
+    for (const t of targets) {
+      runSwitchFast(loaded, t, "empty", {
+        fresh: true,
+        persistEmpty: true,
+        reason: cmd === "kill" ? "kill" : "empty",
+      });
+    }
+    if (targets.length > 1) {
+      console.log(`ok fanout ${cmd} → ${targets.join(",")} (${targets.length})`);
+    }
+    return;
+  }
+
+  if (cmd === "switch" || cmd === "handoff" || cmd === "spawn") {
+    const loaded = meshLoaded(profileArg);
+    requireCoordRole(loaded, cmd === "spawn" ? "switch" : cmd);
     const args = [sub, ...tail].filter(Boolean);
+    const vocal = cmd === "spawn" ? "spawn" : "switch";
+    // spawn defaults fast (paste like typing opencode); switch defaults thorough
+    let fast = cmd === "spawn";
     if (args.length < 2) {
       console.error(
-        "usage: switch <target> <agent|cursor|claude|cc|kiro|oc|opencode|empty> [--keep-resume] [--resume ID] [--queue] [reason...]",
+        cmd === "spawn"
+          ? "usage: spawn <target|1..4> <agent|cursor|claude|oc|opencode> [--fast|--slow] [--keep-resume] [--resume ID]"
+          : "usage: switch <target|1..4> <agent|…|empty> [--fast|--slow] [--keep-resume] [--resume ID] [reason...]",
       );
       console.error(
-        "  targets: secretary|sec, manager|mgr, slot-N, mini-N, here|self (this pane's role)",
+        "  empty→CLI: spawn (fast by default) · replace live: switch · --fast = skip verify waits",
       );
       process.exit(2);
     }
-    const target = args[0]!;
+    const targetRaw = args[0]!;
     const newType = args[1]!;
     let fresh: boolean | undefined;
     let queue = false;
@@ -1894,29 +2068,44 @@ async function main(): Promise<void> {
       const a = args[i]!;
       if (a === "--fresh") fresh = true;
       else if (a === "--keep-resume" || a === "--no-fresh") fresh = false;
+      else if (a === "--fast") fast = true;
+      else if (a === "--slow" || a === "--verify") fast = false;
       else if (a === "--queue") queue = true;
       else if (a === "--resume" && args[i + 1]) resumeId = args[++i];
       else if (a.startsWith("--resume=")) resumeId = a.slice("--resume=".length);
       else reasonParts.push(a);
     }
     const reason = reasonParts.join(" ") || undefined;
-    const run = () =>
+    const targets = expandTargetSpec(
+      targetRaw,
+      targetRangeOptsFromProfile(loaded.profile),
+    );
+    // Fast path skips provider registry build (expensive).
+    const reg = fast ? null : createRegistryForProfile(loaded.profile);
+    const runOne = (target: string) =>
       runSwitch(loaded, reg, target, newType, {
         fresh,
         resumeId,
         reason,
+        fast,
       });
+    const run = () => {
+      for (const t of targets) runOne(t);
+      if (targets.length > 1) {
+        console.log(`ok fanout ${vocal} → ${targets.join(",")} (${targets.length})`);
+      }
+    };
     if (queue) {
       submitPaneOp(
         loaded,
         "switch",
-        { target, newType, fresh, resumeId, reason },
-        `switch ${target} -> ${newType}`,
+        { target: targetRaw, newType, fresh, resumeId, reason, fast },
+        `${vocal} ${targetRaw} -> ${newType}${fast ? " [fast]" : ""}`,
         run,
       );
     } else {
       run();
-      saveMeshSession(loaded, reg);
+      if (!fast && reg) saveMeshSession(loaded, reg);
     }
     return;
   }
@@ -2048,7 +2237,8 @@ async function main(): Promise<void> {
 
     if (sub && AGENT_META.has(sub)) {
       if (sub === "forum" || sub === "golf") {
-        console.log("agent forum/golf — see docs/cli/forum.md (not bundled in this build)");
+        const { printAgentForum } = await import("./commands/agent-forum.js");
+        printAgentForum();
         return;
       }
       if (sub === "apply") {

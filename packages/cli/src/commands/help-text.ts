@@ -15,6 +15,9 @@ const ALIASES: Record<string, string> = {
   patience: "cb",
   coldstart: "cold-start",
   handoff: "switch",
+  empty: "kill",
+  /** Rebuild engine + labels (prefer vocal over misleading "reload"). */
+  rebuild: "reload",
   targets: "target",
   dc: "stack",
   cc: "switch",
@@ -42,16 +45,20 @@ const HELP: Record<string, string> = {
 
   human: `human — put an agent CLI on a pane (operator)
 
-  Empty terminal → agent:
-    switch <target> <opencode|opencode-cpe|claude|agent|kiro>
+  Empty terminal → agent (prefer spawn; **fast by default**):
+    spawn <target|1..4> <opencode|opencode-cpe|claude|agent|kiro>
     Examples:
-      seatmesh switch slot-1 opencode
-      seatmesh switch secretary opencode-cpe --keep-resume
-      seatmesh switch here agent          # this pane (Cursor)
-      seatmesh switch mini-1 opencode-cpe --keep-resume
+      seatmesh spawn slot-1 opencode
+      seatmesh spawn 1..3 opencode-cpe
+      seatmesh spawn here agent --slow   # wait verify + FRESH SUMMON
 
-  Back to plain shell:
-    switch <target> empty
+  Replace a live agent:
+    switch <target> <cli> [--fast] [reason...]
+      seatmesh switch here agent --fast
+
+  Back to plain shell (saves empty in mesh-agents.json):
+    kill <target>     # alias: empty
+    switch <target> empty --fast
 
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
@@ -62,7 +69,7 @@ const HELP: Record<string, string> = {
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
 
-  Give the seat WORK / a todo (does NOT install a CLI — different from switch):
+  Give the seat WORK / a todo (does NOT install a CLI — different from spawn/switch):
     todo give <target> "do the thing"     # preferred
     todo <target> "do the thing"          # shorthand
     assign <target> "do the thing"        # same engine
@@ -155,6 +162,7 @@ const HELP: Record<string, string> = {
   notify info|md "<title>" --md <file>|--body "…" [--image path] [--url https://…]
   notify yesno "<title>" "<blurb>" [--md file|--body "…"] [--image path] [--url https://…]
            [--target seat] [--yes-msg "…"] [--no-msg "…"]
+  notify run|cmd "<title>" --cmd "…" [--body "…"] [--cwd rel]
   Operator eyes (beta) — prefer over asking chat for a toast.
 
   Pick one shape:
@@ -162,10 +170,13 @@ const HELP: Record<string, string> = {
     Info only   notify info "Brief" --body "## Why\\n\\n…" [--url https://mdview.io/s/…]
                 → hub /act/card (:3190). [--url] = Open button (clickable).
                   Bare https:// in body also autolinks. [label](url) works.
-                Mermaid → local Info card renders \`\`\`mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
+                  Mermaid → local Info card renders \`\`\`mermaid (mermaid.js). Optional: preview (mdview.io) then --url share.
     Info+Yes/No notify yesno "Ship?" "Need your call" --body "## Diff\\n…" [--url https://…]
                 → toast buttons Info · Yes · No; card Open if --url.
                 Agents may still put links in --body/--md; toast body stays blurb-only.
+    Run cmd     notify run "Reload layout" --cmd "sm layout reload"
+                → toast **Review** → card shows exact command → **Run** | **Decline**
+                  Run never on the toast — only after you see the command on the card.
 
   yesno args: <title>=decision name · <blurb>=short toast line
   Full recipe: seatmesh agent help notify`,
@@ -211,18 +222,29 @@ const HELP: Record<string, string> = {
   secretary switch <cli> [--keep-resume]
   Lead supervise path (secretary→manager)`,
 
-  switch: `switch <target> <agent|claude|opencode|kiro|empty> [flags] [reason...]
-  HUMAN: empty terminal → agent CLI (or empty = back to shell).
-  Alias: handoff. See: seatmesh help human
-  Examples: switch slot-1 opencode · switch here claude · switch mini-2 empty
-  Flags: --keep-resume --resume ID --queue`,
+  spawn: `spawn <target|1..4> <agent|claude|opencode|kiro> [flags]
+  Empty shell → agent CLI (preferred). Default --fast (paste like typing opencode).
+  Replace live: switch. Thorough waits: --slow. Ranges: 1..4 · slot-2..5 · mini-1..3
+  Examples: spawn slot-1 opencode · spawn 1..3 opencode-cpe · spawn here agent --slow`,
+
+  switch: `switch <target|1..4> <agent|claude|opencode|kiro|empty> [flags] [reason...]
+  Replace a LIVE agent CLI (or → empty). Empty pane → prefer spawn (--fast).
+  Alias: handoff. Flags: --fast (skip verify) --slow --keep-resume --resume ID --queue
+  Examples: switch slot-1 claude · switch here agent --fast`,
+
+  forum: `forum | golf
+  Print the real shorthand table (Ruby ranges + one verb per job).
+  Alias: golf. Also: sm agent forum`,
+
+  golf: `golf
+  Alias for forum — shorthand table (no repo spelunk)`,
 
   swap: `swap <a> <b> [--identity]
   Visual pane swap (same tier). --identity also swaps numbers+seats`,
 
   launch: `launch [targets...]
   Start/resume the seat's already-configured CLI (no type pick).
-  To choose opencode/claude/agent on an empty pane: switch (help human)
+  Empty pane → pick type with spawn. Replace live → switch.
   Examples: launch slot-1 · launch all · launch manager secretary`,
 
   pane: `pane resume [target]
@@ -300,12 +322,27 @@ const HELP: Record<string, string> = {
   session: `session attach|up|down|status|sync|check|repair|init <sm-name>
   Session lifecycle. check = config/version/lost files; repair recreates missing`,
 
-  reload: `reload [--layout]
-  Rebuild engine + labels (no session kill). --layout re-grids`,
+  reload: `reload|rebuild [--layout]
+  Rebuild seatmesh packages (npm build) + refresh labels/borders/inbox.
+  Does NOT re-read config into live agents / does NOT replace pane CLIs
+  (that is spawn/switch/coordSync). --layout re-grids (disruptive).
+  Prefer vocal: rebuild`,
+
+  rebuild: `rebuild [--layout]
+  Alias of reload — rebuild engine + labels (not "reload config JSON").`,
 
   layout: `layout [--no-leads] [--dry-run] [--yes]
+  layout reload [--yes] [--no-leads] [--no-resume]
+  layout scale workers|minis up|down|<N> [--yes] [--dry-run]
   layout column list|add <id> [--cli P] [--after ID] [--co-typed]|remove <id>
-  Workers/minis grid + N base columns`,
+  Relayout + repair panes from mesh-agents.json (resume). Scale + columns.
+  Auto: layout.autoScale.enabled in mesh.config.yaml`,
+
+  kill: `kill <target|1..4|slot-N|mini-N|here>
+  Alias: empty. Respawn pane to plain terminal + save type=empty in mesh-agents.json`,
+
+  empty: `empty <target|1..4|slot-N|mini-N|here>
+  Alias of kill — pane → plain terminal, mesh-agents saved empty`,
 
   realign: `realign
   Resize-only: base ratio + equal worker/mini grids`,
@@ -380,8 +417,12 @@ const HELP: Record<string, string> = {
   Bare mds / mds status = counts. mdview.io share stays: agent preview <file.md>
   Map: docs/patterns/cli-web-parity.md · docs/cli/mds.md`,
 
-  contract: `contract …
-  Contract lock apply/on/off`,
+  contract: `contract [status]
+  contract show <id>
+  contract on|off <id> [--agent <seat>]
+  contract create|open <slug>
+  Easy locks: status = vendor + ON/off. on/off default agent from yaml
+  (supervise→secretary, balance→balance_lead). No --agent needed.`,
 
   balance: `balance …
   Dual-lead balance (coord)`,

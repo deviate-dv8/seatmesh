@@ -1,0 +1,10 @@
+# seatmesh CI runner — isolated container for build/typecheck/vitest.
+# Source is COPYed into the image (not bind-mounted): a run never depends on, or
+# pollutes, the host's node_modules/dist, and never touches host tmux/mesh state.
+services:
+  seatmesh-test:
+    build:
+      context: ../..
+      dockerfile: test/docker/Dockerfile
+    image: seatmesh-test:local
+    container_name: seatmesh-test

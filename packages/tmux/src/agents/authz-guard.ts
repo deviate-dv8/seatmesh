@@ -1,4 +1,5 @@
 import { isCoordKind, type LoadedProfile } from "@seat-mesh/core";
+import { tmux } from "../lib/tmux-run.js";
 import { runWhoami } from "./whoami.js";
 
 /**
@@ -17,9 +18,21 @@ export function requireRole(loaded: LoadedProfile, allowed: string[], cmdLabel: 
   process.exit(2);
 }
 
+/** One tmux read — prefer over full whoami for hot paths (spawn --fast). */
+export function paneRoleHere(): string | null {
+  const pane = process.env.TMUX_PANE;
+  if (!pane) return null;
+  const r = tmux(["display-message", "-t", pane, "-p", "#{@mesh_role}"]);
+  const role = r.out.trim();
+  return role || null;
+}
+
 /** Coordinator tier — any manager-kind or secretary-kind column id. */
 export function requireCoordRole(loaded: LoadedProfile, cmdLabel: string): void {
   if (!process.env.TMUX_PANE) return;
+  // Hot path: @mesh_role only (no list-panes / whoami dump).
+  const lite = paneRoleHere();
+  if (lite && isCoordKind(lite, loaded.profile?.layout?.base.kinds)) return;
   const w = whoamiHereOrOperator(loaded);
   if (!w) return;
   if (isCoordKind(w.role, loaded.profile?.layout?.base.kinds)) return;

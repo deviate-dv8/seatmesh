@@ -119,6 +119,37 @@ export function listContractLocks(contractsDir: string): ContractLockRow[] {
   return out.sort((a, b) => a.contractId.localeCompare(b.contractId));
 }
 
+/** Vendor contract ids present under `_vendor/*.yaml` (filename stem). */
+export function listVendorContractIds(contractsDir: string): string[] {
+  const vendor = path.join(contractsDir, "_vendor");
+  if (!fs.existsSync(vendor)) return [];
+  return fs
+    .readdirSync(vendor)
+    .filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"))
+    .map((f) => f.replace(/\.ya?ml$/i, ""))
+    .sort();
+}
+
+/** Bind agent for arm/disarm — supervise → supervisor; balance → balance_lead. */
+export function defaultContractAgent(contractsDir: string, id: string): string {
+  if (id === "balance") {
+    // Lazy import avoided — balance schema lives in balance.ts; read yaml lightly.
+    const p = vendorContractPath(contractsDir, id);
+    if (!fs.existsSync(p)) throw new Error(`vendor contract missing: ${p}`);
+    const raw = YAML.parse(fs.readFileSync(p, "utf8")) as Record<string, unknown>;
+    const extendPath = path.join(contractsDir, `${id}.extend.yaml`);
+    if (fs.existsSync(extendPath)) {
+      Object.assign(raw, YAML.parse(fs.readFileSync(extendPath, "utf8")) as Record<string, unknown>);
+    }
+    const lead = String(raw.balance_lead ?? "").trim();
+    if (!lead) throw new Error(`balance contract missing balance_lead`);
+    return lead;
+  }
+  const doc = loadVendorContract(contractsDir, id);
+  return doc.supervisor;
+}
+
+
 export function superviseLockPath(loaded: LoadedProfile): string {
   const doc = loadVendorContract(contractsDirFor(loaded), "supervise");
   return contractLockPath(contractsDirFor(loaded), doc.id, doc.supervisor);

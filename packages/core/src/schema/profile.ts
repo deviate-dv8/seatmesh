@@ -150,6 +150,10 @@ export const MeshProfileSchema = z.object({
       autoScrapeIntervalMs: z.number().int().min(0).optional(),
       /** Supervisor: crash restart + reload when dist/mesh-inbox-server.js changes after build. */
       watch: z.boolean().default(true),
+      /** Opt-in: relaunch mesh-agents seats that died back to a plain shell (CPE / kill). Default off. */
+      autoRevive: z.boolean().default(false),
+      /** Min seconds between auto-revive attempts per pane (when autoRevive is on). */
+      autoReviveCooldownSec: z.number().int().min(15).max(600).default(60),
       restartDelayMs: z.number().int().default(1500),
       hmrPollMs: z.number().int().default(2000),
       pollMs: z.number().int().default(4000),

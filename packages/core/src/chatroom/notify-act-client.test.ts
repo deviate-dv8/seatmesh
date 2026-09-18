@@ -3,7 +3,9 @@ import {
   cleanUrl,
   formatNotifyActLinksForToast,
   formatOperatorDecideMsg,
+  formatRunCmdCardBody,
   formatYesNoToastBody,
+  runCmdNotifyActActions,
   yesNoNotifyActActions,
 } from "./notify-act-client.js";
 
@@ -49,6 +51,37 @@ describe("yesNoNotifyActActions", () => {
     expect(actions).toHaveLength(2);
     expect(actions[0]?.params.target).toBe("manager");
     expect(String(actions[0]?.params.msg)).toContain("PRIORITY [operator-decide] YES — Ship CTA?");
+  });
+});
+
+describe("runCmdNotifyActActions", () => {
+  it("builds Run + Decline with cmd params", () => {
+    const actions = runCmdNotifyActActions({ cmd: "echo hi", cwd: "." });
+    expect(actions).toHaveLength(2);
+    expect(actions[0]?.label).toBe("Run");
+    expect(actions[0]?.type).toBe("run-cmd");
+    expect(actions[0]?.params.cmd).toBe("echo hi");
+    expect(actions[1]?.label).toBe("Decline");
+    expect(actions[1]?.type).toBe("ping");
+  });
+});
+
+describe("formatRunCmdCardBody", () => {
+  it("always shows the command in a bash fence", () => {
+    const body = formatRunCmdCardBody({ cmd: "sm layout reload", blurb: "Safe?" });
+    expect(body).toContain("## Command to run");
+    expect(body).toContain("```bash");
+    expect(body).toContain("sm layout reload");
+    expect(body).toContain("Safe?");
+  });
+
+  it("unescapes shell \\\\n in blurb so markdown can render", () => {
+    const body = formatRunCmdCardBody({
+      cmd: "echo ok",
+      blurb: "## What changed\\n\\n**Run** stays on the page.",
+    });
+    expect(body).toContain("## What changed\n\n**Run** stays on the page.");
+    expect(body).not.toContain("\\n");
   });
 });
 

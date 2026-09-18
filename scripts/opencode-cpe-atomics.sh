@@ -119,9 +119,11 @@ kill_all() {
 revive_all() {
   [[ -f "$PENDING" ]] || die "no pending stamp — run record first ($PENDING)"
   clear_stale_lock
-  export OC_CPE_CONTINUE_WAIT_SEC="${OC_CPE_CONTINUE_WAIT_SEC:-12}"
-  export OC_PROXY_RETRY_WAIT_SEC="${OC_PROXY_RETRY_WAIT_SEC:-10}"
-  echo "revive-from-stamp → log=$LOG (continue_wait=${OC_CPE_CONTINUE_WAIT_SEC}s)"
+  export OC_CPE_CONTINUE_WAIT_SEC="${OC_CPE_CONTINUE_WAIT_SEC:-18}"
+  export OC_PROXY_RETRY_WAIT_SEC="${OC_PROXY_RETRY_WAIT_SEC:-15}"
+  export OC_CPE_SKIP_VERSION_CHECK="${OC_CPE_SKIP_VERSION_CHECK:-1}"
+  export OC_CPE_REVIVE_STAGGER_SEC="${OC_CPE_REVIVE_STAGGER_SEC:-2}"
+  echo "revive-from-stamp → log=$LOG (continue_wait=${OC_CPE_CONTINUE_WAIT_SEC}s stagger=${OC_CPE_REVIVE_STAGGER_SEC}s skip_ver=${OC_CPE_SKIP_VERSION_CHECK})"
   # Foreground so caller sees DONE; lock prevents overlap.
   run_mjs --revive-from-stamp "$PENDING" | tee -a "$LOG"
 }

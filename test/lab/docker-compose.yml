@@ -1,0 +1,33 @@
+# seatmesh lab — isolated container for upgrade / poke tests.
+# Host meshes are never mounted. Lab HOME is a Docker volume.
+services:
+  seatmesh-lab:
+    build:
+      context: .
+      args:
+        SEATMESH_VERSION: ${SEATMESH_VERSION:-1.2.5}
+    image: seatmesh-lab:${SEATMESH_VERSION:-1.2.5}
+    container_name: seatmesh-lab
+    hostname: seatmesh-lab
+    ports:
+      - "${LAB_SSH_PORT:-2222}:22"
+      - "${LAB_INBOX_PORT:-31691}:31691"
+      - "${LAB_WEB_PORT:-3191}:3190"
+    environment:
+      SEATMESH_SKIP_VERSION_CHECK: "1"
+      LAB_INBOX_PORT: "${LAB_INBOX_PORT:-31691}"
+      # npm = install seatmesh@$SEATMESH_VERSION from registry (rewrites file: deps)
+      # workspace = bind-mounted monorepo bin (daemon may fail on host node-pty)
+      LAB_INSTALL: "${LAB_INSTALL:-npm}"
+      SEATMESH_VERSION: "${SEATMESH_VERSION:-1.2.5}"
+    volumes:
+      - seatmesh-lab-home:/home/lab
+      - ./keys/authorized_keys:/home/lab/.ssh/authorized_keys:ro
+      # Optional: monorepo for workspace mode / source poke
+      - ../..:/opt/seatmesh:ro
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+volumes:
+  seatmesh-lab-home:

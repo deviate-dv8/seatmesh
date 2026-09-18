@@ -101,6 +101,8 @@ export function recordOpenCodeCpeSeats(
   const seats: OcCpeAtomicSeat[] = [];
   for (const p of panes) {
     if (!p.label) continue;
+    // Manager is the operator shell — never include in CPE kill/revive atomics.
+    if (p.label === "manager" || p.label === "master") continue;
     const entry = seatAgentEntry(loaded, p.label, state);
     if (!wantOpenCodeCpe(entry, p.paneId, kinds)) continue;
     const { ses, source } = paneSes(p.paneId, entry);
@@ -212,7 +214,9 @@ function resetPaneShell(paneId: string): void {
   tmux(["send-keys", "-t", paneId, "C-u"]);
 }
 
-/** Kill CPE-proxied opencode whose --session matches stamped ses (never whole-host wipe). */
+/** Kill CPE / stamped-ses opencode (never whole-host wipe).
+ * After type→opencode-cpe, do not require 18887 in environ — ses match is enough.
+ */
 export function killOcProxySeats(
   seats: OcCpeAtomicSeat[],
   proxyPort: number = 18887,
@@ -234,13 +238,18 @@ export function killOcProxySeats(
     } catch {
       continue;
     }
-    if (!env.includes(portTok) && !env.includes(`:${portTok}`)) continue;
     const ses = (cmd.match(/ses_[A-Za-z0-9]+/) || [])[0];
-    if (wantSes.size > 0 && (!ses || !wantSes.has(ses))) continue;
+    const sesMatch = Boolean(ses && wantSes.has(ses));
+    const proxied = env.includes(portTok) || env.includes(`:${portTok}`);
+    if (wantSes.size > 0) {
+      if (!sesMatch) continue;
+    } else if (!proxied) {
+      continue;
+    }
     try {
       process.kill(Number(pid), "SIGTERM");
       killed += 1;
-      log?.(`OC-ATOMICS kill pid=${pid} ses=${ses ?? "?"}`);
+      log?.(`OC-ATOMICS kill pid=${pid} ses=${ses ?? "?"} proxied=${proxied}`);
     } catch {
       /* */
     }

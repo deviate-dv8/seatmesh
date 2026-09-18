@@ -6,6 +6,9 @@ import type {
 } from "@seat-mesh/core";
 import type { LoadedProfile } from "@seat-mesh/core";
 import { resolvePaneTarget } from "@seat-mesh/tmux";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import type { PeerKind, PeerRow } from "../store/jsonl-store.js";
 
 export interface NotifyActStore {
@@ -157,7 +160,25 @@ export function createNotifyActRegistry() {
     return row;
   }
 
-  return { register, registerCard, getCard, annotatePeerMsgsWithCard, take, pruneExpired };
+  function snapshot(): { cards: NotifyActCardRow[]; tokens: NotifyActTokenRow[] } {
+    pruneExpired();
+    return {
+      cards: [...cards.values()],
+      tokens: [...tokens.values()],
+    };
+  }
+
+  function hydrate(input: { cards: NotifyActCardRow[]; tokens: NotifyActTokenRow[] }): void {
+    const now = Date.now();
+    for (const c of input.cards) {
+      if (c.expiresAt > now) cards.set(c.id, c);
+    }
+    for (const t of input.tokens) {
+      if (t.expiresAt > now && !t.used) tokens.set(t.token, t);
+    }
+  }
+
+  return { register, registerCard, getCard, annotatePeerMsgsWithCard, take, pruneExpired, snapshot, hydrate };
 }
 
 export type NotifyActRegistry = ReturnType<typeof createNotifyActRegistry>;
@@ -231,6 +252,43 @@ export async function executeNotifyAct(
       return {
         ok: true,
         summary: `Queued peer to ${peer.targetLabel} (${target}): ${msg.slice(0, 120)}`,
+      };
+    }
+    case "run-cmd": {
+      const cmd = String(row.params.cmd ?? "").trim();
+      if (!cmd) return { ok: false, summary: "Missing command." };
+      if (cmd.length > 8_000) return { ok: false, summary: "Command too long." };
+      const workspace = ctx.loaded.workspace;
+      const cwdRaw = String(row.params.cwd ?? "").trim();
+      const cwd = cwdRaw
+        ? path.resolve(workspace, cwdRaw)
+        : path.resolve(workspace);
+      const root = path.resolve(workspace) + path.sep;
+      if (cwd !== path.resolve(workspace) && !`${cwd}${path.sep}`.startsWith(root)) {
+        return { ok: false, summary: "cwd must stay under workspace." };
+      }
+      if (!fs.existsSync(cwd)) {
+        return { ok: false, summary: `cwd not found: ${cwd}` };
+      }
+      ctx.log(`NOTIFY-ACT run-cmd cwd=${cwd} cmd=${cmd.slice(0, 200)}`);
+      const r = spawnSync("bash", ["-lc", cmd], {
+        cwd,
+        encoding: "utf8",
+        timeout: Number(row.params.timeoutMs ?? 120_000) || 120_000,
+        env: { ...process.env },
+      });
+      const out = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
+      const code = r.status ?? 1;
+      const snippet = out.slice(0, 1_500) || "(no output)";
+      if (code !== 0) {
+        return {
+          ok: false,
+          summary: `exit ${code}\n$ ${cmd}\n${snippet}`,
+        };
+      }
+      return {
+        ok: true,
+        summary: `ok exit 0\n$ ${cmd}\n${snippet}`,
       };
     }
     default:

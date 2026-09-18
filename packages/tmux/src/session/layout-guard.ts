@@ -7,6 +7,7 @@ import { listMeshMinis, listMeshWorkers, PANE_META_FMT } from "../lib/pane-meta.
 import { capturePaneSnapshot } from "../lib/snapshot.js";
 import { tmux } from "../lib/tmux-run.js";
 import { listWindowPaneIds } from "./window-panes.js";
+import { resolveLiveTmuxSession } from "../lib/live-session.js";
 
 const CLI_CMD_RE =
   /\b(agent|opencode|claude|kiro|opencode-cpe|cursor-agent)\b/i;
@@ -46,6 +47,10 @@ function paneLabel(meta: MeshPaneMeta): string {
   if (meta.role === "worker" && meta.slot) return `slot-${meta.slot}`;
   if (meta.mini) return `mini-${meta.mini}`;
   return meta.role || meta.paneId;
+}
+
+export function activityReasonsForMeta(loaded: LoadedProfile, meta: MeshPaneMeta): string[] {
+  return activityReasons(loaded, meta);
 }
 
 function activityReasons(loaded: LoadedProfile, meta: MeshPaneMeta): string[] {
@@ -131,7 +136,7 @@ function doomedMetaForWindow(
 
 /** Panes that would be killed when shrinking a window to targetCount. */
 export function assessRelayoutShrinkRisk(loaded: LoadedProfile): LayoutRelayoutRisk {
-  const session = loaded.sessionName;
+  const session = resolveLiveTmuxSession(loaded);
   const layout = loaded.profile.layout;
   if (!layout) return { workers: [], minis: [] };
 
@@ -202,7 +207,7 @@ export function assertRelayoutSafe(loaded: LoadedProfile, force = false): void {
 
 /** Summary for layout --dry-run */
 export function printRelayoutPlan(loaded: LoadedProfile): void {
-  const session = loaded.sessionName;
+  const session = resolveLiveTmuxSession(loaded);
   const layout = loaded.profile.layout;
   if (!layout) throw new Error("profile missing layout");
 

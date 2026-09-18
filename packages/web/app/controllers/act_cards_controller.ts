@@ -9,6 +9,13 @@ export type ActCardPayload = {
   expiresAt: number
 }
 
+export type ActV1Json = {
+  ok: boolean
+  label?: string
+  summary?: string
+  error?: string
+}
+
 function rewriteLinksForHub(
   card: ActCardPayload,
   daemonPort: number,
@@ -18,7 +25,7 @@ function rewriteLinksForHub(
     ...card,
     links: card.links.map((l) => {
       if (!l.token) return l
-      // Action tokens always go through hub proxy
+      // Action tokens always go through hub proxy (JSON from card UI).
       return {
         ...l,
         url: `${hubOrigin}/act/v1/${l.token}?port=${daemonPort}`,
@@ -50,6 +57,25 @@ async function fetchCardFromPort(
   } catch {
     return null
   }
+}
+
+async function fetchActFromPort(port: number, token: string): Promise<{ status: number; body: ActV1Json }> {
+  const res = await fetch(`http://127.0.0.1:${port}/act/v1/${encodeURIComponent(token)}?format=json`, {
+    headers: { Accept: 'application/json' },
+    redirect: 'manual',
+    signal: AbortSignal.timeout(8000),
+  })
+  let body: ActV1Json
+  try {
+    body = (await res.json()) as ActV1Json
+  } catch {
+    body = {
+      ok: false,
+      error: 'bad_daemon_response',
+      summary: `Daemon returned non-JSON (${res.status})`,
+    }
+  }
+  return { status: res.status, body }
 }
 
 export default class ActCardsController {
@@ -100,27 +126,22 @@ export default class ActCardsController {
     })
   }
 
-  /** Proxy one-shot Yes/No/Open actions to the owning daemon. */
+  /** Proxy one-shot Run/Yes/No to the owning daemon as JSON (no old HTML shell). */
   async act({ params, request, response }: HttpContext) {
     const token = String(params.token)
     const portQ = request.input('port')
     const portHint = portQ != null ? Number(portQ) : NaN
 
-    const tryPort = async (port: number) => {
-      const res = await fetch(`http://127.0.0.1:${port}/act/v1/${encodeURIComponent(token)}`, {
-        redirect: 'manual',
-        signal: AbortSignal.timeout(8000),
-      })
-      const text = await res.text()
-      return { status: res.status, text, contentType: res.headers.get('content-type') || 'text/html' }
-    }
-
     if (Number.isFinite(portHint) && portHint > 0) {
       try {
-        const r = await tryPort(portHint)
-        return response.status(r.status).header('content-type', r.contentType).send(r.text)
+        const r = await fetchActFromPort(portHint, token)
+        return response.status(r.status).json(r.body)
       } catch (e) {
-        return response.status(502).send(`act proxy failed: ${(e as Error).message}`)
+        return response.status(502).json({
+          ok: false,
+          error: 'proxy_failed',
+          summary: `act proxy failed: ${(e as Error).message}`,
+        })
       }
     }
 
@@ -128,16 +149,18 @@ export default class ActCardsController {
     const up = sessions.filter((s) => s.daemonUp && s.daemonPort > 0)
     for (const s of up) {
       try {
-        const r = await tryPort(s.daemonPort)
+        const r = await fetchActFromPort(s.daemonPort, token)
         // 404 = wrong daemon / expired; keep scanning
         if (r.status === 404) continue
-        return response.status(r.status).header('content-type', r.contentType).send(r.text)
+        return response.status(r.status).json(r.body)
       } catch {
         /* try next */
       }
     }
-    return response
-      .status(404)
-      .send('Action expired, already used, or no live daemon had this token.')
+    return response.status(404).json({
+      ok: false,
+      error: 'expired_or_used',
+      summary: 'Action expired, already used, or no live daemon had this token.',
+    })
   }
 }

@@ -17,6 +17,7 @@ import { tmux } from "../lib/tmux-run.js";
 import { isSecretaryKind, seatKindFromId } from "@seat-mesh/core";
 import { enqueueColdStart } from "../seats/cold-start-inject.js";
 import { saveMeshSession } from "../session/save-session.js";
+import { runSwitchFast } from "./switch-fast.js";
 
 function normalizeType(t: string): string {
   return normalizeAgentKind(t);
@@ -27,8 +28,32 @@ function providerIdToHarnessType(id: string): string {
   return id;
 }
 
+function paneCurrentCommand(paneId: string): string {
+  return tmux(["display-message", "-t", paneId, "-p", "#{pane_current_command}"]).out.trim();
+}
+
+function isPlainShellCmd(cmd: string): boolean {
+  return /^(zsh|bash|sh|fish|dash)$/i.test(cmd);
+}
+
 function sleepMs(ms: number): void {
+  if (ms <= 0) return;
   spawnSync("sleep", [String(ms / 1000)]);
+}
+
+function cheapLiveType(
+  paneId: string,
+  savedType: string | null | undefined,
+): string {
+  const cmd = paneCurrentCommand(paneId);
+  if (isPlainShellCmd(cmd) || !cmd) return "empty";
+  if (/opencode/i.test(cmd)) {
+    return savedType === "opencode-cpe" ? "opencode-cpe" : "opencode";
+  }
+  if (/^(agent|cursor-agent)$/i.test(cmd) || /cursor-agent/i.test(cmd)) return "agent";
+  if (/^claude$/i.test(cmd)) return "claude";
+  if (/kiro/i.test(cmd)) return "kiro";
+  return savedType && savedType !== "empty" ? savedType : "empty";
 }
 
 /** kiro-cli --trust-all-tools still shows a one-time warning (default = No, exit). */
@@ -56,21 +81,39 @@ export interface SwitchOptions {
   fresh?: boolean;
   resumeId?: string;
   reason?: string;
+  /**
+   * Instant paste like typing `opencode` in the pane — skip composer verify +
+   * FRESH SUMMON wait loops. Default true for `spawn`, false for `switch`.
+   */
+  fast?: boolean;
 }
 
 export function runSwitch(
   loaded: LoadedProfile,
-  registry: ProviderRegistry,
+  registry: ProviderRegistry | null,
   target: string,
   newTypeRaw: string,
   opts: SwitchOptions = {},
 ): void {
   const session = loaded.sessionName;
+  void session;
   const newType = normalizeType(newTypeRaw);
   const known = knownHarnessKinds(loaded);
   if (!known.has(newType)) {
     const sample = [...known].sort().slice(0, 12).join("|");
     throw new Error(`bad type: ${newTypeRaw} (known: ${sample}${known.size > 12 ? "|…" : ""})`);
+  }
+  if (!opts.fast && !registry) {
+    throw new Error("switch: registry required unless --fast");
+  }
+
+  if (opts.fast) {
+    runSwitchFast(loaded, target, newTypeRaw, {
+      fresh: opts.fresh,
+      resumeId: opts.resumeId,
+      reason: opts.reason,
+    });
+    return;
   }
 
   if (target === "here" || target === "self") {
@@ -103,18 +146,27 @@ export function runSwitch(
   if ("error" in resolved) throw new Error(resolved.error);
 
   const { paneId, row } = resolved;
-  const snapBefore = capturePaneSnapshot(paneId);
-  const oldProv = snapBefore ? registry.detect(snapBefore) : null;
   const savedBefore = seatAgentEntry(loaded, target);
   const kindsMap = kindsForLoaded(loaded);
-  const oldType = resolveOpenCodeHarnessType({
-    detectId: oldProv?.id ?? "empty",
-    savedType: savedBefore?.type,
-    resumeCmd: savedBefore?.resume_cmd,
-    snap: snapBefore,
-    kinds: kindsMap,
-  });
-  const oldDet = oldProv && snapBefore ? oldProv.detect(snapBefore) : null;
+
+  // Fast path: one tmux current-command read — no capture-pane, no registry detect.
+  let oldType: string;
+  let oldDet: { resumeId?: string | null } | null = null;
+  let snapBefore: ReturnType<typeof capturePaneSnapshot> = null;
+  if (opts.fast) {
+    oldType = cheapLiveType(paneId, savedBefore?.type);
+  } else {
+    snapBefore = capturePaneSnapshot(paneId);
+    const oldProv = snapBefore ? registry!.detect(snapBefore) : null;
+    oldType = resolveOpenCodeHarnessType({
+      detectId: oldProv?.id ?? "empty",
+      savedType: savedBefore?.type,
+      resumeCmd: savedBefore?.resume_cmd,
+      snap: snapBefore,
+      kinds: kindsMap,
+    });
+    oldDet = oldProv && snapBefore ? oldProv.detect(snapBefore) : null;
+  }
   const fresh = opts.fresh ?? true;
 
   let keepRid: string | null = null;
@@ -123,12 +175,12 @@ export function runSwitch(
   } else if (
     !fresh &&
     newType !== "empty" &&
-    (liveHarnessSatisfiesWanted(oldType, newType, snapBefore, {
-      savedType: savedBefore?.type,
-      resumeCmd: savedBefore?.resume_cmd,
-      kinds: kindsMap,
-    }) ||
-      oldType === "empty")
+    (oldType === "empty" ||
+      liveHarnessSatisfiesWanted(oldType, newType, snapBefore, {
+        savedType: savedBefore?.type,
+        resumeCmd: savedBefore?.resume_cmd,
+        kinds: kindsMap,
+      }))
   ) {
     keepRid =
       oldDet?.resumeId ??
@@ -146,13 +198,34 @@ export function runSwitch(
         ? "manager"
         : "-");
 
-  console.log(`switch ${target} slot=${slot} ports=${ports}  ${oldType} -> ${newType}`);
+  console.log(`switch ${target} slot=${slot} ports=${ports}  ${oldType} -> ${newType}${opts.fast ? " [fast]" : ""}`);
   if (opts.reason) console.log(`reason: ${opts.reason}`);
   console.log(`resume: ${keepRid ?? "(none - fresh)"}`);
+
+  if (
+    opts.fast &&
+    newType !== "empty" &&
+    (oldType === newType ||
+      liveHarnessSatisfiesWanted(oldType, newType, null, {
+        savedType: savedBefore?.type,
+        resumeCmd: savedBefore?.resume_cmd,
+        kinds: kindsMap,
+      }))
+  ) {
+    console.log(`already live ${oldType} on ${paneId} — skip`);
+    return;
+  }
 
   selectPaneUnfocused(["-e", "-t", paneId]);
 
   withPaneInputEnabled(paneId, () => {
+    if (opts.fast) {
+      if (oldType === "empty") return;
+      // One interrupt — never stopOpenCodeCli poll loops on --fast.
+      tmux(["send-keys", "-t", paneId, "C-c"]);
+      sleepMs(50);
+      return;
+    }
     if (isOpenCodeHarnessType(oldType)) {
       stopOpenCodeCli(paneId, capturePaneSnapshot);
       return;
@@ -175,7 +248,7 @@ export function runSwitch(
       tmux(["send-keys", "-t", paneId, "clear", "Enter"]);
     });
     console.log(`cleared CLI -> plain terminal on ${paneId}`);
-    persistAfterSwitch(loaded, registry);
+    if (!opts.fast && registry) persistAfterSwitch(loaded, registry);
     return;
   }
 
@@ -186,17 +259,10 @@ export function runSwitch(
   if (!cmd) throw new Error(`no launch command for type ${newType}`);
   const paste = () => pasteHarnessLaunchCmd(loaded, paneId, newType, cmd);
   paste();
-  if (newType === "kiro") {
+  if (newType === "kiro" && !opts.fast) {
     const ok = acceptKiroTrustDialog(paneId);
     if (!ok) console.error("WARN: kiro trust dialog not seen — pane may still be starting");
     sleepMs(800);
-  }
-  const verified = verifyHarnessAfterPaste(loaded, registry, paneId, newType, cmd, paste);
-  if (!verified.ok) {
-    if (isOpenCodeLaunch(newType, cmd) || newType === "agent" || newType === "claude") {
-      throw new Error(`switch ${target}: ${verified.reason}`);
-    }
-    console.error(`WARN: switch ${target}: ${verified.reason}`);
   }
 
   const targetLabel =
@@ -214,8 +280,31 @@ export function runSwitch(
                 ? `slot-${row.slot}`
                 : target;
 
+  if (opts.fast) {
+    // Instant like typing `opencode` — no verify, no summon wait, no scrape-save.
+    invalidatePaneContext(loaded, paneId, targetLabel);
+    tmux([
+      "set-option",
+      "-p",
+      "-t",
+      paneId,
+      "@mesh_status",
+      `${newType}${opts.reason ? ` · ${opts.reason}` : ""}`,
+    ]);
+    console.log(`launched[fast]: ${cmd}`);
+    return;
+  }
+
+  const verified = verifyHarnessAfterPaste(loaded, registry!, paneId, newType, cmd, paste);
+  if (!verified.ok) {
+    if (isOpenCodeLaunch(newType, cmd) || newType === "agent" || newType === "claude") {
+      throw new Error(`switch ${target}: ${verified.reason}`);
+    }
+    console.error(`WARN: switch ${target}: ${verified.reason}`);
+  }
+
   invalidatePaneContext(loaded, paneId, targetLabel);
-  const brief = injectAfterLaunch(loaded, registry, targetLabel, paneId);
+  const brief = injectAfterLaunch(loaded, registry!, targetLabel, paneId);
   if (!brief.ok) {
     console.error(`WARN: fresh-summon whoami prompt ${targetLabel}: ${brief.detail}`);
     try {
@@ -244,13 +333,17 @@ export function runSwitch(
     `${newType}${opts.reason ? ` · ${opts.reason}` : ""}`,
   ]);
   console.log(`launched: ${cmd}`);
-  persistAfterSwitch(loaded, registry);
+  if (registry) persistAfterSwitch(loaded, registry);
 }
 
-function persistAfterSwitch(loaded: LoadedProfile, registry: ProviderRegistry): void {
+function persistAfterSwitch(
+  loaded: LoadedProfile,
+  registry: ProviderRegistry,
+  opts: { quiet?: boolean } = {},
+): void {
   try {
     const file = saveMeshSession(loaded, registry);
-    console.log(`saved mesh-agents.json after switch (${file})`);
+    if (!opts.quiet) console.log(`saved mesh-agents.json after switch (${file})`);
   } catch (e) {
     console.error(`WARN: post-switch save failed: ${(e as Error).message}`);
   }

@@ -1,15 +1,23 @@
 import { Command } from "commander";
 import type { LoadedProfile } from "@seat-mesh/core";
+import { unescapeNotifyMarkdown } from "@seat-mesh/core";
 import {
   runMeshNotify,
   runNotifyDetails,
   sendDesktopToastSync,
   sendYesNoToast,
+  sendRunCmdToast,
 } from "@seat-mesh/tmux";
 
 function collectImage(v: string, acc: string[]): string[] {
   acc.push(v);
   return acc;
+}
+
+function bodyOpt(raw?: string): string | undefined {
+  const t = raw?.trim();
+  if (!t) return undefined;
+  return unescapeNotifyMarkdown(t);
 }
 
 export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
@@ -74,7 +82,7 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
       ) => {
         const loaded = getLoaded();
         const days = Number.parseInt(opts.days, 10);
-        const infoBody = (opts.body ?? opts.bodyMd)?.trim() || undefined;
+        const infoBody = bodyOpt(opts.body ?? opts.bodyMd);
         const result = await sendYesNoToast(loaded, title.trim(), body.trim(), {
           yesMsg: opts.yesMsg?.trim(),
           noMsg: opts.noMsg?.trim(),
@@ -132,7 +140,7 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
         const result = await runNotifyDetails(loaded, {
           title: title.trim(),
           mdFile: opts.md,
-          body: opts.body,
+          body: bodyOpt(opts.body),
           images: opts.image,
           openUrl: opts.url?.trim(),
           check: opts.check ?? "Open Info card",
@@ -154,6 +162,44 @@ export function buildNotifyCommand(getLoaded: () => LoadedProfile): Command {
     );
 
   notify.addCommand(info);
+
+  notify
+    .command("run")
+    .alias("cmd")
+    .description(
+      "Two-step command: toast Review → card shows the exact command → Run or Decline",
+    )
+    .argument("<title>", "toast + card title")
+    .requiredOption("--cmd <command>", "shell command to run after operator accepts")
+    .option("--body <markdown>", "prose above the command on the Review card")
+    .option("--cwd <rel>", "workdir relative to workspace (default: workspace root)")
+    .option("--days <n>", "card TTL days 1-30 (default 7)", "7")
+    .action(
+      async (
+        title: string,
+        opts: { cmd: string; body?: string; cwd?: string; days: string },
+      ) => {
+        const loaded = getLoaded();
+        const days = Number.parseInt(opts.days, 10);
+        if (!Number.isFinite(days) || days < 1 || days > 30) {
+          console.error("FAIL usage 2: --days must be 1-30");
+          process.exit(2);
+        }
+        const result = await sendRunCmdToast(loaded, title.trim(), {
+          cmd: opts.cmd,
+          body: bodyOpt(opts.body),
+          cwd: opts.cwd?.trim(),
+          days,
+        });
+        if (!result.ok) {
+          console.error(`FAIL: ${result.error ?? "notify run failed"}`);
+          process.exit(1);
+        }
+        console.log(
+          `ok run "${title.trim()}" review=${result.infoUrl ?? "?"} (toast Review → card Run|Decline)`,
+        );
+      },
+    );
 
   notify
     .argument("<session>", "what this session is about (title body)")

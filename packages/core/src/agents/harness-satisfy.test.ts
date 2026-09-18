@@ -67,7 +67,7 @@ describe("harness-satisfy", () => {
     expect(resolveLiveHarnessKind({ detectId: "opencode", kinds })).toBe("opencode");
   });
 
-  it("liveKindSatisfiesWanted: CPE UI + saved opencode-cpe", () => {
+  it("liveKindSatisfiesWanted: CPE UI + CPE resumeCmd satisfies", () => {
     const s = snap({
       paneId: "%1",
       captureTail: "Build auto · Big Pickle\nctrl+p commands",
@@ -82,6 +82,40 @@ describe("harness-satisfy", () => {
         { savedType: "opencode-cpe", resumeCmd: "opencode-cpe.sh --session ses_abc" },
       ),
     ).toBe(true);
+  });
+
+  it("liveKindSatisfiesWanted: savedType opencode-cpe + UI alone does NOT satisfy", () => {
+    const s = snap({
+      paneId: "%1",
+      captureTail: "Build auto · Big Pickle\nctrl+p commands",
+      options: { mesh_oc_session: "ses_abc" },
+    });
+    expect(
+      liveKindSatisfiesWanted(
+        "opencode",
+        "opencode-cpe",
+        { snap: s },
+        kinds,
+        { savedType: "opencode-cpe", resumeCmd: "opencode --auto" },
+      ),
+    ).toBe(false);
+  });
+
+  it("resolveLiveHarnessKind: savedType alone + UI labels opencode not opencode-cpe", () => {
+    const s = snap({
+      paneId: "%1",
+      captureTail: "Build auto · Big Pickle\nctrl+p commands",
+      options: { mesh_oc_session: "ses_abc" },
+    });
+    expect(
+      resolveLiveHarnessKind({
+        detectId: "opencode",
+        savedType: "opencode-cpe",
+        resumeCmd: "opencode --auto",
+        snap: s,
+        kinds,
+      }),
+    ).toBe("opencode");
   });
 
   it("liveKindSatisfiesWanted: bare OC does not satisfy opencode-cpe", () => {

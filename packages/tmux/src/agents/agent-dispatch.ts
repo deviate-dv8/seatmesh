@@ -8,7 +8,7 @@ import { resolveGuardRole } from "./agent-card.js";
 import { runWhoami, type WhoamiResult } from "./whoami.js";
 
 /** Meta under `agent` itself — not dispatched as another CLI verb. */
-export const AGENT_META = new Set(["apply", "preflight", "context", "help"]);
+export const AGENT_META = new Set(["apply", "preflight", "context", "help", "forum", "golf"]);
 
 /**
  * Operator / session shared — humans + lead ops run these *without* `agent`.
@@ -100,6 +100,7 @@ const VERB_ACTION: Record<string, CommsAction> = {
   "slot-advice": "prompt.worker",
   switch: "prompt.worker",
   handoff: "prompt.worker",
+  spawn: "prompt.worker",
   set: "prompt.worker",
   tag: "prompt.worker",
   title: "prompt.worker",
@@ -112,6 +113,7 @@ const VERB_ACTION: Record<string, CommsAction> = {
   triage: "send.coord",
   verify: "send.coord",
   reload: "send.coord",
+  rebuild: "send.coord",
   labels: "send.coord",
   snapshot: "snapshot.cold",
   func: "nav.log",
@@ -126,6 +128,7 @@ const ROLE_EXTRA_VERBS: Record<SlotRole, Set<string>> = {
     "launch",
     "verify",
     "reload",
+    "rebuild",
     "labels",
     "assign",
     "prompt",
@@ -135,6 +138,7 @@ const ROLE_EXTRA_VERBS: Record<SlotRole, Set<string>> = {
     "night",
     "switch",
     "handoff",
+    "spawn",
     "set",
     "tag",
     "title",

@@ -29,14 +29,18 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `contexts` | [contexts.md](contexts.md) |
 | `continue` | [continue.md](continue.md) |
 | `contract` | [contract.md](contract.md) |
+| `empty` | [empty.md](empty.md) |
 | `flush` | [flush.md](flush.md) |
+| `forum` | [forum.md](forum.md) |
 | `func` | [func.md](func.md) |
+| `golf` | [golf.md](golf.md) |
 | `help` | [help.md](help.md) |
 | `hub` | [hub.md](hub.md) |
 | `human` | [human.md](human.md) |
 | `inbox` | [inbox.md](inbox.md) |
 | `index` | [index.md](index.md) |
 | `init` | [init.md](init.md) |
+| `kill` | [kill.md](kill.md) |
 | `kind` | [kind.md](kind.md) |
 | `labels` | [labels.md](labels.md) |
 | `launch` | [launch.md](launch.md) |
@@ -60,6 +64,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `proxy` | [proxy.md](proxy.md) |
 | `read-history` | [read-history.md](read-history.md) |
 | `realign` | [realign.md](realign.md) |
+| `rebuild` | [rebuild.md](rebuild.md) |
 | `reload` | [reload.md](reload.md) |
 | `remind` | [remind.md](remind.md) |
 | `remote` | [remote.md](remote.md) |
@@ -74,6 +79,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `sessions` | [sessions.md](sessions.md) |
 | `set` | [set.md](set.md) |
 | `slot-advice` | [slot-advice.md](slot-advice.md) |
+| `spawn` | [spawn.md](spawn.md) |
 | `stack` | [stack.md](stack.md) |
 | `start` | [start.md](start.md) |
 | `status` | [status.md](status.md) |

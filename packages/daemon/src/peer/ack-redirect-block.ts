@@ -6,11 +6,19 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { isManagerKind, isSecretaryKind } from "@seat-mesh/core";
+import { isManagerKind, isSecretaryKind, stripPeerStamps } from "@seat-mesh/core";
 import type { LoadedProfile } from "@seat-mesh/core";
 import { resolvePaneTarget } from "@seat-mesh/tmux";
 import { isAckClassPeer } from "./peer-backlog.js";
 import type { PeerRow } from "../store/create-queue-store.js";
+
+/**
+ * Redirect-eligible = chit-chat ACK/FYI/closing only. PROVED/DONE/CLAIMED/etc are
+ * also `isAckClassPeer` (skip unanswered-ask tracking), but carry real proof that
+ * must still land on the intended recipient — never silently reroute those.
+ */
+const REDIRECT_ACK_ONLY_RE =
+  /^(ACK|FYI|STAND-?BY|BUSY|MCP-?SYNCED|CHECKBACK\?|Noted|Thanks|Thank you|closing\b|got it\b|ok\b)/i;
 
 export const ACK_REDIRECT_DEFAULT_TTL_MS = 45 * 60_000;
 
@@ -199,6 +207,7 @@ export function applyAckRedirectBlock(
   nowMs = Date.now(),
 ): AckRedirectApplyResult {
   if (!isAckClassPeer(row.msg)) return { redirected: false };
+  if (!REDIRECT_ACK_ONLY_RE.test(stripPeerStamps(row.msg))) return { redirected: false };
 
   const from = senderSeatFromPeer(row);
   const block = findAckRedirectBlock(stateDir, from, row.targetLabel || "", nowMs);

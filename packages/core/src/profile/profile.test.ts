@@ -5,7 +5,9 @@ import { defaultProfilePath, loadProfile, portsForSlot } from "../index.js";
 describe("loadProfile", () => {
   it("loads default profile without --profile", () => {
     const loaded = loadProfile();
-    expect(["consumer", "minimal"]).toContain(loaded.profile.name);
+    // cwd may resolve the repo's own dogfooded `.sm/mesh.config.yaml` (name: seatmesh)
+    // instead of falling back to the bundled minimal profile — both are valid "no flags" loads.
+    expect(["consumer", "minimal", "seatmesh"]).toContain(loaded.profile.name);
     expect(loaded.workspace).toBeTruthy();
   });
 

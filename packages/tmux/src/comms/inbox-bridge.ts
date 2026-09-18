@@ -637,6 +637,16 @@ export function restartMeshInbox(loaded: LoadedProfile): void {
     spawnSync("sleep", ["0.2"]);
   }
   startMeshInbox(loaded);
+  // Self-repair: re-merge jsonl CBs + restore act cards after bounce.
+  for (let i = 0; i < 20; i++) {
+    if (probeInbox(port) === "healthy") break;
+    spawnSync("sleep", ["0.15"]);
+  }
+  spawnSync(
+    "curl",
+    ["-sS", "-m", "3", "-X", "POST", `http://127.0.0.1:${port}/repair`],
+    { encoding: "utf8", stdio: "ignore" },
+  );
 }
 
 export function printMeshInboxStatus(

@@ -48,22 +48,29 @@ describe("requireRole / requireCoordRole", () => {
   });
 
   it("requireCoordRole allows manager-2 and secretary, denies worker", () => {
-    // @ts-expect-error partial mock
-    vi.mocked(runWhoami).mockReturnValue({ role: "manager-2" });
-    expect(() => requireCoordRole(loaded, "peer")).not.toThrow();
+    const prev = process.env.TMUX_PANE;
+    process.env.TMUX_PANE = "%1";
+    try {
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "manager-2" });
+      expect(() => requireCoordRole(loaded, "peer")).not.toThrow();
 
-    // @ts-expect-error partial mock
-    vi.mocked(runWhoami).mockReturnValue({ role: "secretary" });
-    expect(() => requireCoordRole(loaded, "peer")).not.toThrow();
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "secretary" });
+      expect(() => requireCoordRole(loaded, "peer")).not.toThrow();
 
-    // @ts-expect-error partial mock
-    vi.mocked(runWhoami).mockReturnValue({ role: "worker" });
-    const { errors } = stubExit();
-    expect(() => requireCoordRole(loaded, "peer")).toThrow("__exit__");
-    expect(errors[0]).toContain("UNAUTHORIZED: peer requires role=");
-    expect(errors[0]).toContain("manager");
-    expect(errors[0]).toContain("secretary");
-    expect(errors[0]).toContain("you_are=worker");
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "worker" });
+      const { errors } = stubExit();
+      expect(() => requireCoordRole(loaded, "peer")).toThrow("__exit__");
+      expect(errors[0]).toContain("UNAUTHORIZED: peer requires role=");
+      expect(errors[0]).toContain("manager");
+      expect(errors[0]).toContain("secretary");
+      expect(errors[0]).toContain("you_are=worker");
+    } finally {
+      if (prev === undefined) delete process.env.TMUX_PANE;
+      else process.env.TMUX_PANE = prev;
+    }
   });
 
   it("requireInboxLifecycleRole allows manager+secretary, denies manager-2", () => {

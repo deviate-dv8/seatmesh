@@ -37,4 +37,30 @@ describe("mergeMeshAgentsIntoProfile", () => {
     });
     expect(merged.layout?.base.coordSync).toEqual({ reload: true, attach: false });
   });
+
+  it("syncs session.workerCount from saved workers.slots", () => {
+    const merged = mergeMeshAgentsIntoProfile(baseProfile, {
+      layout: { workers: { enabled: true, grid: "1x1", slots: 1 } },
+    });
+    expect(merged.layout?.workers.grid).toBe("1x1");
+    expect(merged.layout?.workers.slots).toBe(1);
+    expect(merged.session.workerCount).toBe(1);
+  });
+
+  it("heals poisoned workers grid when capacity !== slots", () => {
+    const merged = mergeMeshAgentsIntoProfile(
+      {
+        ...baseProfile,
+        session: { ...baseProfile.session, workerCount: 1 },
+        layout: {
+          ...baseProfile.layout!,
+          workers: { window: "workers", grid: "1x1", slots: 1, enabled: true },
+        },
+      } as MeshProfile,
+      { layout: { workers: { enabled: true, grid: "3x2", slots: 1 } } },
+    );
+    expect(merged.layout?.workers.grid).toBe("1x1");
+    expect(merged.layout?.workers.slots).toBe(1);
+    expect(merged.session.workerCount).toBe(1);
+  });
 });

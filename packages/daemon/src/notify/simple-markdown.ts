@@ -3,6 +3,7 @@
  * ```mermaid blocks become <pre class="mermaid"> for client-side mermaid.js.
  */
 import { Marked } from "marked";
+import { unescapeNotifyMarkdown } from "@seat-mesh/core";
 
 const marked = new Marked({
   gfm: true,
@@ -41,7 +42,7 @@ marked.use({
 
 /** Render card markdown → safe-ish HTML (GFM + mermaid fences). */
 export function renderSimpleMarkdown(src: string): string {
-  const text = src.replace(/\r\n/g, "\n").trim();
+  const text = unescapeNotifyMarkdown(src.replace(/\r\n/g, "\n")).trim();
   if (!text) return "";
   const html = marked.parse(text, { async: false });
   return typeof html === "string" ? html : "";

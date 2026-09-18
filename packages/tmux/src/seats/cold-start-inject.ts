@@ -18,9 +18,12 @@ import { tmux } from "../lib/tmux-run.js";
 
 const PREFIX = "[mesh-cold-start] ";
 
-function freshSummonBody(w: ReturnType<typeof runWhoami>): string {
-  if (w.role === "secretary") return PREFIX + secretaryColdStartBrief();
-  return PREFIX + freshSummonWhoamiPrompt(w.role);
+function freshSummonBody(
+  w: ReturnType<typeof runWhoami>,
+  providerId?: string | null,
+): string {
+  if (w.role === "secretary") return PREFIX + secretaryColdStartBrief(providerId);
+  return PREFIX + freshSummonWhoamiPrompt(w.role, providerId);
 }
 
 function hubPaths(
@@ -102,9 +105,12 @@ export function injectColdStartDirect(
   target: string,
   opts: { mini?: string | null } = {},
 ): void {
+  const resolved = resolvePaneTarget(target, loaded);
+  if ("error" in resolved) throw new Error(resolved.error);
   const w = runWhoami(loaded, target);
-  const mini = opts.mini ?? null;
-  const body = freshSummonBody(w);
+  const snap = capturePaneSnapshot(resolved.paneId);
+  const prov = snap ? registry.detect(snap) : null;
+  const body = freshSummonBody(w, prov?.id ?? null);
   injectPromptDirect(loaded, registry, target, body, {
     prefix: "",
     force: true,

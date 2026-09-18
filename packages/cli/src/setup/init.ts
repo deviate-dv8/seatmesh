@@ -197,6 +197,42 @@ export function agentsMdTemplatePath(): string {
   return path.join(TEMPLATE_ROOT, AGENTS_MD);
 }
 
+const CURSOR_RULES_TPL = path.join(__dirname, "..", "..", "templates", "cursor", "rules");
+
+/**
+ * Seed workspace `.cursor/rules/seatmesh-agent.mdc` (alwaysApply: true).
+ * Refresh when template differs — Cursor must always see whoami/gateway rules.
+ */
+export function ensureCursorAgentRule(
+  workspace: string,
+  opts: { forceRefresh?: boolean } = {},
+): { created: string[]; refreshed: string[]; skipped: string[] } {
+  const created: string[] = [];
+  const refreshed: string[] = [];
+  const skipped: string[] = [];
+  const src = path.join(CURSOR_RULES_TPL, "seatmesh-agent.mdc");
+  if (!fs.existsSync(src)) return { created, refreshed, skipped };
+
+  const destDir = path.join(workspace, ".cursor", "rules");
+  const dest = path.join(destDir, "seatmesh-agent.mdc");
+  const body = fs.readFileSync(src);
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.writeFileSync(dest, body);
+    created.push(dest);
+  } else if (opts.forceRefresh !== false) {
+    const same = fs.readFileSync(dest).equals(body);
+    if (same) skipped.push(dest);
+    else {
+      fs.writeFileSync(dest, body);
+      refreshed.push(dest);
+    }
+  } else {
+    skipped.push(dest);
+  }
+  return { created, refreshed, skipped };
+}
+
 /**
  * Ensure `.sm/AGENTS.md` exists (and refresh when template differs).
  * Optionally seed workspace-root `AGENTS.md` only when missing (never clobber).
@@ -247,6 +283,11 @@ export function ensureAgentsCliDoc(
   } else {
     skipped.push(rootAgents);
   }
+
+  const cursor = ensureCursorAgentRule(workspace, { forceRefresh: opts.forceRefresh });
+  created.push(...cursor.created);
+  refreshed.push(...cursor.refreshed);
+  skipped.push(...cursor.skipped);
 
   return { created, refreshed, skipped };
 }

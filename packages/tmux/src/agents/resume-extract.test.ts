@@ -1,8 +1,25 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it, afterEach } from "vitest";
-import type { ProviderRegistry } from "@seat-mesh/core";
+import { describe, expect, it, afterEach, vi } from "vitest";
+import type { PaneSnapshot, ProviderRegistry } from "@seat-mesh/core";
+
+// extractResumeIdAuto gates on a live tmux pane snapshot — stub it so the "resume id
+// comes from provider detect" path doesn't depend on a real tmux pane %1 existing.
+vi.mock("../lib/snapshot.js", () => ({
+  capturePaneSnapshot: (paneId: string): PaneSnapshot | null =>
+    paneId === "%1"
+      ? {
+          paneId,
+          windowName: "workers",
+          cwd: "/tmp",
+          currentCommand: "cursor-agent",
+          captureTail: "",
+          options: {},
+        }
+      : null,
+}));
+
 import { extractResumeIdAuto } from "./resume-extract.js";
 
 describe("extractResumeIdAuto", () => {

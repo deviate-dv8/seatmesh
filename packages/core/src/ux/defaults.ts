@@ -16,6 +16,9 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     when: {
       scan: { bottomLines: 8 },
       match: "ctrl\\+p commands|Ask anything|Ask a question|Type a message|Send a message|What would you like",
+      // Free-tier / Orca credit errors sit above chrome — do not classify as idle.
+      unless:
+        "insufficient_user_quota|out of credits|err_credit_gate|orcarouter\\.ai/console/billing|free[ -]?tier",
     },
     set: { phase: "empty" },
   },
@@ -28,7 +31,7 @@ export const DEFAULT_UX_RULES: UxRule[] = [
       match:
         "cannot\\s+connect\\s+to\\s+api|unable\\s+to\\s+connect|service\\s+unavailable|connection\\s+error|ECONNREFUSED|socket\\s+connection\\s+was\\s+closed",
       unless:
-        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429",
+        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|free[ -]?tier",
     },
     set: { phase: "limit", kind: "oc-connect", border: "PROXY-DOWN" },
     onRise: "connectivity.proxy-down",
@@ -50,9 +53,9 @@ export const DEFAULT_UX_RULES: UxRule[] = [
     for: ["opencode"],
     priority: 85,
     when: {
-      scan: { tailLines: 28 },
+      scan: { tailLines: 80 },
       match:
-        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|free[ -]?tier.*limit|plan limit|zen.*limit|session\\s*(expired|limit|ended)|expired\\s*session|provider\\s*limit|free\\s*usage\\s*exceed|usage\\s*exceeded|subscribe to go",
+        "rate\\s*limit|usage\\s*limit|quota\\s*exceed|hit your.*limit|limit reached|too many requests|429|free[ -]?tier|plan limit|zen.*limit|session\\s*(expired|limit|ended)|expired\\s*session|provider\\s*limit|free\\s*usage\\s*exceed|usage\\s*exceeded|subscribe to go",
     },
     set: { phase: "limit", kind: "oc-limit", border: "OC-LIMIT:oc-limit" },
     onRise: "connectivity.rate-limit",

@@ -11,11 +11,12 @@
     "seatmesh": "./bin/seatmesh"
   },
   "scripts": {
-    "build": "npm run build -w @seat-mesh/core && npm run build -w @seat-mesh/providers && npm run build -w @seat-mesh/tmux && npm run build -w @seat-mesh/connectivity && npm run build -w @seat-mesh/daemon && npm run build -w seatmesh",
+    "build": "npm run build -w @seat-mesh/core && npm run build -w @seat-mesh/providers && npm run build -w @seat-mesh/connectivity && npm run build -w @seat-mesh/tmux && npm run build -w @seat-mesh/daemon && npm run build -w seatmesh",
     "gen:commands": "npm run build -w seatmesh && node packages/cli/dist/commands/gen-commands-md.js",
     "typecheck": "npm run typecheck -ws --if-present",
     "test": "vitest run",
     "test:ci": "vitest run --exclude '**/sqlite-store.test.ts'",
+    "test:docker": "bash test/docker/run.sh test",
     "seatmesh": "node packages/cli/dist/main.js",
     "web": "npm run dev -w @seat-mesh/web"
   },

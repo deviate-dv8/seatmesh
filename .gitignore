@@ -24,7 +24,9 @@ coverage/
 # Local Cursor / agent workspace (not product source)
 .agent/
 .agents/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .mcp.json
 
 # Local scripts / infra (not part of the distributed package)

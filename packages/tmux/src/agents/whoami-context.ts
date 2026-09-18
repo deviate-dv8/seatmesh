@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   chatRoomConfigForLoaded,
   entryWantsProxyRecovery,
@@ -9,6 +10,7 @@ import {
   meshRuntimePaths,
   openAcksForSeat,
   resolveAgentId,
+  resolveDaemonPort,
   roomDir,
   runtimePathHint,
   shortAckId,
@@ -243,11 +245,31 @@ export function buildWhoamiContextLines(
   const rt = meshRuntimePaths(loaded);
 
   if (w.paneId) {
-    const cbs = readJsonl<CheckbackRow>(rt.checkbackJsonl, (row) => {
-      const r = row as CheckbackRow;
-      if (r.status !== "active" || r.ownerPane !== w.paneId) return null;
-      return r;
-    });
+    // Prefer daemon store (sqlite) over raw CHECKBACK.jsonl — avoids supervise split-brain.
+    let cbs: CheckbackRow[] = [];
+    try {
+      const port = resolveDaemonPort(loaded.profile, loaded.workspace);
+      const r = spawnSync(
+        "curl",
+        ["-sS", "-m", "2", `http://127.0.0.1:${port}/patience`],
+        { encoding: "utf8" },
+      );
+      if (r.status === 0 && r.stdout) {
+        const j = JSON.parse(r.stdout) as { entries?: CheckbackRow[] };
+        cbs = (j.entries ?? []).filter(
+          (row) => row.status === "active" && row.ownerPane === w.paneId,
+        );
+      }
+    } catch {
+      /* fall through */
+    }
+    if (!cbs.length) {
+      cbs = readJsonl<CheckbackRow>(rt.checkbackJsonl, (row) => {
+        const r = row as CheckbackRow;
+        if (r.status !== "active" || r.ownerPane !== w.paneId) return null;
+        return r;
+      });
+    }
     lines.push("--- checkbacks (this pane) ---");
     if (!cbs.length) {
       lines.push("checkback=none active");

@@ -1,0 +1,40 @@
+---
+description: Seatmesh pane agent — whoami every turn, enqueue-only mesh CLI
+alwaysApply: true
+---
+
+# Seatmesh agent (always on)
+
+Engine-owned mesh CLI. Do not invent alternate CLIs.
+
+## Every turn
+
+```bash
+sm agent whoami
+sm agent          # can / cannot for THIS pane
+```
+
+Default config is workspace `.sm/` (walk-up). Run work only via `sm agent <cmd> …`.
+
+## Hard rules
+
+- Enqueue only — never raw `tmux send-keys` for mesh mail.
+- `[mesh-inbox]` / DIGEST = daemon steering, not a new human task.
+- Chat prose does **not** clear ACK or cancel checkback — use `ack` / `cb cancel`.
+- Inject copy = mesh-copy consts. Never paste `patterns.md` into a pane.
+- Operator eyes / decide → `agent notify` (not chat for a toast).
+- NO CONFIRM — act; chat is a status line after action.
+
+## Vocal (pane CLIs)
+
+| Need | Command |
+|------|---------|
+| Empty shell → agent | `spawn <target> <cli>` |
+| Replace live agent | `switch <target> <cli>` |
+| Resume configured | `launch <target>` |
+| Rebuild engine + labels | `rebuild` (alias: `reload` — not “reload config”) |
+
+## Dig deeper
+
+- Skill: `seatmesh-agent` · notify: `seatmesh-notify`
+- Canonical brief: `.sm/AGENTS.md`

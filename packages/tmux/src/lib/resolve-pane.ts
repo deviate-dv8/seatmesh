@@ -1,9 +1,6 @@
 import { spawnSync } from "node:child_process";
-import {
-  baseColumnIds,
-  expandColumnAlias,
-  type LoadedProfile,
-} from "@seat-mesh/core";
+import type { LoadedProfile } from "@seat-mesh/core/profile";
+import { baseColumnIds, expandColumnAlias } from "@seat-mesh/core/seat-kind";
 import {
   resolveLiveTmuxSession,
   sessionWorkspaceId,
@@ -30,14 +27,7 @@ function tmux(args: string[]): string | null {
   return (r.stdout ?? "").trim() || null;
 }
 
-export function listPanes(session?: string): PaneRow[] {
-  const args = [
-    "list-panes",
-    ...(session ? ["-s", "-t", session] : ["-a"]),
-    "-F",
-    "#{pane_id}\t#{session_name}\t#{window_name}\t#{@mesh_role}\t#{@mesh_slot}\t#{@mesh_ports}\t#{@mesh_mini}\t#{@mesh_workspace_id}",
-  ];
-  const out = tmux(args);
+function parsePaneList(out: string | null): PaneRow[] {
   if (!out) return [];
   return out
     .split("\n")
@@ -65,6 +55,26 @@ export function listPanes(session?: string): PaneRow[] {
         workspaceId: meshWorkspaceId || "",
       };
     });
+}
+
+const PANE_LIST_FMT =
+  "#{pane_id}\t#{session_name}\t#{window_name}\t#{@mesh_role}\t#{@mesh_slot}\t#{@mesh_ports}\t#{@mesh_mini}\t#{@mesh_workspace_id}";
+
+/**
+ * List panes for one tmux session.
+ * Empty/whitespace session is refused — never fall through to host-wide `-a`
+ * (that would let kill/reload touch foreign meshes).
+ */
+export function listPanes(session: string): PaneRow[] {
+  if (!session?.trim()) {
+    throw new Error("listPanes: empty session refused (would list all tmux panes)");
+  }
+  return parsePaneList(tmux(["list-panes", "-s", "-t", session, "-F", PANE_LIST_FMT]));
+}
+
+/** Host-wide pane list — debug / legacy resolve only. Prefer listPanes(session). */
+export function listAllPanes(): PaneRow[] {
+  return parsePaneList(tmux(["list-panes", "-a", "-F", PANE_LIST_FMT]));
 }
 
 function workspaceIdFromContext(ctx: ResolvePaneContext): string | null {
@@ -96,22 +106,40 @@ function paneMatchesWorkspace(row: PaneRow, workspaceId: string | null): boolean
   if (!workspaceId) return true;
   if (row.workspaceId) return row.workspaceId === workspaceId;
   const sid = sessionWorkspaceId(row.session);
-  return sid === workspaceId || sid === null;
+  // Unknown session stamp ≠ match — never treat foreign/unstamped as ours.
+  return sid === workspaceId;
 }
 
+/**
+ * Find a pane in the live mesh session only.
+ * LoadedProfile never falls through to another tmux session (even same workspace_id).
+ */
 function findInMesh(
   ctx: ResolvePaneContext,
   pred: (p: PaneRow) => boolean,
 ): PaneRow | undefined {
   const workspaceId = workspaceIdFromContext(ctx);
   const live = liveSessionFromContext(ctx);
-  const inLive = listPanes(live).find((p) => pred(p) && paneMatchesWorkspace(p, workspaceId));
-  if (inLive) return inLive;
-  for (const row of listPanesForMesh(ctx)) {
-    if (row.session === live) continue;
-    if (pred(row) && paneMatchesWorkspace(row, workspaceId)) return row;
+  if (!tmuxHasSession(live)) return undefined;
+  return listPanes(live).find((p) => pred(p) && paneMatchesWorkspace(p, workspaceId));
+}
+
+/** Refuse mutations that would touch a foreign tmux session. */
+export function assertPaneInLiveSession(
+  row: PaneRow,
+  loaded: LoadedProfile,
+): void {
+  const live = resolveLiveTmuxSession(loaded);
+  if (row.session && row.session !== live) {
+    throw new Error(
+      `refused: pane ${row.paneId} is in session '${row.session}', not live '${live}'`,
+    );
   }
-  return undefined;
+  if (loaded.workspaceId && !paneMatchesWorkspace(row, loaded.workspaceId)) {
+    throw new Error(
+      `refused: pane ${row.paneId} is not in workspace_id=${loaded.workspaceId}`,
+    );
+  }
 }
 
 /** slot-first: bare 1-8, slot-N, pane-N/pN, manager, mini-N, %id, here */
@@ -132,7 +160,7 @@ export function resolvePaneTarget(
     }
     const row =
       listPanesForMesh(ctx).find((p) => p.paneId === paneId) ??
-      (!workspaceId ? listPanes().find((p) => p.paneId === paneId) : undefined);
+      (!workspaceId ? listAllPanes().find((p) => p.paneId === paneId) : undefined);
     if (!row) return { error: `pane ${paneId} not found` };
     if (workspaceId && !paneMatchesWorkspace(row, workspaceId)) {
       return { error: `pane ${paneId} is not in workspace_id=${workspaceId}` };
@@ -143,7 +171,7 @@ export function resolvePaneTarget(
   if (raw.startsWith("%")) {
     const row =
       listPanesForMesh(ctx).find((p) => p.paneId === raw) ??
-      (!workspaceId ? listPanes().find((p) => p.paneId === raw) : undefined);
+      (!workspaceId ? listAllPanes().find((p) => p.paneId === raw) : undefined);
     if (!row) {
       return {
         error: workspaceId
@@ -163,18 +191,17 @@ export function resolvePaneTarget(
     };
   }
 
-  const columnIds =
-    typeof ctx === "string" ? ["manager", "secretary"] : baseColumnIds(ctx.profile.layout);
-  const want = new Set(expandColumnAlias(raw));
-  if (want.has("master")) want.add("manager");
-  const colHit = findInMesh(ctx, (p) => want.has(p.role) || columnIds.some((c) => want.has(c) && p.role === c));
-  if (colHit) return { paneId: colHit.paneId, row: colHit };
-  if (columnIds.some((c) => want.has(c))) {
-    const live = liveSessionFromContext(ctx);
-    return { error: `no ${raw} pane in mesh session '${live}'` };
+  // Hot path first: slot-N / bare N (spawn/switch). Avoid column findInMesh fanout.
+  const slotMatch = raw.match(/^(?:slot-)?(\d+)$/);
+  if (slotMatch) {
+    const slot = slotMatch[1];
+    const row = findInMesh(ctx, (p) => p.slot === slot && p.role === "worker");
+    if (!row) {
+      const live = liveSessionFromContext(ctx);
+      return { error: `slot ${slot} pane not found in mesh session '${live}'` };
+    }
+    return { paneId: row.paneId, row };
   }
-  const roleHit = findInMesh(ctx, (p) => want.has(p.role));
-  if (roleHit) return { paneId: roleHit.paneId, row: roleHit };
 
   const miniMatch = raw.match(/^(?:mini|manager-mini)-(\d+)$/);
   if (miniMatch) {
@@ -201,16 +228,18 @@ export function resolvePaneTarget(
     };
   }
 
-  const slotMatch = raw.match(/^(?:slot-)?(\d+)$/);
-  if (slotMatch) {
-    const slot = slotMatch[1];
-    const row = findInMesh(ctx, (p) => p.slot === slot && p.role === "worker");
-    if (!row) {
-      const live = liveSessionFromContext(ctx);
-      return { error: `slot ${slot} pane not found in mesh session '${live}'` };
-    }
-    return { paneId: row.paneId, row };
+  const columnIds =
+    typeof ctx === "string" ? ["manager", "secretary"] : baseColumnIds(ctx.profile.layout);
+  const want = new Set(expandColumnAlias(raw));
+  if (want.has("master")) want.add("manager");
+  const colHit = findInMesh(ctx, (p) => want.has(p.role) || columnIds.some((c) => want.has(c) && p.role === c));
+  if (colHit) return { paneId: colHit.paneId, row: colHit };
+  if (columnIds.some((c) => want.has(c))) {
+    const live = liveSessionFromContext(ctx);
+    return { error: `no ${raw} pane in mesh session '${live}'` };
   }
+  const roleHit = findInMesh(ctx, (p) => want.has(p.role));
+  if (roleHit) return { paneId: roleHit.paneId, row: roleHit };
 
   const paneIdx = raw.match(/^(?:pane-)?p?(\d+)$/i);
   if (paneIdx && raw !== "pane-0" && raw !== "0") {

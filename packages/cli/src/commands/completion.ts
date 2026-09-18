@@ -38,7 +38,7 @@ const SUBS: Record<string, string[]> = {
   web: ["status", "up", "down", "restart", "open", "url", "help"],
   session: ["attach", "up", "down", "status", "sync", "check", "repair", "init"],
   sessions: ["list", "attach", "forget", "register", "pick"],
-  layout: ["column"],
+  layout: ["column", "scale", "reload", "realign"],
   ops: ["list", "clear"],
   inbox: ["list", "resolve", "log", "instances", "stop", "restart"],
   mini: ["list", "spawn", "prompt", "done", "kill", "reassign", "dispatch-all"],
@@ -62,7 +62,7 @@ const SUBS: Record<string, string[]> = {
   reply: [],
   todo: ["give", "send", "to", "list", "add", "check", "ls", "show"],
   todos: ["give", "send", "to", "list", "add", "check", "ls", "show"],
-  notify: ["info", "md", "details", "yesno", "desktop"],
+  notify: ["info", "md", "details", "yesno", "run", "cmd", "desktop"],
   mds: ["hosted", "agent-self", "agent", "status", "list", "help"],
   preview: [],
   limit: ["idle", "idle-clear"],
@@ -85,6 +85,7 @@ const SUBS: Record<string, string[]> = {
   continue: ["all", "1", "2", "3"],
   switch: [...COMMON_TARGETS],
   handoff: [...COMMON_TARGETS],
+  spawn: [...COMMON_TARGETS],
   set: [...COMMON_TARGETS],
   swap: [...COMMON_TARGETS],
   ppa: ["--raw", "--idle", "perf-index", "index"],
@@ -96,6 +97,7 @@ const SUBS: Record<string, string[]> = {
   version: ["--json", "--check-registry"],
   update: ["--dry-run", "--migrate", "--no-restart-inbox"],
   reload: ["--layout"],
+  rebuild: ["--layout"],
   save: ["--json", "--no-labels"],
   auto: ["--json", "--no-labels"],
   init: ["--force", "--seats-root", "--name"],
@@ -111,6 +113,8 @@ const SUBS: Record<string, string[]> = {
 const DEEPER: Record<string, Record<string, string[]>> = {
   layout: {
     column: ["list", "add", "remove"],
+    scale: ["workers", "minis", "up", "down"],
+    reload: ["--yes", "--no-leads", "--no-resume"],
   },
   seat: {
     task: ["list", "add", "check"],

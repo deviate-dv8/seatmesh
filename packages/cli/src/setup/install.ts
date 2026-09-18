@@ -81,7 +81,7 @@ export function runInstall(opts: InstallOptions = {}): InstallResult {
   const smTarget = resolveSmBinShim();
   fs.mkdirSync(binDir, { recursive: true });
   const force = Boolean(opts.force);
-  installOneLink(binDir, "sm", smTarget, force);
-  const { link, created } = installOneLink(binDir, "seatmesh", seatmeshTarget, force);
+  const { link, created } = installOneLink(binDir, "sm", smTarget, force);
+  installOneLink(binDir, "seatmesh", seatmeshTarget, force);
   return { binDir, link, target: smTarget, created };
 }

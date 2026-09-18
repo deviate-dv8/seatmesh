@@ -1,8 +1,12 @@
 # seatmesh contract
 
 ```text
-contract …
-  Contract lock apply/on/off
+contract [status]
+  contract show <id>
+  contract on|off <id> [--agent <seat>]
+  contract create|open <slug>
+  Easy locks: status = vendor + ON/off. on/off default agent from yaml
+  (supervise→secretary, balance→balance_lead). No --agent needed.
 ```
 
 - CLI: `seatmesh contract --help`

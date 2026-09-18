@@ -3,16 +3,20 @@
 ```text
 human — put an agent CLI on a pane (operator)
 
-  Empty terminal → agent:
-    switch <target> <opencode|opencode-cpe|claude|agent|kiro>
+  Empty terminal → agent (prefer spawn; **fast by default**):
+    spawn <target|1..4> <opencode|opencode-cpe|claude|agent|kiro>
     Examples:
-      seatmesh switch slot-1 opencode
-      seatmesh switch secretary opencode-cpe --keep-resume
-      seatmesh switch here agent          # this pane (Cursor)
-      seatmesh switch mini-1 opencode-cpe --keep-resume
+      seatmesh spawn slot-1 opencode
+      seatmesh spawn 1..3 opencode-cpe
+      seatmesh spawn here agent --slow   # wait verify + FRESH SUMMON
 
-  Back to plain shell:
-    switch <target> empty
+  Replace a live agent:
+    switch <target> <cli> [--fast] [reason...]
+      seatmesh switch here agent --fast
+
+  Back to plain shell (saves empty in mesh-agents.json):
+    kill <target>     # alias: empty
+    switch <target> empty --fast
 
   Start/resume the seat's configured CLI (no type pick):
     launch <target|all|manager|secretary>
@@ -23,7 +27,7 @@ human — put an agent CLI on a pane (operator)
   Check agent vs shell:
     kind <target>     # aliases: what | typeof
 
-  Give the seat WORK / a todo (does NOT install a CLI — different from switch):
+  Give the seat WORK / a todo (does NOT install a CLI — different from spawn/switch):
     todo give <target> "do the thing"     # preferred
     todo <target> "do the thing"          # shorthand
     assign <target> "do the thing"        # same engine

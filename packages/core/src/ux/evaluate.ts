@@ -70,10 +70,17 @@ function opencodeComposerOverride(
   if (providerId !== "opencode") return null;
   const bottomLines = tail.split("\n").filter((l) => l.trim()).slice(-8);
   const bottom = bottomLines.join("\n");
-  // OrcaRouter credit gate must beat idle composer chrome — error sits above ctrl+p.
+  // OrcaRouter credit + free-tier Console errors must beat idle composer chrome.
   const creditBand = tail.split("\n").slice(-80).join("\n");
   if (
     /insufficient_user_quota|out of credits|needs\s*\$[\d.]+|orcarouter\.ai\/console\/billing|err_credit_gate|Add credits to keep going/i.test(
+      creditBand,
+    )
+  ) {
+    return null;
+  }
+  if (
+    /free[ -]?tier|subscribe to go|free\s*usage\s*exceed/i.test(
       creditBand,
     )
   ) {

@@ -1,0 +1,15 @@
+import { performance } from 'node:perf_hooks';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const root = path.resolve(import.meta.dirname, '../..');
+const t0 = performance.now();
+const mark = (l) => console.log(`${String(Math.round(performance.now()-t0)).padStart(5)}ms  ${l}`);
+mark('start');
+await import(pathToFileURL(path.join(root, 'packages/core/dist/index.js')).href);
+mark('core');
+await import(pathToFileURL(path.join(root, 'packages/providers/dist/index.js')).href);
+mark('providers');
+await import(pathToFileURL(path.join(root, 'packages/tmux/dist/index.js')).href);
+mark('tmux');
+await import(pathToFileURL(path.join(root, 'packages/cli/dist/main.js')).href).catch(()=>{});
+mark('cli-main-import-attempt');

@@ -71,8 +71,12 @@ export function ensureBaseLayout(loaded: LoadedProfile, session: string): string
 
   const cols = baseColumns(loaded);
   panes = listWindowPaneIds(session, baseWin);
+  // Never overwrite live @mesh_role (swap-pane / durable seats). Only stamp blanks.
   for (let i = 0; i < panes.length && i < cols.length; i++) {
-    stampBaseColumn(panes[i]!, cols[i]!);
+    const paneId = panes[i]!;
+    const role = paneMetaForPane(paneId)?.role ?? "";
+    if (role) continue;
+    stampBaseColumn(paneId, cols[i]!);
   }
 
   realignBaseLayout(loaded, session);

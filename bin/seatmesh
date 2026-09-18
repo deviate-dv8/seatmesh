@@ -119,6 +119,30 @@ if is_attach_cmd; then
   lazy_attach && exit 0
 fi
 
+# Fast spawn / switch --fast — slim Node entry (full main.js cold start is >1s).
+# Must run BEFORE monorepo cold-start rebuild (that alone can blow the 1s budget).
+is_fast_spawn() {
+  local a0="${ARGS[0]:-}"
+  [[ "$a0" == "spawn" ]] && return 0
+  if [[ "$a0" == "switch" || "$a0" == "handoff" ]]; then
+    local a
+    for a in "${ARGS[@]}"; do
+      [[ "$a" == "--fast" ]] && return 0
+    done
+  fi
+  return 1
+}
+
+if is_fast_spawn; then
+  FAST_CLI="$(dirname "$CLI")/fast-spawn.js"
+  if [[ -f "$FAST_CLI" ]]; then
+    if [[ -n "$PROFILE" ]]; then
+      exec node "$FAST_CLI" --profile "$PROFILE" "${ARGS[@]}"
+    fi
+    exec node "$FAST_CLI" "${ARGS[@]}"
+  fi
+fi
+
 # Monorepo cold start
 if [[ -f "$PKG_ROOT/package.json" && -d "$PKG_ROOT/packages/cli" ]]; then
   needs=0

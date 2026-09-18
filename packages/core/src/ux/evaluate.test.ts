@@ -52,6 +52,16 @@ describe("evaluateUxRules", () => {
     expect(hit?.state).toEqual({ phase: "limit", limitKind: "oc-credit" });
   });
 
+  it("free-tier Console error beats idle ctrl+p (arms CPE reboot)", () => {
+    const tail =
+      "Error from provider (Console): OpenCode's free tier can only be used from within OpenCode\n" +
+      "ctrl+p commands\n";
+    const hit = evaluateUxRules(snap(tail), "opencode", config);
+    expect(hit?.ruleId).toBe("oc-limit");
+    expect(hit?.state.limitKind).toBe("oc-limit");
+    expect(hit?.onRise).toBe("connectivity.rate-limit");
+  });
+
   it("cursor idle follow-up chrome is empty (inbox deliverable)", () => {
     const tail =
       "assistant text\n \u2192 Add a follow-up\n Composer 2.5 Fast \u00b7 37.4% \u00b7 1 file edited\n ~/proj\n";
