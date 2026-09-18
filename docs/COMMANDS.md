@@ -320,6 +320,19 @@ help [cmd]
 - Agent: `seatmesh agent help help`
 - File: [cli/help.md](cli/help.md)
 
+## host
+
+```text
+host up|down|status
+  Opt-in single host-supervisor: one process watches all meshes registered in
+  ~/.config/seatmesh/sessions.json instead of each spawning its own supervisor.
+  Does not affect meshes that haven't opted in (Phase 1, see NOW.md).
+```
+
+- Run: `seatmesh host --help`
+- Agent: `seatmesh agent help host`
+- File: [cli/host.md](cli/host.md)
+
 ## hub
 
 ```text

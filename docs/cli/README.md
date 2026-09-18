@@ -35,6 +35,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `func` | [func.md](func.md) |
 | `golf` | [golf.md](golf.md) |
 | `help` | [help.md](help.md) |
+| `host` | [host.md](host.md) |
 | `hub` | [hub.md](hub.md) |
 | `human` | [human.md](human.md) |
 | `inbox` | [inbox.md](inbox.md) |

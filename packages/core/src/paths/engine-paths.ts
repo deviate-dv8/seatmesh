@@ -34,7 +34,7 @@ export function seatMeshPackageRoot(): string {
 }
 
 export function resolveDaemonScript(
-  name: "mesh-inbox-server.js" | "mesh-inbox-supervisor.js",
+  name: "mesh-inbox-server.js" | "mesh-inbox-supervisor.js" | "mesh-inbox-host-supervisor.js",
 ): string {
   const mono = path.join(seatMeshPackageRoot(), "packages/daemon/dist", name);
   if (fs.existsSync(mono)) return mono;

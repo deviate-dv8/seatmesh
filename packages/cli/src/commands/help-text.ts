@@ -371,6 +371,11 @@ const HELP: Record<string, string> = {
   roles: `roles status|migrate [--to VER]|steps
   Locked role-pack up/down`,
 
+  host: `host up|down|status
+  Opt-in single host-supervisor: one process watches all meshes registered in
+  ~/.config/seatmesh/sessions.json instead of each spawning its own supervisor.
+  Does not affect meshes that haven't opted in (Phase 1, see NOW.md).`,
+
   target: `target add "<text>" [--deadline eod|6h]
   target list | target done <id> | target triage <id>
   Operator EOD work items (outside agent). Alias: targets`,

@@ -253,6 +253,7 @@ Setup (run once per project, by a human)
   config check | config upgrade         validate yaml · how to bump CLI (npm i -g)
   web up|down|restart|status|open|url   operator hub :3190 (npx seatmesh web up)
   roles status|migrate [--to VER]|steps   locked role-pack up/down (1.1.x)
+  host up|down|status   opt-in single host-supervisor for all registered meshes (Phase 1)
   version [--json] [--check-registry]   CLI vs npm latest vs profile .seatmesh-version
 
 Put an agent on a pane (human — most common)
@@ -445,6 +446,13 @@ async function main(): Promise<void> {
       `OK: install ${r.created ? "linked" : "already linked"} ${r.link} -> ${r.target}`,
     );
     console.log(`  bin dir: ${r.binDir} (ensure it is on PATH)`);
+    return;
+  }
+
+  if (cmd === "host") {
+    const { runHostCommand } = await import("./commands/host-cli.js");
+    const code = runHostCommand([sub, ...tail].filter((a): a is string => a != null));
+    if (code !== 0) process.exit(code);
     return;
   }
 

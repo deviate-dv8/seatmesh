@@ -121,6 +121,28 @@ prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `o
 
 ---
 
+## P7 — single host daemon (see NOW.md "Direction")
+
+Today: N meshes on one host = N independent `mesh-inbox-supervisor` + `mesh-inbox-server`
+process pairs (N health-watch loops, N HMR-poll loops). Goal: one host-level process,
+without reinventing Herdr's agent-status surface.
+
+- [x] **7.1** **Phase 1 — host supervisor (opt-in).** `seatmesh host up|down|status`:
+  one `mesh-inbox-host-supervisor` walks `sessions.json`, runs a `mesh-inbox-watcher`
+  per registered mesh. Still N `mesh-inbox-server` processes/ports. Not wired into
+  `ensureMeshInbox` — existing meshes unaffected unless opted in. Landed 2026-09-19.
+- [ ] **7.2** Prove phase 1 under real multi-day load on this box (seatmesh/pia/zsign/
+  dc-agent), including HMR-restart and health-rescue paths, before defaulting to it.
+- [ ] **7.3** Default `ensureMeshInbox`/`seatmesh start`/`engine` to the host supervisor
+  when `host up` is already running; retire the per-mesh auto-spawn path.
+- [ ] **7.4** Phase 2 — collapse N `mesh-inbox-server` child processes into N in-process
+  listeners inside one process (per-mesh queue isolation preserved, one Node process
+  total). Bigger: shared HTTP server dispatch by port/session, one event loop.
+- [ ] **7.5** `seatmesh host` status surfaced in the operator hub (:3190) instead of
+  per-mesh `/health` polling from the picker.
+
+---
+
 ## Prove bar (every closed row)
 
 ```bash
