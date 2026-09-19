@@ -145,6 +145,84 @@ without reinventing Herdr's agent-status surface.
   total). Bigger: shared HTTP server dispatch by port/session, one event loop.
 - [ ] **7.5** `seatmesh host` status surfaced in the operator hub (:3190) instead of
   per-mesh `/health` polling from the picker.
+- [ ] **7.6** Daemon diagnosability. Distinct from 7.1-7.5 (which consolidate *how many*
+  daemon processes run) — this is *when one breaks, why*. Today the only lever is
+  "restart the daemon," never "here's what actually failed." Add structured crash/
+  fault visibility (which subsystem — inject/queue/checkback/notify/connectivity —
+  actually broke) so operators stop papering over real bugs with restarts.
+- [ ] **7.7** Investigate whether running via a symlinked dev install (vs a real npx/
+  npm-published install) is actually implicated in reported daemon crashes. Operator's
+  own words: unconfirmed theory ("idk"), worth checking before assuming.
+
+---
+
+## P8 — persona model + campaign contract (vision, operator direction 2026-09-19 — not scoped, do not implement without explicit go-ahead given blast radius on live meshes)
+
+Full detail: [docs/HANDOUT-CAMPAIGN-CONTRACT.md](docs/HANDOUT-CAMPAIGN-CONTRACT.md).
+Direction: move off fixed manager/secretary/worker/mini roles toward personas, and
+replace today's supervise+balance contracts with a "campaign" concept that can
+actually answer "what's the status of X?" — supervise/balance themselves are already
+a strength (better than Herdr's equivalent per hands-on comparison); the gap is
+status-queryability and role-death resilience, not the underlying mechanism.
+
+- [ ] **8.1** Personas replace fixed manager/secretary/worker/mini roles as structural
+  concepts (ids are already open via P6; this goes further — roles stop being
+  hardcoded engine assumptions). Default project = a bare terminal + `npx seatmesh`
+  echo, not a pre-built base/workers/minis grid. Window 9 "logs" is still liked and
+  should stay — operator says it's "no longer needed" in its *current* form once the
+  multi-daemon-per-mesh setup is fully gone (P7) — confirm exactly what changes
+  there before touching it; read literally the window existed partly to surface
+  N-daemon log noise.
+- [ ] **8.2** Campaign contract — **TODO slices** (assignable work units, need
+  **dependency edges** across balancers/teams — flat lists can't express "this FE
+  slice depends on that API slice") + **Objectives** (the missing piece today: lets
+  "30% complete, N left" be a real answer, not just per-slice done/not-done).
+  **Supervisor** = nudger, **balancer** = assigner (today's "lead"); a manager
+  persona can be both by default (Herdr's plain-mode simplicity).
+- [ ] **8.3** Supervisor/balancer **role failover** — must be easy to "replug" a new
+  agent into the role when the holder dies; a campaign whose progress depends on one
+  un-replaceable agent staying alive is not resilient parallelism. Correctness
+  requirement, not a nice-to-have.
+- [ ] **8.4** Default campaign shape = **ticket-style** (atomic, one unit) — the most
+  stable of the three styles operators actually reach for (EPIC/BMAD-PRD/ticket) per
+  feedback. EPIC (umbrella grouping) and PRD (extend-as-you-go spec) are later
+  extensions, not the base shape.
+- [ ] **8.5** Campaign listing/status must scale to **~100 concurrent campaigns**
+  (ticket-style usage means many small campaigns, not a handful) — a status model
+  that only answers one campaign at a time (e.g. "ask the supervisor") won't hold up.
+- [ ] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
+  this because You= is this") are a real pain point tied directly to 8.1;
+  `requireRole`/`requireCoordRole` (`packages/tmux/src/agents/authz-guard.ts`) will
+  need to loosen or become persona-aware.
+- [ ] **8.7** Chat rooms — flagged as "a good concept but hardly effectively executed"
+  despite being the most-used `sm` CLI surface. **Partially addressed**: 5.10 landed
+  dedupe/`cb=`/`tail`+`get` json+pane+truncate 2026-09-19 — confirm with operator
+  whether that's what was meant, or more rework is wanted.
+
+---
+
+## P9 — ack protocol: move off manager-mediated ACK/ACK loops (vision, operator direction 2026-09-19 — not scoped)
+
+- [ ] **9.1** Agents report task completion as a cheap one-way "done" signal instead
+  of routing through an ACK/ACK confirmation exchange with the manager. Driver: each
+  agent-to-agent inject round is a real LLM prompt, not free chatter — this project's
+  own `.sm/mds/` notes already flag an "n+1" problem from today's ack model. Herdr's
+  simpler one-way status model is the reference point.
+- [ ] **9.2** Tension with **8.2** (campaign Objectives): something still has to
+  signal when an Objective moves, and that can't be the expensive ack loop this item
+  is trying to remove — design these two together, not separately.
+
+---
+
+## P10 — modular architecture + sidebar UI (long-term vision, operator direction 2026-09-19 — not scoped, explicitly "in the future" not near-term)
+
+- [ ] **10.1** Split the web hub / markdown hosting / notifications so they're usable
+  standalone or composed with a different core engine (name-dropped: "workmux", a
+  separate/adjacent tool, not part of this repo) — seatmesh-the-engine and
+  seatmesh-the-tooling-pieces become separable.
+- [ ] **10.2** Wormux-like session sidebar: open a seatmesh session, spawn the
+  sidebar, see a list of sessions, each with a dropdown of which agents are in it.
+  Distinct from the operator hub (:3190) — lighter, always-present picker.
 
 ---
 
