@@ -222,6 +222,12 @@ export const MeshProfileSchema = z.object({
           minInterval: z.string().default("5m"),
         })
         .default({}),
+      /** Same sender + same body within this window is not re-appended/re-fanned-out. */
+      dedupe: z
+        .object({
+          window: z.string().default("20s"),
+        })
+        .default({}),
     })
     .optional(),
   /**

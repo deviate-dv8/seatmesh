@@ -26,6 +26,7 @@ function cfg(): ChatRoomConfig {
     checkbackCallPendingRenew: "1m",
     checkbackMaxFires: 3,
     thinNotifyMinMs: 5 * 60 * 1000,
+    dedupeWindowMs: 20_000,
     inboxBase: "http://127.0.0.1:31670",
   };
 }

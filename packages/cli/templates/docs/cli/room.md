@@ -1,13 +1,11 @@
 # seatmesh room
 
 ```text
-room tail [-r slug] [-n N] | room say [-r slug] "<msg>"
-  Modern path: say/tail (+ contract open <slug> for named ledgers).
-  Prefer CLAIMED|DONE|FYI|STATUS lines over room call/accept (legacy A2A dial).
-  Also: room broadcast <msg> | room read | room create <slug>
-  Legacy: room call|accept|decline|pending (workers) — prefer peer ask/msg instead
-  Global default; -r managers|supervise
-  broadcast/say fan-out = daemon queue (POST /room-fanout)
+room tail [-r slug] [-n N] [--truncate N] [--json] | room get <id> [--json]
+  room say [-r slug] "<msg>"  (same sender+body within ~20s is deduped, not re-sent)
+  room broadcast <msg> | room read | room call|accept …
+  A2A ledger. Global default; -r managers|supervise
+  broadcast/say fan-out = daemon queue (POST /room-fanout) — not direct-inject storm
 ```
 
 - CLI: `seatmesh room --help`

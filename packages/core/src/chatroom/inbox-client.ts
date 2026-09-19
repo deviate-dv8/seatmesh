@@ -24,6 +24,8 @@ export interface ArmCheckbackResult {
   skipped?: boolean;
   reason?: string;
   response?: unknown;
+  /** The armed checkback's id (from the daemon's response entry), when ok. */
+  id?: string;
 }
 
 function inboxClient(base: string) {
@@ -69,7 +71,8 @@ export async function armCheckback(input: ArmCheckbackInput): Promise<ArmCheckba
 
   try {
     const json = await inboxClient(input.inboxBase).post("patience", { json: payload }).json();
-    return { ok: true, response: json };
+    const entryId = (json as { entry?: { id?: string } } | undefined)?.entry?.id;
+    return { ok: true, response: json, id: entryId };
   } catch (e) {
     const err = e as { response?: Response; message?: string };
     if (err.response) {

@@ -17,6 +17,7 @@ import {
   isGlobalSlug,
   formatRoomCommsCheckback,
   unseenSummaryForAgent,
+  roomMessageToJson,
 } from "@seat-mesh/core";
 import {
   fanOutRoomMessage,
@@ -95,7 +96,7 @@ async function runSay(
   } else if (result.checkback && !result.checkback.ok) {
     console.log(`checkback: failed (${result.checkback.reason ?? "?"})`);
   } else if (result.checkback?.ok) {
-    console.log("checkback: armed");
+    console.log(result.checkback.id ? `checkback: armed cb=${result.checkback.id}` : "checkback: armed");
     const expect = `chat-room:${slug} peer update (${result.message.kind})`;
     const hint = formatRoomCommsCheckback(expect, {
       role: w.role,
@@ -289,19 +290,32 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
     .option("-r, --room <slug>", "room slug (default: global)")
     .option("-n, --lines <n>", "line count", "50")
     .option("--no-read", "do not mark messages read")
+    .option("--truncate <n>", "truncate body to N chars (default: full)")
+    .option("--json", "output as a JSON array (id/ts/from/kind/pane/body — same shape as `room get --json`)")
     .action(async (opts) => {
       const loaded = getLoaded();
       const cfg = chatRoomConfigForLoaded(loaded);
       const slug = resolveRoomSlug(cfg, opts.room);
       const agentId = resolveFrom(loaded);
       const unseenBefore = unseenSummaryForAgent(loaded.workspace, cfg, slug, agentId);
-      if (unseenBefore > 0) {
+      if (unseenBefore > 0 && !opts.json) {
         console.log(`unseen: ${unseenBefore}`);
       }
       const n = Number.parseInt(String(opts.lines), 10) || 50;
       const lines = await tailRoom(loaded.workspace, cfg, slug, n);
-      for (const row of lines) {
-        console.log(`${row.ts}\t${row.id.slice(0, 8)}\t${row.from}\t${row.kind}\t${row.body}`);
+      if (opts.json) {
+        console.log(JSON.stringify(lines.map(roomMessageToJson), null, 2));
+      } else {
+        const truncateAt = opts.truncate ? Number.parseInt(String(opts.truncate), 10) : undefined;
+        for (const row of lines) {
+          const body =
+            truncateAt && truncateAt > 0 && row.body.length > truncateAt
+              ? `${row.body.slice(0, truncateAt)}…`
+              : row.body;
+          console.log(
+            `${row.ts}\t${row.id.slice(0, 8)}\t${row.pane ?? "-"}\t${row.from}\t${row.kind}\t${body}`,
+          );
+        }
       }
       if (opts.read !== false) {
         markRoomRead(loaded.workspace, cfg, slug, agentId);
@@ -313,6 +327,7 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
     .description("Look up one room message by id (full or 8-char prefix, from `room tail`)")
     .argument("<id>", "message id or 8-char prefix")
     .option("-r, --room <slug>", "room slug (default: global)")
+    .option("--json", "output as JSON (id/ts/from/kind/pane/body — same shape as `room tail --json`)")
     .action(async (id: string, opts) => {
       const loaded = getLoaded();
       const cfg = chatRoomConfigForLoaded(loaded);
@@ -323,7 +338,11 @@ export function buildRoomCommands(getLoaded: () => LoadedProfile): Command {
         console.error(`room get: no message ${id} in room=${slug}`);
         process.exit(1);
       }
-      console.log(`${row.ts}\t${row.id}\t${row.from}\t${row.kind}\t${row.body}`);
+      if (opts.json) {
+        console.log(JSON.stringify(roomMessageToJson(row), null, 2));
+      } else {
+        console.log(`${row.ts}\t${row.id}\t${row.pane ?? "-"}\t${row.from}\t${row.kind}\t${row.body}`);
+      }
     });
 
   return room;

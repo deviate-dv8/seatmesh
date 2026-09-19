@@ -31,6 +31,8 @@ export interface ChatRoomConfig {
   checkbackCallPendingRenew: string;
   checkbackMaxFires: number;
   thinNotifyMinMs: number;
+  /** Same sender + same body within this window is not re-appended/re-fanned-out. 0 disables. */
+  dedupeWindowMs: number;
   inboxBase: string;
 }
 
@@ -51,6 +53,10 @@ export function chatRoomConfig(profile: MeshProfile): ChatRoomConfig {
         : 3,
     thinNotifyMinMs:
       thinSec != null && thinSec >= 30 ? thinSec * 1000 : 5 * 60 * 1000,
+    dedupeWindowMs: (() => {
+      const sec = parseDurationToSeconds(cr?.dedupe?.window ?? "20s");
+      return sec != null && sec >= 0 ? sec * 1000 : 20_000;
+    })(),
     inboxBase: `http://127.0.0.1:${profile.daemon?.port ?? 31670}`,
   };
 }
@@ -196,11 +202,15 @@ export interface SayOptions {
   senderPane?: string;
   ownerMini?: string | number | null;
   ownerSlot?: string | number | null;
+  /** Bypass the dedupe window (e.g. an explicit retry the caller knows is intentional). */
+  skipDedupe?: boolean;
 }
 
 export interface SayResult {
   message: RoomMessage;
-  checkback?: { ok: boolean; skipped?: boolean; reason?: string };
+  checkback?: { ok: boolean; skipped?: boolean; reason?: string; id?: string };
+  /** True when this returned an existing message instead of appending a new one (dedupe window). */
+  deduped?: boolean;
 }
 
 export async function sayInRoom(
@@ -222,6 +232,20 @@ export async function sayInRoom(
   const kind = opts.kind ?? inferKind(body);
   const expectReply = opts.expectReply ?? looksLikeExpectsReply(body);
   const ts = new Date().toISOString();
+  const normalizedBody = normalizeBody(body, kind);
+
+  if (opts.skipDedupe !== true && cfg.dedupeWindowMs > 0) {
+    const recent = await readJsonlTail(roomLogPath(dir), 20, parseRoomRow);
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const prior = recent[i]!;
+      if (prior.from !== from) continue;
+      const withinWindow = Date.now() - new Date(prior.ts).getTime() <= cfg.dedupeWindowMs;
+      if (withinWindow && stripTsStamp(prior.body) === normalizedBody) {
+        return { message: prior, deduped: true };
+      }
+      break; // only the sender's most recent line counts — older repeats are not dedupe candidates
+    }
+  }
 
   const message: RoomMessage = RoomMessageSchema.parse({
     id: randomUUID(),
@@ -327,6 +351,20 @@ export async function readRoom(
   return readJsonlAll(file, parseRoomRow);
 }
 
+export interface RoomMessageJson {
+  ts: string;
+  id: string;
+  from: string;
+  kind: RoomMessageKind;
+  pane?: string;
+  body: string;
+}
+
+/** Shared JSON row shape for `room tail --json` and `room get --json` — keep in sync. */
+export function roomMessageToJson(row: RoomMessage): RoomMessageJson {
+  return { ts: row.ts, id: row.id, from: row.from, kind: row.kind, pane: row.pane, body: row.body };
+}
+
 export function listRooms(workspace: string, cfg: ChatRoomConfig): string[] {
   const root = resolveFromWorkspace(workspace, cfg.root);
   if (!fs.existsSync(root)) return [];
@@ -363,6 +401,11 @@ export function stampActionableBody(ts: string, body: string, kind: RoomMessageK
   if (/\[@\d{4}-\d{2}-\d{2}T/.test(body)) return body;
   const compact = ts.replace(/\.\d{3}Z$/, "Z");
   return `${body} [@${compact}]`;
+}
+
+/** Undo stampActionableBody's trailing [@ts] — for dedupe comparison, not display. */
+function stripTsStamp(body: string): string {
+  return body.replace(/\s\[@\d{4}-\d{2}-\d{2}T[\d:.]+Z\]$/, "");
 }
 
 /** Human-assistant phrasing often implies a reply that never comes from peer agents. */

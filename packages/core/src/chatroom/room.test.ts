@@ -11,6 +11,7 @@ import {
   looksLikeExpectsReply,
   ensureGlobalRoom,
   stampActionableBody,
+  roomMessageToJson,
   type ChatRoomConfig,
 } from "./room.js";
 import {
@@ -60,6 +61,7 @@ const testChatCfg: ChatRoomConfig = {
   checkbackCallPendingRenew: "1m",
   checkbackMaxFires: 3,
   thinNotifyMinMs: 5 * 60 * 1000,
+  dedupeWindowMs: 20_000,
   inboxBase: "http://127.0.0.1:1",
 };
 
@@ -287,5 +289,67 @@ describe("room file ops", () => {
     expect(lines[0].from).toBe("mini-4");
     expect(lines[0].kind).toBe("claim");
     expect(lines[0].body).toContain("CLAIMED:");
+  });
+
+  it("dedupes same sender + same body within the window", async () => {
+    createRoom({ workspace, cfg, slug: "dedupe-1", createdBy: "mini-1" });
+    const first = await sayInRoom(workspace, cfg, "dedupe-1", "mini-2", "DONE: fixed the thing", {
+      armCheckback: false,
+    });
+    expect(first.deduped).toBeUndefined();
+    const second = await sayInRoom(workspace, cfg, "dedupe-1", "mini-2", "DONE: fixed the thing", {
+      armCheckback: false,
+    });
+    expect(second.deduped).toBe(true);
+    expect(second.message.id).toBe(first.message.id);
+    const lines = await tailRoom(workspace, cfg, "dedupe-1", 10);
+    expect(lines).toHaveLength(1);
+  });
+
+  it("does not dedupe a different body, a different sender, or outside the window", async () => {
+    createRoom({ workspace, cfg, slug: "dedupe-2", createdBy: "mini-1" });
+    await sayInRoom(workspace, cfg, "dedupe-2", "mini-2", "FYI: step one", { armCheckback: false });
+    await sayInRoom(workspace, cfg, "dedupe-2", "mini-2", "FYI: step two", { armCheckback: false });
+    await sayInRoom(workspace, cfg, "dedupe-2", "mini-3", "FYI: step two", { armCheckback: false });
+    const zeroWindowCfg = { ...cfg, dedupeWindowMs: 0 };
+    await sayInRoom(workspace, zeroWindowCfg, "dedupe-2", "mini-2", "FYI: step two", {
+      armCheckback: false,
+    });
+    const lines = await tailRoom(workspace, cfg, "dedupe-2", 10);
+    expect(lines).toHaveLength(4);
+  });
+
+  it("skipDedupe bypasses the window", async () => {
+    createRoom({ workspace, cfg, slug: "dedupe-3", createdBy: "mini-1" });
+    await sayInRoom(workspace, cfg, "dedupe-3", "mini-2", "FYI: same line", { armCheckback: false });
+    const second = await sayInRoom(workspace, cfg, "dedupe-3", "mini-2", "FYI: same line", {
+      armCheckback: false,
+      skipDedupe: true,
+    });
+    expect(second.deduped).toBeUndefined();
+    const lines = await tailRoom(workspace, cfg, "dedupe-3", 10);
+    expect(lines).toHaveLength(2);
+  });
+});
+
+describe("roomMessageToJson", () => {
+  it("shapes ts/id/from/kind/pane/body for room tail --json and room get --json", () => {
+    const shaped = roomMessageToJson({
+      id: "11111111-1111-1111-1111-111111111111",
+      ts: "2026-09-19T00:00:00.000Z",
+      from: "mini-2",
+      kind: "done",
+      body: "DONE: thing",
+      pane: "%4",
+      expectReply: false,
+    });
+    expect(shaped).toEqual({
+      ts: "2026-09-19T00:00:00.000Z",
+      id: "11111111-1111-1111-1111-111111111111",
+      from: "mini-2",
+      kind: "done",
+      pane: "%4",
+      body: "DONE: thing",
+    });
   });
 });
