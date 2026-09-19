@@ -48,8 +48,11 @@ Needs a real `AgentProvider` — `kindBase()` for the kind resolver, plus `detec
 `composerState`/`injectPlan`/`sessionId` so the daemon can actually drive the pane.
 Today (before P6.1 lands) that means a file in `packages/providers/src/` and a line
 in `builtin.ts` — a real change to seatmesh itself, not something a consumer project
-can drop in on its own yet. Once P6.1 (`.sm/providers/` drop-in loader) ships, the
-same file drops into a project's `.sm/providers/kimi.js` instead — true "no fork."
+can drop in on its own yet. Once P6.1 (`.sm/providers/` drop-in loader — design in
+[HANDOUT-PROVIDERS-DROPIN.md](HANDOUT-PROVIDERS-DROPIN.md)) ships, the same file
+drops into a project's `.sm/providers/kimi.mjs` instead for inject — you'd still
+also keep the Path 1 `agents.kinds` yaml stanza above for launch, at least in that
+design's first phase.
 
 Smallest real provider, modeled on `packages/providers/src/kiro.ts` (same shape —
 single-turn CLI, UUID-style resume id, no special composer chrome to parse):
