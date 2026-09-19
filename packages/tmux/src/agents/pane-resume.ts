@@ -12,7 +12,6 @@ import { injectToPane, withPaneInputEnabled } from "../inject/inject.js";
 import { seatAgentEntry, seatIdFromPaneRow } from "./agents-state.js";
 import { defaultHarnessTypeForSeat, kindsForLoaded } from "./agent-launch.js";
 import { syncOpenCodePaneSession } from "./oc-session-sync.js";
-import { isOpenCodeCpeResumeCmd } from "../session/save-session.js";
 import { prepareOpenCodeForPaste, isOpenCodeHarnessType } from "./oc-stop.js";
 import { runSwitch } from "./switch.js";
 import { tmux } from "../lib/tmux-run.js";
@@ -33,19 +32,23 @@ function providerIdToHarnessType(id: string): string {
 }
 
 /** Prefer prove-kind (CPE) when mesh-agents / resumeCmd say so. */
-function resolveHarnessType(
+export function resolveHarnessType(
   loaded: LoadedProfile,
   seatId: string,
   liveType: string,
   saved: ReturnType<typeof seatAgentEntry>,
 ): string {
   const kinds = kindsForLoaded(loaded);
+  // entryWantsProxyRecovery already scans every onProxyUp kind's prove pattern
+  // against saved.resume_cmd (kinds is always resolved here — kindsForLoaded
+  // never returns undefined) — a direct type-string match is the only thing
+  // left for the fallback below to add.
   if (entryWantsProxyRecovery(saved, kinds)) {
     const byType = saved?.type ? lookupResolvedKind(kinds, saved.type) : undefined;
     if (byType?.recovery?.onProxyUp || byType?.prove) return byType.id;
     return lookupResolvedKind(kinds, "opencode-cpe")?.id ?? "opencode-cpe";
   }
-  if (saved?.type === "opencode-cpe" || isOpenCodeCpeResumeCmd(saved?.resume_cmd)) {
+  if (saved?.type === "opencode-cpe") {
     return "opencode-cpe";
   }
   if (liveType === "opencode" || liveType === "opencode-cpe") {

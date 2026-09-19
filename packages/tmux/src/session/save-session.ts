@@ -4,6 +4,7 @@ import {
   MeshAgentsSchema,
   buildKindLaunchCmd,
   entryWantsProxyRecovery,
+  resumeCmdMatchesKindProve,
   isOpenCodeKind,
   lookupResolvedKind,
   normalizeAgentKind,
@@ -96,7 +97,7 @@ function isOpenCodeFamily(type: CliType | undefined): boolean {
   return Boolean(type && isOpenCodeKind(type));
 }
 
-function isOpenCodeCpeKind(
+export function isOpenCodeCpeKind(
   type: CliType | undefined,
   preserved?: PreservedSlot,
   kinds?: Record<string, ResolvedAgentKind>,
@@ -122,11 +123,14 @@ function isOpenCodeCpeKind(
   }
   if (type === "opencode-cpe") return true;
   if (preserved?.type === "opencode-cpe") return true;
-  if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) return true;
+  // Both entryWantsProxyRecovery calls above already scan preserved.resumeCmd
+  // against every onProxyUp kind's prove pattern when kinds is available — this
+  // regex is only a fallback for callers that didn't pass kinds at all.
+  if (!kinds && preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) return true;
   return false;
 }
 
-function buildSavedResumeCmd(
+export function buildSavedResumeCmd(
   type: CliType,
   workspace: string,
   resumeId: string | null,
@@ -135,7 +139,15 @@ function buildSavedResumeCmd(
   kinds?: Record<string, ResolvedAgentKind>,
 ): string | null {
   if (type === "empty") return null;
-  if (preserved?.resumeCmd && isOpenCodeCpeResumeCmd(preserved.resumeCmd)) {
+  // This never consulted `kinds` even when the caller had it available — fixed
+  // to prefer the generic prove-pattern match (any onProxyUp kind, not just
+  // hardcoded CPE), falling back to the regex only when kinds is unavailable.
+  if (
+    preserved?.resumeCmd &&
+    (kinds
+      ? resumeCmdMatchesKindProve(preserved.resumeCmd, kinds)
+      : isOpenCodeCpeResumeCmd(preserved.resumeCmd))
+  ) {
     return injectOpenCodeSessionIntoCmd(preserved.resumeCmd, resumeId);
   }
   const custom = buildKindLaunchCmd(type, workspace, resumeId, runners, kinds);
@@ -143,7 +155,7 @@ function buildSavedResumeCmd(
   return buildAgentLaunchCmd(type, workspace, resumeId);
 }
 
-function finalizePaneState(
+export function finalizePaneState(
   workspace: string,
   live: { type: CliType; resumeId: string | null },
   preserved: PreservedSlot | undefined,
@@ -193,7 +205,7 @@ function stampOpenCodeSessionOnPane(paneId: string, resumeId: string | null): vo
   tmux(["set-option", "-p", "-t", paneId, "@mesh_oc_session", sid]);
 }
 
-function detectPaneType(
+export function detectPaneType(
   snap: NonNullable<ReturnType<typeof capturePaneSnapshot>>,
   provType: CliType,
   preserved?: PreservedSlot,
@@ -219,13 +231,23 @@ function detectPaneType(
         kinds,
       )
     ) {
-      return preserved.type && lookupResolvedKind(kinds, preserved.type)
-        ? preserved.type
-        : "opencode-cpe";
+      // Pre-existing bug found while adding test coverage for this (TODO 6.4):
+      // this used to return preserved.type whenever it resolved to *any* valid
+      // kind (e.g. plain "opencode"), even when the actual recovery match came
+      // from a *different* kind's (opencode-cpe's) prove pattern matching
+      // preserved.resumeCmd — silently losing the CPE type on a pane whose type
+      // field went stale. Only trust preserved.type when its own resolved kind
+      // is the one carrying the recovery/prove signal (same pattern already
+      // correct in pane-resume.ts's resolveHarnessType).
+      const byType = preserved.type ? lookupResolvedKind(kinds, preserved.type) : undefined;
+      return byType?.recovery?.onProxyUp || byType?.prove ? byType.id : "opencode-cpe";
     }
   }
   if (matchAny(lines, [/opencode-cpe\.sh/i])) return "opencode-cpe";
-  if (preserved?.type === "opencode-cpe" || isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
+  if (preserved?.type === "opencode-cpe") return "opencode-cpe";
+  // entryWantsProxyRecovery above already scanned preserved.resumeCmd against
+  // every onProxyUp kind's prove pattern when kinds was available.
+  if (!kinds && isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
     return "opencode-cpe";
   }
   if (matchAny(lines, [/opencode/i])) return "opencode";
@@ -444,12 +466,15 @@ export function scrapeMeshAgents(
       loaded.profile.layout?.base.cli?.secretary?.trim().toLowerCase() ?? "opencode";
     const secDefaultType: CliType =
       normalizeAgentKind(profileSecCli) === "opencode-cpe" ? "opencode-cpe" : "opencode";
-    if (!paneSid && !isOpenCodeCpeResumeCmd(preserved?.resumeCmd)) {
+    const preservedIsCpe = kinds
+      ? resumeCmdMatchesKindProve(preserved?.resumeCmd, kinds)
+      : isOpenCodeCpeResumeCmd(preserved?.resumeCmd);
+    if (!paneSid && !preservedIsCpe) {
       preserved = { ...preserved, type: secDefaultType, resumeId: null, resumeCmd: null };
     } else if (paneSid) {
       preserved = {
         ...preserved,
-        type: isOpenCodeCpeResumeCmd(preserved?.resumeCmd) ? "opencode-cpe" : secDefaultType,
+        type: preservedIsCpe ? "opencode-cpe" : secDefaultType,
         resumeId: paneSid,
       };
     }

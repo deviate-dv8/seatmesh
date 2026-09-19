@@ -122,7 +122,31 @@ prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `o
   registry adoption — `providers list/scan` etc. don't see drop-ins yet, deferred).
 - [x] **6.2** `sm kind list|show [id]` — dump resolved kinds (provider ⊎ overlay ⊎ runners) for custom-profile DX
 - [x] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list) — `switch`/`handoff`/`set <target> <cli>` and `secretary switch <cli>` tab-complete a profile's `agents.kinds` overlay ids (falls back to the builtin list outside any `.sm/`)
-- [ ] **6.4** Prune dual-path: retire `isOpenCodeCpeResumeCmd` / `buildCustomKindLaunchCmd` opencode-cpe special-case once prove-only path is sole. Not attempted autonomously: touches live CPE launch/resume logic that pia/zsign (real meshes on this host) currently run on.
+- [x] **6.4** Prune dual-path: `isOpenCodeCpeResumeCmd`'s regex fallback removed from
+  every site where the generic prove-pattern check (`resumeCmdMatchesKindProve`/
+  `entryWantsProxyRecovery`) already covers it — `resolveLaunchCmd` (agents-state.ts),
+  `resolveHarnessType` (pane-resume.ts), `isOpenCodeCpeKind`/`detectPaneType`/
+  `buildSavedResumeCmd`/secretary-preserved-type (save-session.ts). Kept as an
+  explicit fallback (`kinds ? generic : legacy`) rather than deleted outright —
+  every live call site always passes `kinds` today, but this keeps the function
+  correct if that ever changes. **Found + fixed a real pre-existing bug** while
+  adding test coverage: `detectPaneType`'s kinds-based branch returned
+  `preserved.type` whenever it resolved to *any* valid kind (e.g. plain
+  `"opencode"`), even when the actual CPE-recovery match came from a *different*
+  kind's prove pattern — silently losing the CPE type on a pane whose `type` field
+  went stale. **Deliberately left untouched**: `buildCustomKindLaunchCmd`'s
+  opencode-cpe branch (provably unreachable in every live path — `buildKindLaunchCmd`'s
+  kinds-based early return always intercepts first; only reachable via the
+  already-`@deprecated`, zero-live-callers `buildLaunchCmd`), `opencode-launch-sanitize.ts`
+  (dead code, no live callers anywhere), `opencode-cpe-atomics.ts`'s inline duplicate
+  regex (freshly proven/battle-tested atomic recovery code, redundant check costs
+  nothing at runtime since it's an OR, not worth the risk to touch for zero benefit).
+  24 new tests using real resolved kinds (`resolveKindsForProfile`, not hand-typed
+  fixtures) across `save-session.test.ts`/`pane-resume.test.ts`/new
+  `agents-state.test.ts`. Verified live end-to-end too: `sm save` against a real
+  tmux session with a real opencode pane ran the full `scrapeMeshAgents` pipeline
+  through every changed function with no crash and correctly classified the plain
+  opencode pane as `opencode`, not a false-positive `opencode-cpe`.
 - [x] **6.5a** Canonical CPE kind **`opencode-cpe`**; `oc-proxy` only as normalize/aliases + thin `scripts/oc-proxy-*.sh` shims
 - [x] **6.5c** **Migration close:** `oc-proxy` in mesh.config (`providers` / `runners` / `layout.cli`) still launches CPE; 4 atomics (record→kill→revive→CONTINUE) proved
 - [ ] **6.5b** Delete `origin/oc-proxy` + retire `tools/shadow-oc-proxy.sh` / sync workflow when meshes migrated off alias keys. Not attempted autonomously: deleting a remote git branch is destructive and explicitly needs an operator's go-ahead, not an autonomous call.

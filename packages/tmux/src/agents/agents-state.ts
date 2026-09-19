@@ -190,10 +190,14 @@ export function resolveLaunchCmd(
   const kinds = loaded ? resolveKindsForProfile(loaded.profile) : undefined;
   const resumeId = entry.resume_id ?? null;
   if (entry.resume_cmd) {
-    // Keep CPE (or any prove-kind) wrapper — only refresh --session
+    // Keep CPE (or any prove-kind) wrapper — only refresh --session. Prefer the
+    // generic prove-pattern match (works for any onProxyUp kind, not just CPE);
+    // the hardcoded regex is only a fallback for the caller-omitted-loaded case
+    // (kinds undefined) — every live caller of resolveLaunchCmd passes loaded.
     if (
-      (kinds && resumeCmdMatchesKindProve(entry.resume_cmd, kinds)) ||
-      isOpenCodeCpeResumeCmd(entry.resume_cmd)
+      kinds
+        ? resumeCmdMatchesKindProve(entry.resume_cmd, kinds)
+        : isOpenCodeCpeResumeCmd(entry.resume_cmd)
     ) {
       return injectOpenCodeSessionIntoCmd(entry.resume_cmd, resumeId);
     }
