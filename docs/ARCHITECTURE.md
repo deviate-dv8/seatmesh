@@ -241,6 +241,9 @@ needs a provider module with `kindBase()`.
 
 ### Checklist: adding a new CLI family (e.g. Kimi)
 
+Worked example, both the launch-only-yaml path and the full-provider path:
+[EXAMPLE-CUSTOM-KIND-KIMI.md](EXAMPLE-CUSTOM-KIND-KIMI.md).
+
 | Step | Required work |
 |------|----------------|
 | Provider | New `AgentProvider` with `kindBase()` in `packages/providers/src/`; register in `builtin.ts` |
