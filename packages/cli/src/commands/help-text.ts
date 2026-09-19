@@ -222,7 +222,7 @@ const HELP: Record<string, string> = {
   mini prompt <N> <text> | mini done <N> PASS|FAIL: …
   mini kill|reassign|dispatch-all`,
 
-  secretary: `secretary start|status|digest|restart
+  secretary: `secretary start|stop|status|digest|restart
   secretary supervise on [10m]|run|off
   secretary switch <cli> [--keep-resume]
   Lead supervise path (secretary→manager)`,

@@ -47,7 +47,7 @@ const SUBS: Record<string, string[]> = {
   ops: ["list", "clear"],
   inbox: ["list", "resolve", "log", "instances", "stop", "restart"],
   mini: ["list", "spawn", "prompt", "done", "kill", "reassign", "dispatch-all"],
-  secretary: ["start", "status", "digest", "restart", "supervise", "switch", "watch"],
+  secretary: ["start", "stop", "status", "digest", "restart", "supervise", "switch", "watch"],
   roles: ["status", "migrate", "steps"],
   night: ["on", "off", "status"],
   ack: ["list", "reply", "clear", "redirect"],

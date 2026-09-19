@@ -1549,6 +1549,13 @@ async function main(): Promise<void> {
       secretaryLaunch(loaded);
       return;
     }
+    if (sub === "stop") {
+      const reg = createRegistryForProfile(loaded.profile);
+      runSwitch(loaded, reg, "secretary", "empty", { reason: "stop" });
+      saveMeshSession(loaded, reg);
+      console.log("OK: secretary stopped (pane -> empty shell)");
+      return;
+    }
     if (sub === "restart" || sub === "switch") {
       const reg = createRegistryForProfile(loaded.profile);
       const keepResume =

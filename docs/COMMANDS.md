@@ -873,7 +873,7 @@ seat init | seat task …
 ## secretary
 
 ```text
-secretary start|status|digest|restart
+secretary start|stop|status|digest|restart
   secretary supervise on [10m]|run|off
   secretary switch <cli> [--keep-resume]
   Lead supervise path (secretary→manager)

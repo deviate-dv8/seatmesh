@@ -63,7 +63,7 @@
 
 ## P3 — manager / secretary / minis
 
-- [ ] **3.1** `secretary start|stop|…`
+- [x] **3.1** `secretary start|stop|…` — `start`, `restart`, `switch`, `dispatch`, `collect`, `status`, `watch`, `supervise` already existed; added `stop` (switch secretary → empty, same path as `switch <target> empty`)
 - [~] **3.2** `mini list|spawn|prompt|done|dispatch-all` + `secretary dispatch` (`minis.ts`)
 - [x] **3.3** minis grid + leads from profile (`layout.minis.grid` / `max` / `leads`, `sm layout`)
 - [-] **3.4** `triage` / `board-sync` — optional thin wrapper
