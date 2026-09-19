@@ -543,6 +543,19 @@ mini list | mini spawn [--role R] <task...>
 - Agent: `seatmesh agent help mini`
 - File: [cli/mini.md](cli/mini.md)
 
+## nav
+
+```text
+nav log [-n N] [--json]
+  nav summary [-n N] [--json]
+  Navigation history — recent `peek <target>` events (which panes/seats you've
+  looked at). log = chronological, summary = grouped by target, most-recent first.
+```
+
+- Run: `seatmesh nav --help`
+- Agent: `seatmesh agent help nav`
+- File: [cli/nav.md](cli/nav.md)
+
 ## night
 
 ```text

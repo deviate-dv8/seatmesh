@@ -74,6 +74,8 @@ export interface MeshRuntimePaths {
   gateQueue: string;
   /** Directory for terminal-pool job stdout/stderr logs. */
   tpJobsDir: string;
+  /** Navigation history — appended on `peek <target>` (`sm nav log|summary`). */
+  navJsonl: string;
 }
 
 export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
@@ -104,6 +106,7 @@ export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
     miniManifest: path.join(dataRoot, "mini-manifest.json"),
     gateQueue: path.join(dataRoot, "GATE-QUEUE.md"),
     tpJobsDir: path.join(daemonDir, "tp-jobs"),
+    navJsonl: path.join(daemonDir, "NAV.jsonl"),
   };
 }
 

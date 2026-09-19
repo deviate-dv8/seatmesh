@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import type { LoadedProfile, ProviderRegistry } from "@seat-mesh/core";
+import { appendNavEntry, type LoadedProfile, type ProviderRegistry } from "@seat-mesh/core";
 import { composerFromCapture } from "@seat-mesh/providers";
 import { resolvePaneTarget } from "../lib/resolve-pane.js";
 import { capturePaneSnapshot } from "../lib/snapshot.js";
@@ -32,6 +32,13 @@ export function runPeek(
     throw new Error(resolved.error);
   }
   const { paneId, row } = resolved;
+  void appendNavEntry(loaded, {
+    actor: process.env.TMUX_PANE ? "agent" : "operator",
+    target,
+    targetPane: paneId,
+    role: row.role,
+    slot: row.slot,
+  });
 
   if (mode === "full") {
     const text = captureFull(paneId);

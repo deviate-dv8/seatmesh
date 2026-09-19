@@ -50,6 +50,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `mds` | [mds.md](mds.md) |
 | `migrate-runtime` | [migrate-runtime.md](migrate-runtime.md) |
 | `mini` | [mini.md](mini.md) |
+| `nav` | [nav.md](nav.md) |
 | `night` | [night.md](night.md) |
 | `notify` | [notify.md](notify.md) |
 | `ops` | [ops.md](ops.md) |

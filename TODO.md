@@ -68,7 +68,7 @@
 - [x] **3.3** minis grid + leads from profile (`layout.minis.grid` / `max` / `leads`, `sm layout`)
 - [-] **3.4** `triage` / `board-sync` — optional thin wrapper
 - [x] **3.5** `contexts` / `seats` — `contexts.ts` (FOCUS preview + open TASK/REMINDER counts, `--json`)
-- [ ] **3.6** `nav log|summary` — no spec beyond the name; "nav" isn't defined elsewhere in this codebase, needs scoping.
+- [x] **3.6** `nav log|summary` — navigation history for `peek <target>` (not switch/attach/pane-resume — those are provisioning, not pure navigation). `log` = chronological, `summary` = grouped by target with visit counts, most-recent first.
 - [-] **3.7** `manager-reminder`
 - [~] **3.8** `proxy` — status/check only
 

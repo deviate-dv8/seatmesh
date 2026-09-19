@@ -416,6 +416,11 @@ const HELP: Record<string, string> = {
   Also: notify info|md "<title>" --md <file>  (same publish, toast+card)
   Docs: https://mdview.io/agents · API POST https://mdview.io/api/public/publish`,
 
+  nav: `nav log [-n N] [--json]
+  nav summary [-n N] [--json]
+  Navigation history — recent \`peek <target>\` events (which panes/seats you've
+  looked at). log = chronological, summary = grouped by target, most-recent first.`,
+
   schedule: `schedule <target> "<msg...>" --at <time>
   Delayed one-shot peer — queues now, held out of drain until --at passes
   (ISO time or relative duration: 10m, 2h, 1d). Fire-and-forget: no ACK
