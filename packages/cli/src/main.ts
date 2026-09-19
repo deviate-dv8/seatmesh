@@ -138,8 +138,9 @@ import {
   runSeatInit,
   applyAgentContractBundle,
   balanceLeadCommand,
+  kindsForLoaded,
 } from "@seat-mesh/tmux";
-import { parseAgentApplyArgs } from "@seat-mesh/core";
+import { parseAgentApplyArgs, lookupResolvedKind } from "@seat-mesh/core";
 import { buildChatCommands } from "./commands/chat-cli.js";
 import { buildCheckbackCommands } from "./commands/checkback-cli.js";
 import { buildTargetCommands } from "./commands/target-cli.js";
@@ -1676,6 +1677,39 @@ async function main(): Promise<void> {
       console.error((e as Error).message);
       process.exit(1);
     }
+    return;
+  }
+
+  if (cmd === "kind" && (sub === "list" || sub === "show")) {
+    const loaded = meshLoaded(profileArg);
+    const kinds = kindsForLoaded(loaded);
+    if (sub === "list") {
+      for (const id of Object.keys(kinds).sort()) {
+        const k = kinds[id]!;
+        const launch =
+          k.launch === undefined
+            ? "default"
+            : k.launch === null
+              ? "empty"
+              : "builtin" in k.launch
+                ? `builtin:${k.launch.builtin}`
+                : `script:${k.launch.command}`;
+        const aliases = k.aliases?.length ? ` aliases=${k.aliases.join(",")}` : "";
+        console.log(`${id}\tprovider=${k.provider}\tlaunch=${launch}${aliases}`);
+      }
+      return;
+    }
+    const id = tail[0];
+    if (!id) {
+      console.error("usage: kind show <id>");
+      process.exit(2);
+    }
+    const found = lookupResolvedKind(kinds, id);
+    if (!found) {
+      console.error(`kind show: unknown kind "${id}" (see: seatmesh kind list)`);
+      process.exit(1);
+    }
+    console.log(JSON.stringify(found, null, 2));
     return;
   }
 

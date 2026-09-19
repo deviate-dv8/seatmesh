@@ -1,8 +1,10 @@
 # seatmesh kind
 
 ```text
-kind <target>
-  Agent CLI vs plain terminal. Aliases: what, typeof
+kind <target>  |  kind list  |  kind show <id>
+  <target>: agent CLI vs plain terminal (aliases: what, typeof)
+  list/show: dump resolved agent kinds (provider kindBase ⋂ agents.kinds overlay
+  ⋂ runners shim, extends flattened) — DX for custom-profile kinds
 ```
 
 - CLI: `seatmesh kind --help`

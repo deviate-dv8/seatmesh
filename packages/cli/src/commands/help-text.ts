@@ -185,8 +185,10 @@ const HELP: Record<string, string> = {
   peek: `peek <target> status|full
   Live pane snapshot / scrollback (manager|slot-N|mini-N|here)`,
 
-  kind: `kind <target>
-  Agent CLI vs plain terminal. Aliases: what, typeof`,
+  kind: `kind <target>  |  kind list  |  kind show <id>
+  <target>: agent CLI vs plain terminal (aliases: what, typeof)
+  list/show: dump resolved agent kinds (provider kindBase ⋂ agents.kinds overlay
+  ⋂ runners shim, extends flattened) — DX for custom-profile kinds`,
 
   inbox: `inbox [--json] [--wait N] [--meta]
   inbox list|resolve|log|instances|stop|restart

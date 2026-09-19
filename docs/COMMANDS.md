@@ -438,8 +438,10 @@ kill <target|1..4|slot-N|mini-N|here>
 ## kind
 
 ```text
-kind <target>
-  Agent CLI vs plain terminal. Aliases: what, typeof
+kind <target>  |  kind list  |  kind show <id>
+  <target>: agent CLI vs plain terminal (aliases: what, typeof)
+  list/show: dump resolved agent kinds (provider kindBase ⋂ agents.kinds overlay
+  ⋂ runners shim, extends flattened) — DX for custom-profile kinds
 ```
 
 - Run: `seatmesh kind --help`
