@@ -55,7 +55,7 @@
 - [~] **2.3** peer comms — `sm to-slot` / `to-mini` enqueue `PEER.jsonl`; room/chat ledger separate
 - [x] **2.4** `checkback` — `start|list|cancel|reset|ack` (`patience` alias) + auto-start on down via `ensureMeshInbox`
 - [x] **2.5** `schedule` — `sm schedule <target> "<msg...>" --at <time>`, delayed one-shot peer (ISO time or relative duration). Queues via the normal `/to-peer` path but held out of drain (`PeerRow.notBefore`) until due; no ACK opens until actually delivered (fire-and-forget by design).
-- [ ] **2.6** `dc-feedback` — no spec beyond the name; unclear if this relates to the `dc-agent` project in the session registry or something else.
+- [ ] **2.6** `dc-feedback` — operator's own call (2026-09-19): leave in the backlog, not now.
 
 **Hard rule:** only daemon calls `inject.ts`.
 
