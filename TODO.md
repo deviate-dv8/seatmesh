@@ -167,8 +167,21 @@ without reinventing Herdr's agent-status surface.
   `ensureMeshInbox` — existing meshes unaffected unless opted in. Landed 2026-09-19.
 - [ ] **7.2** Prove phase 1 under real multi-day load on this box (seatmesh/pia/zsign/
   dc-agent), including HMR-restart and health-rescue paths, before defaulting to it.
-- [ ] **7.3** Default `ensureMeshInbox`/`seatmesh start`/`engine` to the host supervisor
-  when `host up` is already running; retire the per-mesh auto-spawn path.
+- [~] **7.3** Default `ensureMeshInbox`/`seatmesh start`/`engine` to the host supervisor
+  when `host up` is already running; retire the per-mesh auto-spawn path. **The
+  "prefer" half is already true today, verified 2026-09-19 — no new code needed**:
+  `ensureMeshInbox` already returns early once a mesh's daemon answers healthy
+  regardless of who spawned it, and `mesh-inbox-watcher`'s spawn pre-check already
+  detects+skips when something's already serving (both proven in the phase-1 work).
+  Live-tested the exact case: registered a mesh, ran `host up` *first* (so the host
+  supervisor spawned its daemon), then ran the normal per-mesh `inbox status` path
+  for that same mesh — the meta file's `supervisorPid` correctly showed the host
+  supervisor's pid, zero stray per-mesh `mesh-inbox-supervisor.js` process, exactly
+  one daemon. **Not done, and deliberately not attempted**: "retire the per-mesh
+  auto-spawn path" — actually deleting that fallback code. 7.2 (prove phase 1 under
+  real multi-day load) hasn't happened yet, and removing the fallback now would
+  strip pia/zsign's safety net before that's proven — exactly the sequencing 7.2's
+  own text already calls for ("before defaulting to it").
 - [ ] **7.4** Phase 2 — collapse N `mesh-inbox-server` child processes into N in-process
   listeners inside one process (per-mesh queue isolation preserved, one Node process
   total). Bigger: shared HTTP server dispatch by port/session, one event loop.
