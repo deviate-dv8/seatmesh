@@ -99,7 +99,7 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 - [x] **5.8** `preview` — `sm preview <file...> [--set <days>] [--notify]` wrapping publish-mdview.sh (P2-3)
 - [ ] **5.9** `worktree` — `sm worktree new|rm|backlog <slug>` wrapping the three scripts (P2-4)
 - [x] **5.10** `room say` dedupe window + `cb=<id>` output; `room tail` id/pane/truncate + `--json`; `room get <id>` (P3-1/P3-2)
-- [ ] **5.11** `chat put|get` — positional upsert + id/turnHash lookup (P3-3)
+- [x] **5.11** `chat put|get` — positional upsert + id/turnHash lookup (P3-3)
 - [ ] **5.12** base layer `pane-meta|panes|capture|inject|interrupt|restart` — surface tmux primitives as verbs (P4-2)
 
 ---

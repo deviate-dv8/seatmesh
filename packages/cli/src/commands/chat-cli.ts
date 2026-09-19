@@ -146,6 +146,73 @@ export function buildChatCommands(getLoaded: () => LoadedProfile): Command {
     );
 
   chat
+    .command("put")
+    .description("Positional upsert — same as `chat append --human` (dedup by turnHash)")
+    .argument("<slot>", "worker-1, mini-3, manager, ...")
+    .argument("<human...>", "human prompt text")
+    .option("--response <text>", "agent response")
+    .option("--session <id>")
+    .option("--model <name>")
+    .option("--provider <id>", "default: unknown")
+    .action(
+      async (
+        slot: string,
+        humanParts: string[],
+        opts: { response?: string; session?: string; model?: string; provider?: string },
+      ) => {
+        const loaded = getLoaded();
+        const cfg = chatFileConfigForLoaded(loaded);
+        const human = humanParts.join(" ").trim();
+        if (!human) {
+          console.error("chat put: human prompt required");
+          process.exit(2);
+        }
+        const row = await appendSlotPrompt(loaded.workspace, cfg, {
+          slot,
+          providerId: opts.provider ?? "unknown",
+          sessionId: opts.session,
+          model: opts.model,
+          humanPrompt: human,
+          agentResponse: opts.response,
+        });
+        console.log(
+          `ok id=${row.id} slot=${row.slot} agent=${row.agent} turnHash=${row.turnHash}`,
+        );
+      },
+    );
+
+  chat
+    .command("get")
+    .description("Look up one chat record by id or turnHash (full or 8-char prefix)")
+    .argument("<id>", "record id or turnHash, full or 8-char prefix")
+    .option("--slot <key>", "search only this slot (default: all slots)")
+    .option("--json", "JSON output")
+    .action(async (id: string, opts: { slot?: string; json?: boolean }) => {
+      const loaded = getLoaded();
+      const cfg = chatFileConfigForLoaded(loaded);
+      const rows = await querySlotPrompts(loaded.workspace, cfg, {
+        slot: opts.slot,
+        limit: Number.MAX_SAFE_INTEGER,
+      });
+      const row = rows.find(
+        (r) =>
+          r.id === id ||
+          r.id.startsWith(id) ||
+          r.turnHash === id ||
+          Boolean(r.turnHash?.startsWith(id)),
+      );
+      if (!row) {
+        console.error(`chat get: no record ${id}${opts.slot ? ` in slot=${opts.slot}` : ""}`);
+        process.exit(1);
+      }
+      if (opts.json) {
+        console.log(JSON.stringify(row, null, 2));
+      } else {
+        console.log(formatChatTranscript(row));
+      }
+    });
+
+  chat
     .command("record")
     .description("Scrape pane(s) via AgentProvider and append new turns")
     .option("--pane <id>", "single tmux pane")

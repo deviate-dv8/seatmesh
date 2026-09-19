@@ -2,9 +2,10 @@
 
 ```text
 chat tail [--slot key] [--lines N] [--json]
-  chat query […] — history of prompt/response CHAT.jsonl (read-only ledger)
-  Not a live group chat. Live A2A = room say/tail · peer ask/msg
-  append|record = engine/session writers — agents rarely need these
+  chat query [--slot|--session|--model|--since|--limit] [--json]
+  chat put <slot> "<human>" [--response "<text>"]  (positional upsert, dedupe by turnHash)
+  chat get <id> [--slot key] [--json]  (id or turnHash, full or 8-char prefix)
+  chat append|record  — per-slot prompt/response CHAT.jsonl
 ```
 
 - CLI: `seatmesh chat --help`
