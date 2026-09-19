@@ -1,10 +1,23 @@
 import { spawnSync } from 'node:child_process'
-import { readGlobalRegistry, type GlobalSessionEntry } from '@seat-mesh/core'
+import {
+  hostSupervisorSessionsByProfilePath,
+  readGlobalRegistry,
+  readHostSupervisorMeta,
+  type GlobalSessionEntry,
+} from '@seat-mesh/core'
 
 export type HubSession = GlobalSessionEntry & {
   tmuxLive: boolean
   daemonUp: boolean | null
   health: DaemonHealth | null
+  /**
+   * TODO 7.5 (partial — backend only, no UI wired up yet): true when this
+   * session's daemon is managed by the opt-in `seatmesh host` supervisor
+   * (TODO 7.1) instead of its own per-mesh supervisor. Informational only —
+   * does not change daemonUp/health, which still come from /health same as
+   * before either way.
+   */
+  viaHostSupervisor: boolean
 }
 
 export type DaemonHealth = {
@@ -141,9 +154,12 @@ export async function listHubSessions(opts: ListHubSessionsOpts = {}): Promise<H
   const probe = opts.probe !== false
   const reg = readGlobalRegistry()
   const wantId = opts.probeSessionId?.trim()
+  // Cheap (one small local file, no network) — safe to read on every call.
+  const hostSupervisorSessions = hostSupervisorSessionsByProfilePath(readHostSupervisorMeta())
 
   const rows = await Promise.all(
     reg.sessions.map(async (s) => {
+      const viaHostSupervisor = hostSupervisorSessions.has(s.profilePath)
       const tmuxLive = tmuxHasSession(s.sessionName)
       let daemonUp: boolean | null = null
       let health: DaemonHealth | null = null
@@ -161,7 +177,7 @@ export async function listHubSessions(opts: ListHubSessionsOpts = {}): Promise<H
           daemonUp = cached?.ok === true
         }
       }
-      return { ...s, tmuxLive, daemonUp, health }
+      return { ...s, tmuxLive, daemonUp, health, viaHostSupervisor }
     })
   )
   return rows

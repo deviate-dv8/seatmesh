@@ -10,20 +10,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { globalConfigDir, resolveDaemonScript } from "@seat-mesh/core";
-
-interface HostMeta {
-  hostSupervisorPid: number;
-  startedAt: string;
-  rescanMs: number;
-  sessions: Array<{ profilePath: string; session: string; port: number; pid?: number }>;
-}
+import {
+  globalConfigDir,
+  hostSupervisorMetaPath,
+  readHostSupervisorMeta,
+  resolveDaemonScript,
+  type HostSupervisorMeta,
+} from "@seat-mesh/core";
 
 function hostStateDir(): string {
   return globalConfigDir();
 }
 function metaPath(): string {
-  return path.join(hostStateDir(), "host-supervisor.json");
+  return hostSupervisorMetaPath();
 }
 function stopPath(): string {
   return path.join(hostStateDir(), "host-supervisor.stop");
@@ -32,12 +31,8 @@ function logPath(): string {
   return path.join(hostStateDir(), "host-supervisor.log");
 }
 
-function readMeta(): HostMeta | null {
-  try {
-    return JSON.parse(fs.readFileSync(metaPath(), "utf8")) as HostMeta;
-  } catch {
-    return null;
-  }
+function readMeta(): HostSupervisorMeta | null {
+  return readHostSupervisorMeta();
 }
 
 function pidAlive(pid: number | undefined): boolean {

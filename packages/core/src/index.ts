@@ -45,6 +45,7 @@ export * from "./runtime/global-registry.js";
 export * from "./runtime/hub-url.js";
 export * from "./runtime/notification-ledger.js";
 export * from "./runtime/nav-log.js";
+export * from "./runtime/host-supervisor-meta.js";
 export * from "./messages/mesh-copy.js";
 export * from "./messages/mesh-inject-text.js";
 export * from "./messages/mesh-inbox-intent.js";

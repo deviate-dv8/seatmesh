@@ -185,8 +185,23 @@ without reinventing Herdr's agent-status surface.
 - [ ] **7.4** Phase 2 — collapse N `mesh-inbox-server` child processes into N in-process
   listeners inside one process (per-mesh queue isolation preserved, one Node process
   total). Bigger: shared HTTP server dispatch by port/session, one event loop.
-- [ ] **7.5** `seatmesh host` status surfaced in the operator hub (:3190) instead of
-  per-mesh `/health` polling from the picker.
+- [~] **7.5** `seatmesh host` status surfaced in the operator hub (:3190) instead of
+  per-mesh `/health` polling from the picker. **Backend only, landed 2026-09-19**:
+  new shared `readHostSupervisorMeta()`/`hostSupervisorSessionsByProfilePath()` in
+  `@seat-mesh/core` (was duplicated as a local `interface HostMeta` in both the
+  writer and the CLI reader — now one source of truth for a third reader too).
+  `listHubSessions()` (`packages/web`) gets an additive `viaHostSupervisor: boolean`
+  field per session — does not replace or change the existing `/health` polling,
+  which still populates `daemonUp`/`health` exactly as before. Wired one level up
+  into `mesh_sessions_controller.ts`'s Inertia props too. **Not done**: no Vue
+  template treatment (`sessions/index.vue`) — `packages/web` has its own test
+  runner (AdonisJS/Japa, not vitest, not in this repo's CI gates) and needs an
+  actual browser to verify UI changes render correctly, which wasn't available
+  this session. Verified everything that *could* be verified without one: `tsc
+  --noEmit` on `@seat-mesh/web` shows zero new errors (same pre-existing,
+  unrelated error set as before — auth/tasks typing gaps that predate this),
+  and a live `seatmesh host up/down/status` smoke test confirms the refactor
+  didn't break the CLI surface the shared utility now backs.
 - [ ] **7.6** Daemon diagnosability. Distinct from 7.1-7.5 (which consolidate *how many*
   daemon processes run) — this is *when one breaks, why*. Today the only lever is
   "restart the daemon," never "here's what actually failed." Add structured crash/

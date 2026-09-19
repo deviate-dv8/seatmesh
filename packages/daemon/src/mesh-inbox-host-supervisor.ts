@@ -15,8 +15,10 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   globalConfigDir,
+  hostSupervisorMetaPath,
   loadProfile,
   readGlobalRegistry,
+  type HostSupervisorMeta,
   type LoadedProfile,
 } from "@seat-mesh/core";
 import { createMeshWatcher, type MeshWatcher } from "./mesh-inbox-watcher.js";
@@ -28,7 +30,7 @@ function hostStateDir(): string {
   return globalConfigDir();
 }
 function metaPath(): string {
-  return path.join(hostStateDir(), "host-supervisor.json");
+  return hostSupervisorMetaPath();
 }
 function stopPath(): string {
   return path.join(hostStateDir(), "host-supervisor.stop");
@@ -47,13 +49,6 @@ function log(msg: string): void {
   console.error(`mesh-inbox-host-supervisor: ${msg}`);
 }
 
-interface HostMeta {
-  hostSupervisorPid: number;
-  startedAt: string;
-  rescanMs: number;
-  sessions: Array<{ profilePath: string; session: string; port: number; pid?: number }>;
-}
-
 async function main(): Promise<void> {
   const startedAt = new Date().toISOString();
   const watchers = new Map<string, MeshWatcher>();
@@ -66,7 +61,7 @@ async function main(): Promise<void> {
   }
 
   const writeMeta = () => {
-    const meta: HostMeta = {
+    const meta: HostSupervisorMeta = {
       hostSupervisorPid: process.pid,
       startedAt,
       rescanMs: RESCAN_MS,

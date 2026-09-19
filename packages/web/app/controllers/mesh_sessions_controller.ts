@@ -13,6 +13,9 @@ export default class MeshSessionsController {
         daemonPort: s.daemonPort,
         tmuxLive: s.tmuxLive,
         daemonUp: s.daemonUp,
+        // TODO 7.5 (backend only) — surfaces which sessions the opt-in `seatmesh
+        // host` supervisor manages. No UI treatment for this yet in sessions/index.vue.
+        viaHostSupervisor: s.viaHostSupervisor,
         tasksOpen: s.tasks?.open ?? s.health?.tasksOpen ?? null,
         tasksDone: s.tasks?.done ?? s.health?.tasksDone ?? null,
         notifySent: s.health?.notifySent ?? null,
