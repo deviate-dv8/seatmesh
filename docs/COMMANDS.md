@@ -153,6 +153,17 @@ base ensure|realign
 - Agent: `seatmesh agent help base`
 - File: [cli/base.md](cli/base.md)
 
+## capture
+
+```text
+capture [target] [--lines N] [--ansi] [--json]
+  Read-only pane scrollback dump (default: here, last 80 lines)
+```
+
+- Run: `seatmesh capture --help`
+- Agent: `seatmesh agent help capture`
+- File: [cli/capture.md](cli/capture.md)
+
 ## cb
 
 ```text

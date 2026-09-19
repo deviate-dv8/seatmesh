@@ -463,6 +463,9 @@ const HELP: Record<string, string> = {
   "pane-meta": `pane-meta <target>
   Raw @mesh_* pane metadata`,
 
+  capture: `capture [target] [--lines N] [--ansi] [--json]
+  Read-only pane scrollback dump (default: here, last 80 lines)`,
+
   ppa: `ppa [--raw] [--idle SEC]
   Who is slacking? Idle ≥ppa.idleSlackSec (default 120) with open TASKS / BUSY|BLOCKED mark.
   Default = slack verdict. --raw = telemetry table (old perf-index).

@@ -47,6 +47,7 @@ export * from "./roles/contexts.js";
 export * from "./roles/peek.js";
 export * from "./roles/pane-kind.js";
 export * from "./roles/pane-meta-cli.js";
+export * from "./roles/pane-capture-cli.js";
 export * from "./roles/slot-advice.js";
 export * from "./roles/ppa.js";
 export * from "./session/reload.js";

@@ -116,6 +116,7 @@ import {
   runPeek,
   runPaneKind,
   runPaneMeta,
+  runPaneCapture,
   runPpa,
   runToSlot,
   runToMini,
@@ -1741,6 +1742,17 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     try {
       runPaneMeta(loaded, [sub, ...tail].filter((a): a is string => Boolean(a)));
+    } catch (e) {
+      console.error((e as Error).message);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (cmd === "capture") {
+    const loaded = meshLoaded(profileArg);
+    try {
+      runPaneCapture(loaded, [sub, ...tail].filter((a): a is string => Boolean(a)));
     } catch (e) {
       console.error((e as Error).message);
       process.exit(1);
