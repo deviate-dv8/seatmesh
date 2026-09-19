@@ -168,6 +168,7 @@ export function createMeshWatcher(loaded: LoadedProfile, opts: MeshWatcherOption
   let restarts = 0;
   let healthMisses = 0;
   let lastBundleMtime = fs.existsSync(serverJs) ? fs.statSync(serverJs).mtimeMs : 0;
+  let lastAdoptedLogAt = 0;
   let logFd: number | null = null;
   const startedAt = new Date().toISOString();
   const timers: NodeJS.Timeout[] = [];
@@ -231,6 +232,25 @@ export function createMeshWatcher(loaded: LoadedProfile, opts: MeshWatcherOption
     }
     spawning = true;
     try {
+      // Fast pre-check: something is already serving here — the common case during
+      // the opt-in transition is a mesh already spawned the normal way (ensureMeshInbox)
+      // before the host supervisor picked it up. Don't duplicate, and don't burn a
+      // 10s poll loop + log spam every ~3s retry — recognize it and back off quietly.
+      const quick = await fetchHealth(port, 1500);
+      if (quick) {
+        const adopted = quick.engine === "@seat-mesh/daemon";
+        const now = Date.now();
+        if (now - lastAdoptedLogAt > 60_000) {
+          log(
+            adopted
+              ? `port already serving @seat-mesh/daemon (pid=${String(quick.pid ?? "?")}) — not spawning a duplicate, watching only`
+              : "WARN: port answered by a non-daemon process — not spawning (check for a stray listener)",
+          );
+          lastAdoptedLogAt = now;
+        }
+        return;
+      }
+
       if (logFd == null) {
         fs.mkdirSync(path.dirname(logPath), { recursive: true });
         logFd = fs.openSync(logPath, "a");
