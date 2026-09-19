@@ -207,9 +207,30 @@ without reinventing Herdr's agent-status surface.
   "restart the daemon," never "here's what actually failed." Add structured crash/
   fault visibility (which subsystem — inject/queue/checkback/notify/connectivity —
   actually broke) so operators stop papering over real bugs with restarts.
-- [ ] **7.7** Investigate whether running via a symlinked dev install (vs a real npx/
-  npm-published install) is actually implicated in reported daemon crashes. Operator's
-  own words: unconfirmed theory ("idk"), worth checking before assuming.
+- [x] **7.7** Investigate whether running via a symlinked dev install (vs a real npx/
+  npm-published install) is actually implicated in reported daemon crashes. **Checked
+  2026-09-19, evidence says no** — confirmed `sm`/`seatmesh` on this box are symlinked
+  to this checkout (`~/.local/bin/sm -> .../seatmesh/bin/sm`, via `sm install`), but
+  the actual daemon logs tell a different, much more concrete story:
+  - Both pia and this repo's own `.sm` mesh show a severe, escalating pattern of
+    health-rescue `SIGKILL` restarts (daemon wedged badly enough that `/health` missed
+    3 consecutive probes) — **pia: 735 total** (Sep 15: 169, Sep 16: 263, Sep 17: 302),
+    **this repo: 167 total** (Sep 17 alone: 96, the worst day for both).
+  - **Zero SIGKILL rescues on either mesh since ~2026-09-18T01:18Z** — 27+ hours clean
+    at time of writing, right after the last wedge event.
+  - That cutoff lines up almost exactly with commits `28bb155` (prune launch/atomics/
+    resume off `type===oc-proxy` hardcodes) through `c363df1` (oc-proxy config + 4
+    atomics close the CPE migration), landed **2026-09-17 20:59–22:18 +08:00** (the
+    evening before the wedging stopped on both meshes) — not a coincidence given how
+    cleanly it lines up on two independently-running meshes.
+  - Mechanism was almost certainly something in the pre-fix CPE/oc-proxy code blocking
+    the event loop or getting stuck (matching the health-rescue's own framing:
+    "CPU-starve / wedged loop"), not a module-resolution/symlink issue — symlinks
+    don't explain a bug that started days before this session and stopped the moment
+    the CPE migration closed. **Conclusion: this specific theory is not supported by
+    the evidence; the real cause already got fixed** (6.5a/6.5c "migration close").
+    Doesn't rule out symlinks mattering for something else, but there's no evidence
+    for it in what actually happened.
 
 ---
 
