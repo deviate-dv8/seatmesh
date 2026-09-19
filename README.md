@@ -1,97 +1,78 @@
 # seatmesh
 
-Profile-driven tmux workbench for multi-agent coordination. One session layout,
-one inbox daemon, pluggable agent CLIs (Cursor, Claude, Kiro, OpenCode), and
-enqueue-only comms so nothing stomps a live composer.
+Run several AI coding agents (Claude, Cursor, OpenCode, Kiro) side by side in one
+tmux session, and talk to them from one CLI instead of switching panes by hand.
+seatmesh lays out the panes, launches the CLIs, and routes messages between them
+through a single background daemon — so two commands never paste into the same
+pane at once.
 
-## Install and cold start
-
-### Global CLI (npm)
+## Try it
 
 ```bash
-# If your shell inherits npm_config_prefix from this repo, unset it first:
-bash scripts/global-install-seatmesh.sh          # seatmesh@latest from registry
-bash scripts/global-install-seatmesh.sh local    # git checkout packages/cli
-
-sm install                 # symlink sm + seatmesh → ~/.local/bin
-sm --help
-sm init
+cd your-project
+npx seatmesh start
 ```
 
-`better-sqlite3` is **optional** — install succeeds without a C++ toolchain; profiles
-with `storage.backend: sqlite` fall back to JSONL when the native module is missing.
-For sqlite, use Node 22 LTS and `build-essential`, or set `storage.backend: jsonl`.
+That's the whole quickstart. `start` sets up `.sm/` config the first time you run
+it, then builds the tmux session and attaches. Run it again any time — if the
+session already exists, it just attaches to it.
 
-Publish (maintainers): `bash scripts/publish-npm.sh` after `npm login`. Schedule:
-[docs/RELEASE.md](docs/RELEASE.md) (next: **2026-09-14**).
-
-Global/npx installs print an **stderr upgrade hint** when npm has a newer `seatmesh`
-(6h cache). `seatmesh update` refreshes profile vendor files — **not** the npm package;
-use `npm install -g seatmesh@latest` or `npx seatmesh@latest`.
-
-### Git checkout / monorepo
-
-The CLI entry (`bin/seatmesh`) **auto-builds on first run**: if `dist/` is missing
-or stale, it runs `npm install` and `npm run build` in the package root, then execs
-the CLI. No manual build step required for normal use.
+## Install it properly (recommended after you've tried it)
 
 ```bash
-sm install                 # prefer alias `sm` (seatmesh still works)
-sm init
-sm session up
+bash scripts/global-install-seatmesh.sh   # installs seatmesh@latest from npm
+sm install                                # symlinks `sm` (+ `seatmesh`) onto your PATH
+sm --help
+```
 
-# Git checkout (development)
-./bin/sm --help
+Prefer the short alias `sm` day to day — `seatmesh` still works everywhere.
 
-# npx one-shot (no PATH install)
+`better-sqlite3` (faster local storage) is optional — install works fine without a
+C++ toolchain; it falls back to plain JSONL files. To use sqlite, install with
+Node 22 LTS + `build-essential`, or just set `storage.backend: jsonl` in your config.
+
+### Working from a git checkout instead of npm
+
+```bash
+./bin/sm --help        # auto-builds dist/ on first run, no manual build step
 npx seatmesh session up
 ```
 
-`./sm.sh` is **retired** — use `sm` (after `sm install`). The root wrapper still prints a deprecation and forwards for compatibility.
+Point any command at a specific project with `--profile <dir>` (a directory
+containing `.sm/mesh.config.yaml`), or just run from inside the project — seatmesh
+finds `.sm/` by walking up from your current directory.
 
-Point the CLI at your project config with `--profile <dir>` (directory containing
-`.sm/mesh.config.yaml` or `mesh.config.yaml`) or rely on discovery walking up from
-cwd for `.sm/`.
+## Learn more
 
-## Documentation
-
-| Doc | Contents |
-|-----|----------|
-| [docs/README.md](docs/README.md) | Full index |
-| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Init, session, reload, inbox |
-| [docs/ONE-PATH.md](docs/ONE-PATH.md) | Command reference (one table) |
-| [docs/FEATURES.md](docs/FEATURES.md) | Feature overview |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layout, daemon, providers |
+| Doc | What's in it |
+|-----|---------------|
+| [docs/README.md](docs/README.md) | Full documentation index |
+| [docs/QUICKSTART.md](docs/QUICKSTART.md) | Init, session, reload, inbox — walked through |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the daemon, panes, and providers fit together |
 | [docs/CONFIG.md](docs/CONFIG.md) | `mesh.config.yaml` reference |
-| [docs/SLOTS.md](docs/SLOTS.md) | Slots, roles, seat files |
-| [docs/STATE.md](docs/STATE.md) | `mesh-agents.json` |
-| [docs/COMMS.md](docs/COMMS.md) | Inbox, peer, checkback, **notify-act** (Yes/No toasts) |
-| (zsign agents) `.agent/seat-mesh-notify.md` | When to use `notify.sh` vs `seatmesh notify yesno` |
-| [docs/CHATROOM.md](docs/CHATROOM.md) | Room ledger and broadcast |
-| [docs/CHATFILE.md](docs/CHATFILE.md) | Shared chat files |
-| [docs/PORTABILITY.md](docs/PORTABILITY.md) | Connectivity hooks, data layout |
-| [docs/PORTS.md](docs/PORTS.md) | Inbox ports (`:31670` mesh, `:31699` harness) |
+| [docs/COMMS.md](docs/COMMS.md) | How agents message each other (inbox, peer, checkback) |
+| [docs/CHATROOM.md](docs/CHATROOM.md) | Shared chat rooms between agents |
+| [TODO.md](TODO.md) | What's built, what's in progress, what's just an idea |
 
-Bundled profiles live under `profiles/` (`minimal`, …). Consumer-specific notes
-belong in each project's `.sm/` dotdir, not in the engine docs above.
+Bundled example configs live under `profiles/`. If you're using seatmesh in your
+own project, put project-specific notes in that project's `.sm/` folder, not here.
 
-## Package layout
+## How the code is organized
 
 ```text
-services/seatmesh/
-  bin/seatmesh          CLI entry (cold start + node dist)
-  packages/
-    core/                Schemas, profile loader, chatroom, paths
-    cli/                 Command router (npm package seatmesh)
-    tmux/                Session, launch, inject, seats
-    daemon/              Inbox server (sole pane writer)
-    providers/           Agent CLI detection and inject plans
-    connectivity/        Proxy probe and recovery hooks
-  profiles/              Shipped example configs
+bin/seatmesh          CLI entry point
+packages/
+  core/                Config schema, profile loading, shared types
+  cli/                 The `seatmesh`/`sm` command itself
+  tmux/                Session layout, launching CLIs, injecting messages
+  daemon/              The inbox daemon (the only thing that writes to a pane)
+  providers/           Per-CLI detection (is this pane running Claude? Cursor?)
+  connectivity/        Proxy/network recovery hooks
+profiles/              Example configs you can copy from
 ```
 
 ## Status
 
-Version **0.1** — session layout, workspace-scoped tmux sessions (`mesh-{hash}`),
-profile-driven runtime paths (`data.root`), enqueue comms, room/chat, connectivity
-hooks, and supervised inbox daemon. Internal parity tracking: [TODO.md](TODO.md).
+Current version: see `package.json` (`npm run seatmesh -- version`). Actively
+developed — see [TODO.md](TODO.md) for what's done, in progress, or still just an
+idea, and [NOW.md](NOW.md) for what's happening this week.
