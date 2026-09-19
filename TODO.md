@@ -54,8 +54,8 @@
 - [x] **2.2** `to-master` — enqueue + daemon inject (`deliverToPane`, `INBOX.jsonl` drain)
 - [~] **2.3** peer comms — `sm to-slot` / `to-mini` enqueue `PEER.jsonl`; room/chat ledger separate
 - [x] **2.4** `checkback` — `start|list|cancel|reset|ack` (`patience` alias) + auto-start on down via `ensureMeshInbox`
-- [ ] **2.5** `schedule`
-- [ ] **2.6** `dc-feedback`
+- [ ] **2.5** `schedule` — no spec beyond the name; needs scoping before implementing (cron-like campaign/task scheduling? one-shot delayed peer? unclear).
+- [ ] **2.6** `dc-feedback` — no spec beyond the name; unclear if this relates to the `dc-agent` project in the session registry or something else.
 
 **Hard rule:** only daemon calls `inject.ts`.
 
@@ -68,7 +68,7 @@
 - [x] **3.3** minis grid + leads from profile (`layout.minis.grid` / `max` / `leads`, `sm layout`)
 - [-] **3.4** `triage` / `board-sync` — optional thin wrapper
 - [x] **3.5** `contexts` / `seats` — `contexts.ts` (FOCUS preview + open TASK/REMINDER counts, `--json`)
-- [ ] **3.6** `nav log|summary`
+- [ ] **3.6** `nav log|summary` — no spec beyond the name; "nav" isn't defined elsewhere in this codebase, needs scoping.
 - [-] **3.7** `manager-reminder`
 - [~] **3.8** `proxy` — status/check only
 
@@ -76,12 +76,17 @@
 
 ## P4 — cutover (see `docs/SURPASS.md`)
 
+`docs/SURPASS.md` does not exist in this repo, and neither does `legacy harness.sh`
+or anything on `:3099` (checked 2026-09-19) — 4.5/4.6's "surpass gate" framing
+(beating the old bash harness) looks fully obsolete. Leaving unchecked rather than
+guessing a replacement scope.
+
 - [~] **4.1** `mesh-agents.json` (mesh-owned state) — save/read + set/tag + switch auto-save; full json engine still open
-- [ ] **4.2** `session down` (never touch `dev`)
-- [ ] **4.3** kiro trust dialog on launch
-- [ ] **4.4** Cursor composer-ready wait before handoff
-- [ ] **4.5** cutover doc: when workers leave `dev` — **surpass gate D**
-- [ ] **4.6** **Surpass gate A** — inbox list/resolve + fix :3100 health wedge (beats harness :3099 for manager ops)
+- [x] **4.2** `session down` (never touch `dev`) — already landed (`sessionDown`/`session down|stop|kill`); kills only `loaded.sessionName`, the current profile's own computed session — a session by any other name (e.g. `dev`) is structurally untouched, no special-case needed.
+- [ ] **4.3** kiro trust dialog on launch — needs a real kiro-cli launch to verify against; not attempted without live-CLI access to confirm the fix actually works.
+- [ ] **4.4** Cursor composer-ready wait before handoff — same: needs a real cursor-agent pane to verify timing against, not guessed.
+- [ ] **4.5** cutover doc: when workers leave `dev` — **surpass gate D** — stale, see note above.
+- [ ] **4.6** **Surpass gate A** — inbox list/resolve + fix :3100 health wedge (beats harness :3099 for manager ops) — stale, see note above.
 
 ---
 
@@ -97,10 +102,10 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 - [x] **5.6** workers layout profile-config — `layoutWorkersFromProfile` replaces hard-coded `layoutWorkers3x2` (DAN req; P1-4). Verified done while scoping other work: wired into both `session.ts` call sites, `layoutWorkers3x2`/`layoutGrid` have zero live callers left outside tests.
 - [x] **5.7** `notify` — `sm notify "<session>" "<check>" [--url URL]`, seat from TMUX_PANE, loud FAIL on missing notify-send (P2-1)
 - [x] **5.8** `preview` — `sm preview <file...> [--set <days>] [--notify]` wrapping publish-mdview.sh (P2-3)
-- [ ] **5.9** `worktree` — `sm worktree new|rm|backlog <slug>` wrapping the three scripts (P2-4)
+- [-] **5.9** `worktree` — `sm worktree new|rm|backlog <slug>` wrapping the three scripts (P2-4). Checked 2026-09-19: no such scripts anywhere in this repo — premise looks stale/inapplicable to seatmesh itself (may be a zsign-consumer-repo item). Needs re-spec before picking up.
 - [x] **5.10** `room say` dedupe window + `cb=<id>` output; `room tail` id/pane/truncate + `--json`; `room get <id>` (P3-1/P3-2)
 - [x] **5.11** `chat put|get` — positional upsert + id/turnHash lookup (P3-3)
-- [ ] **5.12** base layer `pane-meta|panes|capture|inject|interrupt|restart` — surface tmux primitives as verbs (P4-2)
+- [~] **5.12** base layer `pane-meta|panes|capture|inject|interrupt|restart` — surface tmux primitives as verbs (P4-2). `pane-meta`/`panes` already landed (see `pane-meta-cli.ts` "P4-2" comment). `capture`/`inject`/`interrupt`/`restart` as raw CLI primitives would contradict "No direct send" in ARCHITECTURE.md — the daemon is supposed to be the *only* pane writer. Do not implement those four without deciding how they coexist with that rule first (e.g. read-only `capture` is probably fine; `inject`/`interrupt`/`restart` as bypass primitives are not).
 
 ---
 
@@ -109,13 +114,13 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 Landed on `agent-kinds-json` → `1.2.4`: provider `kindBase`/`kindExtensions`, `agents.kinds` overlay,
 prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `opencode`.
 
-- [ ] **6.1** **`.sm/providers/` load** — drop-in provider modules (e.g. `kimi.js`) without engine PR/fork; register into builtin registry + emit `kindBase`. Today: launch-only via `agents.kinds`; full inject still needs a provider class in `@seat-mesh/providers` (or this loader).
+- [ ] **6.1** **`.sm/providers/` load** — drop-in provider modules (e.g. `kimi.js`) without engine PR/fork; register into builtin registry + emit `kindBase`. Today: launch-only via `agents.kinds`; full inject still needs a provider class in `@seat-mesh/providers` (or this loader). Not attempted autonomously: real feature work (dynamic module loading + running project-supplied JS as a provider — a genuine security surface worth designing deliberately, not guessing).
 - [x] **6.2** `sm kind list|show [id]` — dump resolved kinds (provider ⊎ overlay ⊎ runners) for custom-profile DX
 - [x] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list) — `switch`/`handoff`/`set <target> <cli>` and `secretary switch <cli>` tab-complete a profile's `agents.kinds` overlay ids (falls back to the builtin list outside any `.sm/`)
-- [ ] **6.4** Prune dual-path: retire `isOpenCodeCpeResumeCmd` / `buildCustomKindLaunchCmd` opencode-cpe special-case once prove-only path is sole
+- [ ] **6.4** Prune dual-path: retire `isOpenCodeCpeResumeCmd` / `buildCustomKindLaunchCmd` opencode-cpe special-case once prove-only path is sole. Not attempted autonomously: touches live CPE launch/resume logic that pia/zsign (real meshes on this host) currently run on.
 - [x] **6.5a** Canonical CPE kind **`opencode-cpe`**; `oc-proxy` only as normalize/aliases + thin `scripts/oc-proxy-*.sh` shims
 - [x] **6.5c** **Migration close:** `oc-proxy` in mesh.config (`providers` / `runners` / `layout.cli`) still launches CPE; 4 atomics (record→kill→revive→CONTINUE) proved
-- [ ] **6.5b** Delete `origin/oc-proxy` + retire `tools/shadow-oc-proxy.sh` / sync workflow when meshes migrated off alias keys
+- [ ] **6.5b** Delete `origin/oc-proxy` + retire `tools/shadow-oc-proxy.sh` / sync workflow when meshes migrated off alias keys. Not attempted autonomously: deleting a remote git branch is destructive and explicitly needs an operator's go-ahead, not an autonomous call.
 - [x] **6.6** E2E: custom `agents.kinds.my-oc: { extends: opencode, … }` through `switch` + save prove (`packages/providers/src/builtin.test.ts`)
 - [x] **6.7** Example mesh doc: add Kimi (launch-only yaml vs full provider) — no fork (`docs/EXAMPLE-CUSTOM-KIND-KIMI.md`)
 
