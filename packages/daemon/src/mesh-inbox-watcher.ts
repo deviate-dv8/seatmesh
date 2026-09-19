@@ -13,6 +13,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import { writeWedgeSnapshot } from "./wedge-diagnostics.js";
 import {
   meshRuntimePaths,
   resolveDaemonPort,
@@ -383,8 +384,16 @@ export function createMeshWatcher(loaded: LoadedProfile, opts: MeshWatcherOption
       );
       if (healthMisses >= healthMissThreshold) {
         log(
-          `health rescue — ${healthMissThreshold} consecutive misses; SIGKILL child (CPU-starve / wedged loop)`,
+          `health rescue — ${healthMissThreshold} consecutive misses; SIGKILL child (CPU-starve / wedged loop) — snapshot: ${stateDir}/last-wedge.json`,
         );
+        writeWedgeSnapshot(stateDir, logPath, {
+          session: loaded.sessionName,
+          port,
+          pid: child?.pid,
+          healthMisses,
+          healthMissThreshold,
+          healthTimeoutMs,
+        });
         healthMisses = 0;
         stopChild("SIGKILL");
       }

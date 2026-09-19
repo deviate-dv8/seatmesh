@@ -202,11 +202,39 @@ without reinventing Herdr's agent-status surface.
   unrelated error set as before — auth/tasks typing gaps that predate this),
   and a live `seatmesh host up/down/status` smoke test confirms the refactor
   didn't break the CLI surface the shared utility now backs.
-- [ ] **7.6** Daemon diagnosability. Distinct from 7.1-7.5 (which consolidate *how many*
-  daemon processes run) — this is *when one breaks, why*. Today the only lever is
-  "restart the daemon," never "here's what actually failed." Add structured crash/
-  fault visibility (which subsystem — inject/queue/checkback/notify/connectivity —
-  actually broke) so operators stop papering over real bugs with restarts.
+- [x] **7.6** Daemon diagnosability — first slice: wedge-snapshot capture. Distinct
+  from 7.1-7.5 (which consolidate *how many* daemon processes run) — this is *when
+  one breaks, why*. Before this, the only lever was "restart the daemon" — the
+  health-rescue path (`mesh-inbox-watcher.ts`, 3 consecutive missed `/health`
+  probes → SIGKILL) threw away the exact evidence that would explain 900+
+  historical wedge events (found investigating 7.7) the moment it killed the
+  process.
+  - Added `packages/daemon/src/wedge-diagnostics.ts`: `writeWedgeSnapshot()` writes
+    a single overwritten `<mesh>/.sm/runtime/daemon/last-wedge.json` right before
+    the SIGKILL — session, port, pid, health-miss counters, `/proc/<pid>/status`
+    snapshot (state/VmRSS/threads, Linux-only, null elsewhere), and the last 40
+    lines of the mesh's own daemon log. Deliberately one overwritten file, not one
+    per event — 7.7 showed this can fire hundreds of times a day; an unbounded
+    directory would just be a smaller version of the same opacity problem.
+    Best-effort only — every failure mode is swallowed internally so diagnostics
+    can never delay or block the actual rescue.
+  - 8 unit tests (`wedge-diagnostics.test.ts`), all passing.
+  - **Live-verified end to end**, isolated test mesh (`/tmp/seatmesh-wedge-smoke`,
+    own `XDG_CONFIG_HOME`, no registry leak): spawned a real daemon child via
+    `createMeshWatcher`, waited out the (hardcoded, correct-as-is) 45s health-check
+    grace period, `SIGSTOP`'d the live child pid to simulate a genuine wedge,
+    confirmed 2 consecutive health misses were detected, the rescue fired, and
+    `last-wedge.json` was written with `procState.state: "T (stopped)"` — an exact
+    match for the simulated fault — plus correct log tail, then confirmed the
+    child was SIGKILL'd and cleanly respawned. Cleaned up all test artifacts and
+    processes afterward; real `~/.config/seatmesh/sessions.json` unaffected
+    (still exactly the 4 real sessions).
+  - **What this is not**: this is a snapshot at the moment of a hard health-rescue,
+    not per-subsystem fault classification (inject/queue/checkback/notify/
+    connectivity). Knowing *which subsystem* broke inside a still-technically-
+    "healthy" daemon is a bigger scope — the log tail in the snapshot is a step
+    toward that (it captures whatever the daemon was last logging), but doesn't
+    label a specific fault. Left as a possible follow-up, not attempted here.
 - [x] **7.7** Investigate whether running via a symlinked dev install (vs a real npx/
   npm-published install) is actually implicated in reported daemon crashes. **Checked
   2026-09-19, evidence says no** — confirmed `sm`/`seatmesh` on this box are symlinked
