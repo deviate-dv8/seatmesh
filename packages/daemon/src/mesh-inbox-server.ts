@@ -20,7 +20,7 @@ import {
   recordNotification,
   markNotificationActed,
 } from "@seat-mesh/core";
-import { createRegistryForProfile } from "@seat-mesh/providers";
+import { createRegistryForProfile, loadDropInProviders } from "@seat-mesh/providers";
 import {
   capturePaneSnapshot,
   listMeshMonitorPanes,
@@ -176,6 +176,19 @@ async function main(): Promise<void> {
   const restoredActs = restoreActRegistry(rt.actCardsJsonl, actRegistry);
   if (restoredActs) log(`ACT restore cards=${restoredActs} from ${rt.actCardsJsonl}`);
   const registry = createRegistryForProfile(profile);
+
+  // Drop-in providers (TODO 6.1b) — .sm/providers/*.mjs, no engine PR/fork needed
+  // for inject. See docs/HANDOUT-PROVIDERS-DROPIN.md. Loaded once at daemon
+  // startup (same cadence as the rest of registry construction); a change needs
+  // `inbox restart`, same as any other profile change.
+  const dropInDir = path.join(loaded.profileDir, "providers");
+  const dropIn = await loadDropInProviders(dropInDir, log);
+  for (const p of dropIn.providers) registry.register(p);
+  if (dropIn.providers.length || dropIn.skipped.length) {
+    log(
+      `drop-in providers: loaded=${dropIn.providers.length} skipped=${dropIn.skipped.length} dir=${dropInDir}`,
+    );
+  }
 
   // Terminal-pool PTY pool — concurrency from mesh.config.yaml daemon.terminalPool.concurrency
   const tpConcurrency = (profile as { daemon?: { terminalPool?: { concurrency?: number } } }).daemon?.terminalPool?.concurrency ?? 2;
