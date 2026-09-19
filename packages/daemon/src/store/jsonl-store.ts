@@ -78,6 +78,8 @@ export interface PeerRow {
   /** Set on first successful pane paste — survives backlog park; never re-inject. */
   injectedPane?: string;
   injectedAt?: string;
+  /** ISO timestamp — held out of drain until this passes (`sm schedule --at`). Unset = normal (immediate). */
+  notBefore?: string;
 }
 
 /** Delivered = inject succeeded AND proof fields stamped (not hand-set sent:true). */

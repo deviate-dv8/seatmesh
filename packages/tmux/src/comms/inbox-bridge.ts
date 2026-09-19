@@ -144,6 +144,8 @@ export interface EnqueuePeerOptions {
   fromAgent?: string | null;
   /** Fan-out batch: caller already ensured inbox once. */
   skipEnsure?: boolean;
+  /** ISO timestamp — held out of drain until this passes (sm schedule --at). */
+  notBefore?: string;
 }
 
 export function enqueuePeer(
@@ -161,6 +163,7 @@ export function enqueuePeer(
     fromPorts: opts.fromPorts,
     roomSlug: opts.roomSlug,
     fromAgent: opts.fromAgent,
+    notBefore: opts.notBefore,
   });
   const r = spawnSync(
     "curl",

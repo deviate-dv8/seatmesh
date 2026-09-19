@@ -153,6 +153,7 @@ import { buildLimitCommands } from "./commands/limit-cli.js";
 import { buildRolesCommands } from "./commands/roles-cli.js";
 import { buildNotifyCommand } from "./commands/notify-cli.js";
 import { buildPreviewCommand } from "./commands/preview-cli.js";
+import { buildScheduleCommand } from "./commands/schedule-cli.js";
 import { runMdsCommand } from "./commands/mds-cli.js";
 import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
 import { buildRoomCommands } from "./commands/room-cli.js";
@@ -2711,6 +2712,20 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
     const branch = buildPreviewCommand(getLoaded);
+    try {
+      await branch.parseAsync(rest.slice(1), { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
+    }
+    return;
+  }
+
+  if (cmd === "schedule") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildScheduleCommand(getLoaded);
     try {
       await branch.parseAsync(rest.slice(1), { from: "user" });
     } catch (e) {

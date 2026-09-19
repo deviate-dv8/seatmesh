@@ -74,6 +74,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `roles` | [roles.md](roles.md) |
 | `room` | [room.md](room.md) |
 | `save` | [save.md](save.md) |
+| `schedule` | [schedule.md](schedule.md) |
 | `seat` | [seat.md](seat.md) |
 | `secretary` | [secretary.md](secretary.md) |
 | `session` | [session.md](session.md) |

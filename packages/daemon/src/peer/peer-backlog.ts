@@ -315,6 +315,13 @@ export function countPeerBacklog(store: QueueStore): number {
 }
 
 export function pendingPeerRows(store: QueueStore): PeerRow[] {
-  // Backlog rows wait for promotePeerBacklog — do not re-drain every tick (capture spam / typing lag).
-  return store.readPeer().filter((r) => !isPeerDelivered(r) && r.deliverPane !== "backlog");
+  const now = Date.now();
+  return store.readPeer().filter((r) => {
+    if (isPeerDelivered(r)) return false;
+    // Backlog rows wait for promotePeerBacklog — do not re-drain every tick (capture spam / typing lag).
+    if (r.deliverPane === "backlog") return false;
+    // Scheduled — not due yet (sm schedule --at).
+    if (r.notBefore && Date.parse(r.notBefore) > now) return false;
+    return true;
+  });
 }

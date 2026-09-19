@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { isAckClassPeer } from "./peer-backlog.js";
+import { isAckClassPeer, pendingPeerRows } from "./peer-backlog.js";
 import { isPeerDelivered, peerSentToken } from "../store/jsonl-store.js";
 import type { PeerRow } from "../store/jsonl-store.js";
+import type { QueueStore } from "../store/create-queue-store.js";
 
 describe("peer backlog harden helpers", () => {
   it("extracts [sent:token] for dedupe", () => {
@@ -52,5 +53,50 @@ describe("peer backlog harden helpers", () => {
     };
     expect(isPeerDelivered(row)).toBe(true);
     expect(peerSentToken(row.msg)).toBe("smu049eezp47h");
+  });
+});
+
+function mockStore(peer: PeerRow[]): QueueStore {
+  return { readPeer: () => peer } as QueueStore;
+}
+
+function schedulableRow(overrides: Partial<PeerRow>): PeerRow {
+  return {
+    id: "s1",
+    at: "2026-01-01T00:00:00.000Z",
+    kind: "prompt",
+    fromSlot: "operator",
+    fromPorts: null,
+    targetPane: "%1",
+    targetLabel: "secretary",
+    msg: "EOD digest",
+    sent: false,
+    ...overrides,
+  };
+}
+
+describe("pendingPeerRows notBefore gate (sm schedule, TODO 2.5)", () => {
+  it("holds a not-yet-due scheduled row out of drain", () => {
+    const future = new Date(Date.now() + 3600_000).toISOString();
+    const row = schedulableRow({ notBefore: future });
+    expect(pendingPeerRows(mockStore([row]))).toEqual([]);
+  });
+
+  it("releases a scheduled row once notBefore passes", () => {
+    const past = new Date(Date.now() - 1000).toISOString();
+    const row = schedulableRow({ notBefore: past });
+    expect(pendingPeerRows(mockStore([row]))).toEqual([row]);
+  });
+
+  it("a row with no notBefore drains immediately as before", () => {
+    const row = schedulableRow({});
+    expect(pendingPeerRows(mockStore([row]))).toEqual([row]);
+  });
+
+  it("still excludes delivered and backlog-parked rows regardless of notBefore", () => {
+    const past = new Date(Date.now() - 1000).toISOString();
+    const delivered = schedulableRow({ notBefore: past, sent: true, sentAt: past, deliverPane: "%1" });
+    const backlog = schedulableRow({ id: "s2", notBefore: past, deliverPane: "backlog" });
+    expect(pendingPeerRows(mockStore([delivered, backlog]))).toEqual([]);
   });
 });

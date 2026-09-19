@@ -416,6 +416,12 @@ const HELP: Record<string, string> = {
   Also: notify info|md "<title>" --md <file>  (same publish, toast+card)
   Docs: https://mdview.io/agents · API POST https://mdview.io/api/public/publish`,
 
+  schedule: `schedule <target> "<msg...>" --at <time>
+  Delayed one-shot peer — queues now, held out of drain until --at passes
+  (ISO time or relative duration: 10m, 2h, 1d). Fire-and-forget: no ACK
+  tracking opens until it's actually delivered.
+  Examples: schedule secretary "EOD digest" --at 6h · schedule slot-2 "follow up" --at 2026-09-20T09:00:00Z`,
+
   mds: `mds [hosted|agent-self|agent <kind>] …
   Three markdown galleries (CLI ↔ hub /mds):
     hosted [list] | host <file.md> [--as slug] | show|url <slug>

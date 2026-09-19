@@ -964,7 +964,11 @@ async function main(): Promise<void> {
           targetLabel: String(body.targetLabel ?? targetPane),
           msg,
           sent: false,
+          ...(body.notBefore ? { notBefore: String(body.notBefore) } : {}),
         };
+        const scheduledForFuture = Boolean(
+          row.notBefore && Date.parse(row.notBefore) > Date.now(),
+        );
         const redir = applyAckRedirectBlock(store.stateDir, loaded, row);
         if (redir.redirected) {
           log(
@@ -986,8 +990,13 @@ async function main(): Promise<void> {
           });
         }
         store.appendPeer(row);
-        log(`TO-PEER ${kind} from=slot-${row.fromSlot} -> ${row.targetLabel}`);
-        openAckForPeerRow(store, row, log);
+        log(
+          `TO-PEER ${kind} from=slot-${row.fromSlot} -> ${row.targetLabel}` +
+            (scheduledForFuture ? ` (scheduled notBefore=${row.notBefore})` : ""),
+        );
+        // Ack tracking starts at delivery, not schedule time — a not-yet-due row
+        // isn't an "unanswered ask" yet.
+        if (!scheduledForFuture) openAckForPeerRow(store, row, log);
         await enqueueAfterAppend("peer", row.id);
         return json(res, 200, {
           ok: true,
