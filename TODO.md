@@ -111,7 +111,7 @@ prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `o
 
 - [ ] **6.1** **`.sm/providers/` load** — drop-in provider modules (e.g. `kimi.js`) without engine PR/fork; register into builtin registry + emit `kindBase`. Today: launch-only via `agents.kinds`; full inject still needs a provider class in `@seat-mesh/providers` (or this loader).
 - [x] **6.2** `sm kind list|show [id]` — dump resolved kinds (provider ⊎ overlay ⊎ runners) for custom-profile DX
-- [ ] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list)
+- [x] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list) — `switch`/`handoff`/`set <target> <cli>` and `secretary switch <cli>` tab-complete a profile's `agents.kinds` overlay ids (falls back to the builtin list outside any `.sm/`)
 - [ ] **6.4** Prune dual-path: retire `isOpenCodeCpeResumeCmd` / `buildCustomKindLaunchCmd` opencode-cpe special-case once prove-only path is sole
 - [x] **6.5a** Canonical CPE kind **`opencode-cpe`**; `oc-proxy` only as normalize/aliases + thin `scripts/oc-proxy-*.sh` shims
 - [x] **6.5c** **Migration close:** `oc-proxy` in mesh.config (`providers` / `runners` / `layout.cli`) still launches CPE; 4 atomics (record→kill→revive→CONTINUE) proved

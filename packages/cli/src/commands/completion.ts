@@ -3,9 +3,14 @@
  * Source of truth for top-level verbs: help-text.ts.
  */
 import { listHelpAliases, listHelpVerbs } from "./help-text.js";
+import { findDotSmConfig, knownAgentKindIds, loadProfile } from "@seat-mesh/core";
+import { resolveKindsForProfile } from "@seat-mesh/providers";
 
 const GLOBAL_FLAGS = ["--profile", "-p", "--help", "-h"];
 
+/** Builtin fallback — used when no `.sm/` profile is discoverable from cwd, or it
+ * fails to load. `switch`/`handoff`/`set`/`secretary switch` prefer the live
+ * resolveCliTypes() below (profile-aware: custom agents.kinds + their aliases). */
 const CLI_TYPES = [
   "agent",
   "claude",
@@ -123,7 +128,7 @@ const DEEPER: Record<string, Record<string, string[]>> = {
   secretary: {
     supervise: ["on", "run", "off"],
     watch: ["on", "off"],
-    switch: CLI_TYPES,
+    // switch: handled earlier via resolveCliTypes() (profile-aware, TODO 6.3)
   },
   session: {
     init: [],
@@ -141,9 +146,8 @@ const DEEPER: Record<string, Record<string, string[]>> = {
   peek: {
     // after target
   },
-  switch: Object.fromEntries(COMMON_TARGETS.map((t) => [t, CLI_TYPES])),
-  handoff: Object.fromEntries(COMMON_TARGETS.map((t) => [t, CLI_TYPES])),
-  set: Object.fromEntries(COMMON_TARGETS.map((t) => [t, CLI_TYPES])),
+  // switch/handoff/set <target> <cli>: handled earlier via resolveCliTypes()
+  // (profile-aware, TODO 6.3) — not listed here.
   pane: {
     resume: COMMON_TARGETS.filter((t) => t !== "all"),
   },
@@ -154,6 +158,36 @@ const DEEPER: Record<string, Record<string, string[]>> = {
 
 function uniqSorted(words: string[]): string[] {
   return [...new Set(words.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+let cachedCliTypes: string[] | undefined;
+
+/** Test-only: resolveCliTypes() memoizes per process; tests that chdir between a
+ * profile and no-profile cwd need to clear this between cases. */
+export function __resetCliTypesCacheForTests(): void {
+  cachedCliTypes = undefined;
+}
+
+/**
+ * Profile-aware CLI type completions (TODO 6.3): resolved kinds — provider
+ * kindBase ⊎ this profile's agents.kinds overlay ⊎ runners shim — instead of just
+ * the builtin CLI_TYPES list, so a custom `agents.kinds.my-oc: {...}` overlay tab-
+ * completes too. Cheap (yaml parse only, no tmux/network) and memoized per process;
+ * falls back to CLI_TYPES on any failure or when no `.sm/` is discoverable from cwd.
+ */
+function resolveCliTypes(): string[] {
+  if (cachedCliTypes) return cachedCliTypes;
+  try {
+    const profilePath = findDotSmConfig();
+    if (!profilePath) return CLI_TYPES;
+    const loaded = loadProfile(profilePath);
+    const kinds = resolveKindsForProfile(loaded.profile);
+    const ids = [...knownAgentKindIds(kinds)];
+    cachedCliTypes = ids.length ? uniqSorted([...ids, ...CLI_TYPES]) : CLI_TYPES;
+  } catch {
+    cachedCliTypes = CLI_TYPES;
+  }
+  return cachedCliTypes;
 }
 
 /** Top-level verbs + aliases (+ completion itself). */
@@ -296,13 +330,17 @@ export function completeArgv(words: string[], cword: number): string[] {
   // Deeper: cmd sub …
   if (before.length >= 2) {
     const sub = before[1]!;
+    // switch/handoff/set <target> <cli> and secretary switch <cli> — profile-aware
+    // kinds take precedence over the static DEEPER entries below (TODO 6.3).
+    if (
+      ((cmd === "switch" || cmd === "handoff" || cmd === "set") && before.length === 2) ||
+      (cmd === "secretary" && sub === "switch" && before.length === 2)
+    ) {
+      return filterPrefix(resolveCliTypes(), cur);
+    }
     const deep = DEEPER[cmd]?.[sub];
     if (deep && before.length === 2) {
       return filterPrefix(uniqSorted(deep), cur);
-    }
-    // switch <target> <cli>
-    if ((cmd === "switch" || cmd === "handoff" || cmd === "set") && before.length === 2) {
-      return filterPrefix(CLI_TYPES, cur);
     }
     if (cmd === "peek" && before.length === 2) {
       return filterPrefix(["status", "full"], cur);
