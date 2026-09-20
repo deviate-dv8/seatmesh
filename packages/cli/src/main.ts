@@ -156,6 +156,7 @@ import { buildNotifyCommand } from "./commands/notify-cli.js";
 import { buildPreviewCommand } from "./commands/preview-cli.js";
 import { buildScheduleCommand } from "./commands/schedule-cli.js";
 import { buildNavCommands } from "./commands/nav-cli.js";
+import { buildCampaignCommands } from "./commands/campaign-cli.js";
 import { runMdsCommand } from "./commands/mds-cli.js";
 import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
 import { buildRoomCommands } from "./commands/room-cli.js";
@@ -2745,6 +2746,24 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
     const branch = buildNavCommands(getLoaded);
+    if (!sub) {
+      branch.outputHelp();
+      return;
+    }
+    try {
+      await branch.parseAsync([sub, ...tail], { from: "user" });
+    } catch (e) {
+      const err = e as { code?: string };
+      if (err.code === "commander.helpDisplayed" || err.code === "commander.version") return;
+      throw e;
+    }
+    return;
+  }
+
+  if (cmd === "campaign") {
+    const loaded = meshLoaded(profileArg);
+    const getLoaded = () => loaded;
+    const branch = buildCampaignCommands(getLoaded);
     if (!sub) {
       branch.outputHelp();
       return;

@@ -334,23 +334,41 @@ status-queryability and role-death resilience, not the underlying mechanism.
   multi-daemon-per-mesh setup is fully gone (P7) — confirm exactly what changes
   there before touching it; read literally the window existed partly to surface
   N-daemon log noise.
-- [ ] **8.2** Campaign contract — **TODO slices** (assignable work units, need
+- [~] **8.2** Campaign contract — **TODO slices** (assignable work units, need
   **dependency edges** across balancers/teams — flat lists can't express "this FE
   slice depends on that API slice") + **Objectives** (the missing piece today: lets
   "30% complete, N left" be a real answer, not just per-slice done/not-done).
   **Supervisor** = nudger, **balancer** = assigner (today's "lead"); a manager
-  persona can be both by default (Herdr's plain-mode simplicity).
+  persona can be both by default (Herdr's plain-mode simplicity). **Narrowest
+  slice landed 2026-09-20 as 8.4** (ticket-style, atomic campaigns) — see 8.4.
+  Dependency edges, Objectives-as-aggregate-status, and supervisor/balancer-as-
+  persona-roles are explicitly **not** part of that landing — those still need the
+  open questions in [docs/HANDOUT-CAMPAIGN-CONTRACT.md](docs/HANDOUT-CAMPAIGN-CONTRACT.md)
+  resolved first (how % complete computes, how roles map onto personas).
 - [ ] **8.3** Supervisor/balancer **role failover** — must be easy to "replug" a new
   agent into the role when the holder dies; a campaign whose progress depends on one
   un-replaceable agent staying alive is not resilient parallelism. Correctness
   requirement, not a nice-to-have.
-- [ ] **8.4** Default campaign shape = **ticket-style** (atomic, one unit) — the most
+- [x] **8.4** Default campaign shape = **ticket-style** (atomic, one unit) — the most
   stable of the three styles operators actually reach for (EPIC/BMAD-PRD/ticket) per
   feedback. EPIC (umbrella grouping) and PRD (extend-as-you-go spec) are later
-  extensions, not the base shape.
+  extensions, not the base shape. **Landed 2026-09-20**: `sm campaign
+  create|list|show|assign|done|cancel|reopen|note` (`packages/core/src/runtime/
+  campaigns.ts` + `packages/cli/src/commands/campaign-cli.ts`) — event-sourced
+  jsonl log (same pattern as `nav-log.ts`), reduced to current state on read.
+  Deliberately the narrowest possible slice: one atomic ticket (title, objective,
+  status, assignee, freeform notes), **no dependency graph, no supervisor/balancer
+  role changes, no persona-model changes** — purely additive new CLI surface + new
+  event log, zero interaction with existing supervise/balance/room/task/role code,
+  so a mesh that never runs `sm campaign` is byte-for-byte unaffected. 9 unit tests
+  (fold/reduce logic + jsonl round-trip) + live-verified full lifecycle
+  (create→list→note→reassign→done→show→status-filter) against a real throwaway
+  mesh through the actual CLI, not just the core module.
 - [ ] **8.5** Campaign listing/status must scale to **~100 concurrent campaigns**
   (ticket-style usage means many small campaigns, not a handful) — a status model
   that only answers one campaign at a time (e.g. "ask the supervisor") won't hold up.
+  8.4's `campaign list` is a flat read-and-filter over the full jsonl log — fine at
+  today's scale, not proven at ~100 concurrent, no pagination/index yet.
 - [~] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
   this because You= is this") are a real pain point tied directly to 8.1.
   `requireCoordRole` was already persona-aware (via `isCoordKind`/`layout.base.kinds`)

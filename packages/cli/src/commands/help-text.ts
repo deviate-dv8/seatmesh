@@ -421,6 +421,16 @@ const HELP: Record<string, string> = {
   Navigation history — recent \`peek <target>\` events (which panes/seats you've
   looked at). log = chronological, summary = grouped by target, most-recent first.`,
 
+  campaign: `campaign create <title> [--objective "..."] [--assign <seat>] [--json]
+  campaign list [--status open|done|cancelled|all] [--json]
+  campaign show <id> [--json]
+  campaign assign <id> <seat>
+  campaign done|cancel|reopen <id>
+  campaign note <id> "<text>"
+  Ticket-style campaigns (TODO 8.2/8.4) — one atomic work unit: title, objective
+  (what "done" means), status, optional assignee, freeform notes. Purely additive,
+  its own event log — no dependency graph, no supervisor/balancer roles yet.`,
+
   schedule: `schedule <target> "<msg...>" --at <time>
   Delayed one-shot peer — queues now, held out of drain until --at passes
   (ISO time or relative duration: 10m, 2h, 1d). Fire-and-forget: no ACK

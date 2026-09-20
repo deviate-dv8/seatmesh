@@ -76,6 +76,8 @@ export interface MeshRuntimePaths {
   tpJobsDir: string;
   /** Navigation history — appended on `peek <target>` (`sm nav log|summary`). */
   navJsonl: string;
+  /** Campaign event log (`sm campaign ...`, TODO 8.2/8.4 — ticket-style, atomic). */
+  campaignsJsonl: string;
 }
 
 export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
@@ -107,6 +109,7 @@ export function meshRuntimePaths(loaded: LoadedProfile): MeshRuntimePaths {
     gateQueue: path.join(dataRoot, "GATE-QUEUE.md"),
     tpJobsDir: path.join(daemonDir, "tp-jobs"),
     navJsonl: path.join(daemonDir, "NAV.jsonl"),
+    campaignsJsonl: path.join(daemonDir, "CAMPAIGNS.jsonl"),
   };
 }
 

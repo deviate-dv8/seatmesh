@@ -21,6 +21,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `auto` | [auto.md](auto.md) |
 | `balance` | [balance.md](balance.md) |
 | `base` | [base.md](base.md) |
+| `campaign` | [campaign.md](campaign.md) |
 | `capture` | [capture.md](capture.md) |
 | `cb` | [cb.md](cb.md) |
 | `chat` | [chat.md](chat.md) |
