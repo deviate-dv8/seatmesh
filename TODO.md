@@ -85,8 +85,15 @@ guessing a replacement scope.
 - [x] **4.2** `session down` (never touch `dev`) — already landed (`sessionDown`/`session down|stop|kill`); kills only `loaded.sessionName`, the current profile's own computed session — a session by any other name (e.g. `dev`) is structurally untouched, no special-case needed.
 - [ ] **4.3** kiro trust dialog on launch — needs a real kiro-cli launch to verify against; not attempted without live-CLI access to confirm the fix actually works.
 - [ ] **4.4** Cursor composer-ready wait before handoff — same: needs a real cursor-agent pane to verify timing against, not guessed.
-- [ ] **4.5** cutover doc: when workers leave `dev` — **surpass gate D** — stale, see note above.
-- [ ] **4.6** **Surpass gate A** — inbox list/resolve + fix :3100 health wedge (beats harness :3099 for manager ops) — stale, see note above.
+- [-] **4.5** cutover doc: when workers leave `dev` — **surpass gate D**. Closed as
+  defer, not open work: `docs/SURPASS.md` and `legacy harness.sh` don't exist in this
+  repo, confirmed 2026-09-19 — the "surpass gate" framing this item is built on is
+  gone, there's no replacement scope to guess at without inventing one unasked.
+- [-] **4.6** **Surpass gate A** — inbox list/resolve + fix :3100 health wedge (beats
+  harness :3099 for manager ops). Same closure as 4.5 — the harness/`:3099` this was
+  scored against doesn't exist here; `inbox list/resolve` itself already shipped as
+  5.2, so the only un-landed part of this item was the "beat :3099" framing, not a
+  real gap.
 
 ---
 
@@ -188,8 +195,19 @@ without reinventing Herdr's agent-status surface.
   one `mesh-inbox-host-supervisor` walks `sessions.json`, runs a `mesh-inbox-watcher`
   per registered mesh. Still N `mesh-inbox-server` processes/ports. Not wired into
   `ensureMeshInbox` — existing meshes unaffected unless opted in. Landed 2026-09-19.
-- [ ] **7.2** Prove phase 1 under real multi-day load on this box (seatmesh/pia/zsign/
+- [~] **7.2** Prove phase 1 under real multi-day load on this box (seatmesh/pia/zsign/
   dc-agent), including HMR-restart and health-rescue paths, before defaulting to it.
+  **Clock actually started 2026-09-20T08:33Z** — ran `seatmesh host up` for real
+  (previously it had never once been started; 7.2 was stuck at zero evidence).
+  Confirmed on landing: `host status` shows all 4 registered meshes; seatmesh/pia
+  (already had live per-mesh daemons) correctly show `pid=-` — adopted, not
+  duplicated, per 7.3's proven coexistence logic; zsign/dc-agent (no daemon running
+  at all before this) got real daemons spawned for the first time. `/health` on
+  seatmesh/pia unaffected (same pids as before `host up`, zero disruption). Still
+  `[~]` not `[x]` — multi-day is multi-day, this only starts the clock, doesn't
+  finish it. Revisit `~/.config/seatmesh/host-supervisor.json` and each mesh's
+  `mesh-inbox.log` for HMR-restart/health-rescue behavior under the host supervisor
+  specifically after real elapsed time.
 - [~] **7.3** Default `ensureMeshInbox`/`seatmesh start`/`engine` to the host supervisor
   when `host up` is already running; retire the per-mesh auto-spawn path. **The
   "prefer" half is already true today, verified 2026-09-19 — no new code needed**:
