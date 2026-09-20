@@ -378,11 +378,37 @@ status-queryability and role-death resilience, not the underlying mechanism.
 
 ## P9 — ack protocol: move off manager-mediated ACK/ACK loops (vision, operator direction 2026-09-19 — not scoped)
 
-- [ ] **9.1** Agents report task completion as a cheap one-way "done" signal instead
+- [~] **9.1** Agents report task completion as a cheap one-way "done" signal instead
   of routing through an ACK/ACK confirmation exchange with the manager. Driver: each
   agent-to-agent inject round is a real LLM prompt, not free chatter — this project's
   own `.sm/mds/` notes already flag an "n+1" problem from today's ack model. Herdr's
-  simpler one-way status model is the reference point.
+  simpler one-way status model is the reference point. **Investigated 2026-09-20,
+  premise partially out of date** — read the actual current ack code
+  (`packages/daemon/src/ack/*.ts`, `packages/core/src/ack/ack-algo.ts`) instead of
+  assuming, same as 7.7's approach:
+  - Opening an ack row (`openAckForPeerRow`) costs nothing extra — it's metadata
+    attached to a peer delivery that was already happening, not a new inject.
+  - Closing (`closeAcksOnFilings`) is already fully passive/one-way: it fires when
+    the seat sends *any* later peer/inbox message, during the daemon's own sweep
+    tick — no reply-to-the-manager round-trip is required, and nothing gets
+    injected into the agent's pane to close it.
+  - **The literal reminder re-inject mechanism — the actual "n+1" cost — is already
+    disabled**, and has been for a while: `ack-algo.ts`'s `remindableAcks()`
+    unconditionally `return []`s, with its own comment: *"Never re-inject. First ask
+    paste is the only prompt; whoami/banner list open rows; `ack <id>` closes
+    without a peer reply (n+1 was burning turns)."* `fireAckReminders`'s loop body
+    is dead code as a result (empty input every tick).
+  - Open acks surface today only via `whoami`/hub status (`whoami-context.ts`,
+    `hub.ts`) — pull-based, read on an existing prompt, not a daemon-initiated push.
+  - **What's actually still true about the vision**: there's no explicit lightweight
+    "done" message type distinct from "the seat filed literally anything" — that's
+    a real ergonomics gap (a worker can't cheaply signal "this specific ask is
+    done" vs. just happening to send unrelated peer traffic later) — but it's not
+    a prompt-cost problem anymore, since nothing injects to open or close a row.
+  - Left `[~]` not `[x]`: the ergonomics gap above is real remaining scope, and 9.2
+    explicitly says design this together with 8.2 (campaign Objectives), which
+    doesn't exist yet — this investigation doesn't try to resolve that pairing,
+    just corrects the cost-model premise it was reasoning from.
 - [ ] **9.2** Tension with **8.2** (campaign Objectives): something still has to
   signal when an Objective moves, and that can't be the expensive ack loop this item
   is trying to remove — design these two together, not separately.
