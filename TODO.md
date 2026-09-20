@@ -223,9 +223,23 @@ without reinventing Herdr's agent-status surface.
   real multi-day load) hasn't happened yet, and removing the fallback now would
   strip pia/zsign's safety net before that's proven — exactly the sequencing 7.2's
   own text already calls for ("before defaulting to it").
-- [ ] **7.4** Phase 2 — collapse N `mesh-inbox-server` child processes into N in-process
-  listeners inside one process (per-mesh queue isolation preserved, one Node process
-  total). Bigger: shared HTTP server dispatch by port/session, one event loop.
+- [~] **7.4** Phase 2 — collapse N `mesh-inbox-server` child processes into N in-process
+  listeners inside one process. **Design done 2026-09-20, not implemented** — see
+  [docs/HANDOUT-HOST-DAEMON-PHASE2.md](docs/HANDOUT-HOST-DAEMON-PHASE2.md). Found two
+  concrete blockers by reading the actual file, not guessing: (1) `mesh-inbox-
+  server.ts`'s fault isolation today relies on 4 `process.exit()` call sites that
+  are correct for one-process-per-mesh and actively dangerous collapsed (one mesh's
+  fatal error would kill every mesh on the host); (2) at least one real cross-mesh
+  module-global — `compose-gate.ts`'s `skipTypingGate` flag — would let two meshes
+  with different `daemon.skipTypingGate` config silently clobber each other.
+  "Shared HTTP server dispatch by port/session" turns out unnecessary — N independent
+  `http.Server`s in one process is simpler and keeps today's per-mesh port model.
+  Biggest open question: HMR has no in-process equivalent of "the OS respawns the
+  child with freshly-built code" — not solved in this pass. **Recommendation: do
+  not implement** until 7.2 (Phase 1 proof) actually concludes and a full
+  module-global audit (not just the one found here) is done — see the design doc's
+  own reasoning. Broken into 7.4a (module-global audit) / 7.4b (`MeshInstance`
+  extraction) / 7.4c (host-process integration) / 7.4d (HMR redesign), none started.
 - [~] **7.5** `seatmesh host` status surfaced in the operator hub (:3190) instead of
   per-mesh `/health` polling from the picker. **Backend only, landed 2026-09-19**:
   new shared `readHostSupervisorMeta()`/`hostSupervisorSessionsByProfilePath()` in
