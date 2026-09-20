@@ -114,21 +114,35 @@ Open rows from the sm-functions campaign. Each ships as one function per SPEC (S
 Landed on `agent-kinds-json` → `1.2.4`: provider `kindBase`/`kindExtensions`, `agents.kinds` overlay,
 prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `opencode`.
 
-- [ ] **6.1** **`.sm/providers/` load** — drop-in provider modules (e.g. `kimi.mjs`) without engine PR/fork; register into builtin registry + emit `kindBase`. Today: launch-only via `agents.kinds`; full inject still needs a provider class in `@seat-mesh/providers` (or this loader). **Design done, not implemented** — see [docs/HANDOUT-PROVIDERS-DROPIN.md](docs/HANDOUT-PROVIDERS-DROPIN.md): `.mjs` file contract, error-isolation wrapper (a throwing/hanging drop-in provider must not take the shared daemon down), and why Phase 1 is daemon-registry-only (`resolveKindsForProfile`/`createRegistryForProfile` are sync and have ~30+ call sites — making them async to support this would be a much bigger refactor than the feature is worth). Broken into 6.1a (loader+validation+wrapper, landed 2026-09-19) / 6.1b (wire into
+- [x] **6.1** **`.sm/providers/` load** — drop-in provider modules (e.g. `kimi.mjs`) without engine PR/fork; register into builtin registry + emit `kindBase`. Today: launch-only via `agents.kinds`; full inject still needs a provider class in `@seat-mesh/providers` (or this loader). See [docs/HANDOUT-PROVIDERS-DROPIN.md](docs/HANDOUT-PROVIDERS-DROPIN.md): `.mjs` file contract, error-isolation wrapper (a throwing/hanging drop-in provider must not take the shared daemon down), and why Phase 1 is daemon-registry-only (`resolveKindsForProfile`/`createRegistryForProfile` are sync and have ~30+ call sites — making them async to support this would be a much bigger refactor than the feature is worth). Broken into 6.1a (loader+validation+wrapper, landed 2026-09-19) / 6.1b (wire into
   daemon bootstrap only, landed 2026-09-19 — inject-capable drop-in providers now
   work for real, no PR/fork needed; still requires the `agents.kinds` yaml stanza
-  from EXAMPLE-CUSTOM-KIND-KIMI.md too, per the design's Phase-1 scope) / 6.1c (kind
-  auto-merge so the yaml stanza isn't needed either, deferred) / **6.1d landed
-  2026-09-20**: `providers list|scan` (`main.ts`'s `cmd === "providers"` block) now
-  calls `loadDropInProviders` and registers the result into that call site's local
-  registry, same as the daemon — `main()` was already `async`, so this needed one
-  `await` at one call site, not the wider ~30-site refactor the design ruled out for
-  Phase 1. Scoped to just `providers list|scan`, not the other ~20
+  from EXAMPLE-CUSTOM-KIND-KIMI.md too, per the design's Phase-1 scope) / **6.1c
+  landed 2026-09-20**: kind auto-merge, the yaml stanza is no longer needed. Daemon
+  bootstrap now writes `<profileDir>/runtime/daemon/dropin-kinds.json` (best-effort,
+  never blocks startup — `dropin.ts`'s `writeDropInKindsCache`, computed via the
+  existing `collectProviderKinds` over the loaded drop-ins) right after `6.1b`'s
+  registry wiring. `resolveKindsForProfile` grew an optional second `profileDir`
+  param (backward compatible — omitted everywhere except the 3 real call sites,
+  which all already had a `LoadedProfile`: `kindsForLoaded`/`agent-launch.ts`,
+  `completion.ts`, `agents-state.ts`) that reads the cache and merges it into
+  `fromProviders`, so a profile's own `agents.kinds` overlay still wins on a
+  same-id conflict. 10 new unit tests (round-trip, corrupt-file, empty-map removes
+  stale cache, merge-precedence). **Live-verified end to end**: a real
+  `.sm/providers/kimi.mjs` with only `kindBase()` (no `agents.kinds.kimi:` yaml
+  anywhere in the profile) showed up correctly in both `sm kind list` and
+  `sm kind show kimi` after one real daemon bootstrap — the exact "just the one
+  `.mjs` file" experience the design doc called the ideal but deferred. / 6.1d
+  landed 2026-09-20: `providers list|scan` (`main.ts`'s `cmd === "providers"` block)
+  now calls `loadDropInProviders` and registers the result into that call site's
+  local registry, same as the daemon — `main()` was already `async`, so this needed
+  one `await` at one call site, not the wider ~30-site refactor the design ruled out
+  for Phase 1. Scoped to just `providers list|scan`, not the other ~20
   `createRegistryForProfile` call sites (`switch` verification etc.) — those stay
   untouched, matching the design's "adopt incrementally" framing. Live-verified: a
   real `.sm/providers/smoke.mjs` fixture showed up in `providers list` output
   alongside the builtins; a mesh with no `.sm/providers/` dir (the common case)
-  stayed silent and unaffected.
+  stayed silent and unaffected. **All of 6.1 (a/b/c/d) is now landed.**
 - [x] **6.2** `sm kind list|show [id]` — dump resolved kinds (provider ⊎ overlay ⊎ runners) for custom-profile DX
 - [x] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list) — `switch`/`handoff`/`set <target> <cli>` and `secretary switch <cli>` tab-complete a profile's `agents.kinds` overlay ids (falls back to the builtin list outside any `.sm/`)
 - [x] **6.4** Prune dual-path: `isOpenCodeCpeResumeCmd`'s regex fallback removed from

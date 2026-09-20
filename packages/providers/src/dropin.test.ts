@@ -3,7 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentProvider } from "@seat-mesh/core";
-import { isValidDropInProvider, loadDropInProviders, wrapDropInProvider } from "./dropin.js";
+import {
+  dropInKindsCachePath,
+  isValidDropInProvider,
+  loadDropInProviders,
+  readDropInKindsCache,
+  wrapDropInProvider,
+  writeDropInKindsCache,
+} from "./dropin.js";
 
 function stubProvider(overrides: Partial<AgentProvider> = {}): AgentProvider {
   return {
@@ -196,5 +203,49 @@ describe("loadDropInProviders", () => {
     }
     const result = await loadDropInProviders(tmp);
     expect(result.providers.map((p) => p.id).sort()).toEqual(["alpha", "beta"]);
+  });
+});
+
+describe("drop-in kinds cache (TODO 6.1c)", () => {
+  let tmp = "";
+
+  afterEach(() => {
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    tmp = "";
+  });
+
+  it("returns {} when no cache file exists", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-"));
+    expect(readDropInKindsCache(tmp)).toEqual({});
+  });
+
+  it("round-trips a write then read", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-"));
+    writeDropInKindsCache(tmp, { kimi: { provider: "kimi", launch: null } });
+    expect(fs.existsSync(dropInKindsCachePath(tmp))).toBe(true);
+    expect(readDropInKindsCache(tmp)).toEqual({ kimi: { provider: "kimi", launch: null } });
+  });
+
+  it("removes a stale cache file when writing an empty kinds map", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-"));
+    writeDropInKindsCache(tmp, { kimi: { provider: "kimi" } });
+    expect(fs.existsSync(dropInKindsCachePath(tmp))).toBe(true);
+    writeDropInKindsCache(tmp, {});
+    expect(fs.existsSync(dropInKindsCachePath(tmp))).toBe(false);
+  });
+
+  it("returns {} for a corrupt cache file instead of throwing", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-"));
+    const file = dropInKindsCachePath(tmp);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "{ not valid json");
+    expect(readDropInKindsCache(tmp)).toEqual({});
+  });
+
+  it("never throws even when the runtime dir can't be created", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-"));
+    const blocker = path.join(tmp, "runtime");
+    fs.writeFileSync(blocker, "x"); // a file where writeDropInKindsCache wants a dir
+    expect(() => writeDropInKindsCache(tmp, { kimi: { provider: "kimi" } })).not.toThrow();
   });
 });

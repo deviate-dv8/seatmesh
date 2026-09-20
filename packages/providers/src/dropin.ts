@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  AgentKindDef,
   AgentProvider,
   ComposerState,
   InjectPlan,
@@ -156,4 +157,56 @@ export async function loadDropInProviders(
   }
 
   return { providers, skipped };
+}
+
+/**
+ * TODO 6.1c — kind auto-merge cache. The daemon (async bootstrap) writes the
+ * kindBase/kindExtensions emitted by loaded drop-ins here once; `resolveKindsForProfile`
+ * (sync, ~3 call sites, all of which already have a `LoadedProfile`) reads it back
+ * alongside the profile's own `agents.kinds` overlay. This is the "sync/async bridge"
+ * the design doc's 6.1c note asked for: no live drop-in provider objects are touched
+ * outside the daemon bootstrap, only a small JSON snapshot of their static kind data.
+ * A user still needs `inbox restart` to pick up a changed drop-in — same cadence as
+ * the rest of registry construction (Phase 1 has no hot-reload, by design).
+ */
+export function dropInKindsCachePath(profileDir: string): string {
+  return path.join(profileDir, "runtime", "daemon", "dropin-kinds.json");
+}
+
+/** Best-effort — never throws. Called once from the daemon's async bootstrap. */
+export function writeDropInKindsCache(
+  profileDir: string,
+  kinds: Record<string, AgentKindDef>,
+): void {
+  const file = dropInKindsCachePath(profileDir);
+  try {
+    if (Object.keys(kinds).length === 0) {
+      // Nothing to cache — remove any stale cache from a previous run so a
+      // removed/renamed drop-in doesn't linger as a phantom kind forever.
+      try {
+        fs.unlinkSync(file);
+      } catch {
+        /* already gone */
+      }
+      return;
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(kinds, null, 2)}\n`);
+  } catch {
+    /* diagnostics-grade write — never break daemon bootstrap over this */
+  }
+}
+
+/** Best-effort — never throws. `{}` when the cache is missing/unreadable/invalid. */
+export function readDropInKindsCache(profileDir: string): Record<string, AgentKindDef> {
+  try {
+    const raw = fs.readFileSync(dropInKindsCachePath(profileDir), "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, AgentKindDef>;
+    }
+    return {};
+  } catch {
+    return {};
+  }
 }

@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { launchCmdFromKind } from "@seat-mesh/core";
 import { createBuiltinRegistry, normalizeProviderEnableIds, resolveKindsForProfile } from "./builtin.js";
+import { writeDropInKindsCache } from "./dropin.js";
 
 describe("normalizeProviderEnableIds", () => {
   it("maps opencode-cpe / oc aliases to opencode provider", () => {
@@ -83,5 +87,55 @@ describe("resolveKindsForProfile", () => {
     // no schema change needed for a seat launched on a custom kind.
     const noResume = launchCmdFromKind(myOc, "/work", null);
     expect(noResume).not.toContain("--session");
+  });
+});
+
+describe("resolveKindsForProfile + drop-in kinds cache (TODO 6.1c)", () => {
+  let tmp = "";
+
+  afterEach(() => {
+    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    tmp = "";
+  });
+
+  it("ignores the cache when profileDir is omitted (backward compatible)", () => {
+    const kinds = resolveKindsForProfile({ providers: ["empty"], agents: { runners: {}, kinds: {} } });
+    expect(kinds.kimi).toBeUndefined();
+  });
+
+  it("merges a cached drop-in kind in when profileDir is given, no yaml stanza needed", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-profile-"));
+    writeDropInKindsCache(tmp, {
+      kimi: { provider: "kimi", launch: { command: "kimi-cli", sessionFlag: "--resume" } },
+    });
+    const kinds = resolveKindsForProfile(
+      { providers: ["empty"], agents: { runners: {}, kinds: {} } },
+      tmp,
+    );
+    expect(kinds.kimi).toBeDefined();
+    expect(kinds.kimi.provider).toBe("kimi");
+    expect(kinds.kimi.launch).toMatchObject({ command: "kimi-cli" });
+  });
+
+  it("profile agents.kinds overlay still wins over a same-id cached drop-in kind", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-profile-"));
+    writeDropInKindsCache(tmp, { kimi: { provider: "kimi", aliases: ["from-cache"] } });
+    const kinds = resolveKindsForProfile(
+      {
+        providers: ["empty"],
+        agents: { runners: {}, kinds: { kimi: { provider: "kimi", aliases: ["from-yaml"] } } },
+      },
+      tmp,
+    );
+    expect(kinds.kimi.aliases).toEqual(["from-yaml"]);
+  });
+
+  it("a missing cache (no drop-ins ever loaded) behaves exactly like no profileDir", () => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dropin-kinds-profile-"));
+    const kinds = resolveKindsForProfile(
+      { providers: ["empty"], agents: { runners: {}, kinds: {} } },
+      tmp,
+    );
+    expect(kinds.kimi).toBeUndefined();
   });
 });

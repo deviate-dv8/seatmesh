@@ -22,7 +22,7 @@ import { tmux } from "../lib/tmux-run.js";
 
 /** Resolved kinds for this profile (provider kindBase ⊎ overlay ⊎ runners). */
 export function kindsForLoaded(loaded: LoadedProfile): Record<string, ResolvedAgentKind> {
-  return resolveKindsForProfile(loaded.profile);
+  return resolveKindsForProfile(loaded.profile, loaded.profileDir);
 }
 
 /** Profile-aware launch one-liner (kinds JSON + runners shim). */

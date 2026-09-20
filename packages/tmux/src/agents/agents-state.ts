@@ -187,7 +187,7 @@ export function resolveLaunchCmd(
   loaded?: LoadedProfile,
 ): string | null {
   const runners = loaded ? runnersFromProfile(loaded.profile) : {};
-  const kinds = loaded ? resolveKindsForProfile(loaded.profile) : undefined;
+  const kinds = loaded ? resolveKindsForProfile(loaded.profile, loaded.profileDir) : undefined;
   const resumeId = entry.resume_id ?? null;
   if (entry.resume_cmd) {
     // Keep CPE (or any prove-kind) wrapper — only refresh --session. Prefer the

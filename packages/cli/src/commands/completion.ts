@@ -182,7 +182,7 @@ function resolveCliTypes(): string[] {
     const profilePath = findDotSmConfig();
     if (!profilePath) return CLI_TYPES;
     const loaded = loadProfile(profilePath);
-    const kinds = resolveKindsForProfile(loaded.profile);
+    const kinds = resolveKindsForProfile(loaded.profile, loaded.profileDir);
     const ids = [...knownAgentKindIds(kinds)];
     cachedCliTypes = ids.length ? uniqSorted([...ids, ...CLI_TYPES]) : CLI_TYPES;
   } catch {

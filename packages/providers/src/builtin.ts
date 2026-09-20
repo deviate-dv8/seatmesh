@@ -17,6 +17,7 @@ import { claudeProvider } from "./claude.js";
 import { opencodeProvider } from "./opencode.js";
 import { emptyProvider } from "./empty.js";
 import { wrapProviderWithUx } from "./ux-wrap.js";
+import { readDropInKindsCache } from "./dropin.js";
 
 const BUILTIN = [
   cursorAgentProvider,
@@ -77,9 +78,20 @@ export function collectProviderKinds(
   return out;
 }
 
-/** Provider-emitted kinds ⊎ profile.agents.kinds ⊎ runners shim. */
+/**
+ * Provider-emitted kinds ⊎ drop-in kinds cache (TODO 6.1c, opt-in via `profileDir`)
+ * ⊎ profile.agents.kinds ⊎ runners shim.
+ *
+ * `profileDir` is optional and backward-compatible: omit it (as every existing
+ * fixture/test does) and behavior is identical to before 6.1c. Pass
+ * `loaded.profileDir` from any of the 3 real call sites (all already have a
+ * `LoadedProfile`) to also pick up `.sm/providers/*.mjs` drop-ins' `kindBase`/
+ * `kindExtensions` — cached by the daemon at bootstrap (`dropin.ts`'s
+ * `writeDropInKindsCache`) since drop-in loading is async and this function isn't.
+ */
 export function resolveKindsForProfile(
   profile: Pick<MeshProfile, "agents" | "providers">,
+  profileDir?: string,
 ): Record<string, ResolvedAgentKind> {
   const enabled = normalizeProviderEnableIds(profile.providers);
   const allow = enabled ? new Set(enabled) : null;
@@ -87,7 +99,10 @@ export function resolveKindsForProfile(
   if (!providers.some((p) => p.id === "empty")) {
     providers.push(emptyProvider);
   }
-  const fromProviders = collectProviderKinds(providers);
+  const fromProviders = {
+    ...collectProviderKinds(providers),
+    ...(profileDir ? readDropInKindsCache(profileDir) : {}),
+  };
   const { fromProfile, runners } = kindsMapsFromAgentsConfig(profile.agents);
   return resolveAgentKinds({ fromProviders, fromProfile, runners });
 }

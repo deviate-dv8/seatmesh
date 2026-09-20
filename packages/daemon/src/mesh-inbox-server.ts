@@ -20,7 +20,12 @@ import {
   recordNotification,
   markNotificationActed,
 } from "@seat-mesh/core";
-import { createRegistryForProfile, loadDropInProviders } from "@seat-mesh/providers";
+import {
+  collectProviderKinds,
+  createRegistryForProfile,
+  loadDropInProviders,
+  writeDropInKindsCache,
+} from "@seat-mesh/providers";
 import {
   capturePaneSnapshot,
   listMeshMonitorPanes,
@@ -189,6 +194,10 @@ async function main(): Promise<void> {
       `drop-in providers: loaded=${dropIn.providers.length} skipped=${dropIn.skipped.length} dir=${dropInDir}`,
     );
   }
+  // TODO 6.1c — cache drop-in kindBase/kindExtensions so resolveKindsForProfile
+  // (sync) can pick them up without the user also writing an agents.kinds yaml
+  // stanza. Best-effort; never blocks bootstrap.
+  writeDropInKindsCache(loaded.profileDir, collectProviderKinds(dropIn.providers));
 
   // Terminal-pool PTY pool — concurrency from mesh.config.yaml daemon.terminalPool.concurrency
   const tpConcurrency = (profile as { daemon?: { terminalPool?: { concurrency?: number } } }).daemon?.terminalPool?.concurrency ?? 2;
