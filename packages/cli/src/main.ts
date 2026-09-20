@@ -23,7 +23,7 @@ import {
   targetRangeOptsFromProfile,
 } from "@seat-mesh/core";
 import { snapshotConnectivity, formatStatus } from "@seat-mesh/connectivity";
-import { createRegistryForProfile } from "@seat-mesh/providers";
+import { createRegistryForProfile, loadDropInProviders } from "@seat-mesh/providers";
 import {
   printWhoami,
   whoamiJson,
@@ -2514,6 +2514,12 @@ async function main(): Promise<void> {
   if (cmd === "providers") {
     const loaded = meshLoaded(profileArg);
     const reg = createRegistryForProfile(loaded.profile);
+    const path = await import("node:path");
+    const dropIn = await loadDropInProviders(
+      path.join(loaded.profileDir, "providers"),
+      (line) => console.error(line),
+    );
+    for (const p of dropIn.providers) reg.register(p);
     if (sub === "list") {
       for (const p of reg.all()) console.log(p.id);
       return;

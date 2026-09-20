@@ -118,8 +118,17 @@ prove/satisfy/recovery, open `type` strings. CPE = `opencode-cpe` **extends** `o
   daemon bootstrap only, landed 2026-09-19 — inject-capable drop-in providers now
   work for real, no PR/fork needed; still requires the `agents.kinds` yaml stanza
   from EXAMPLE-CUSTOM-KIND-KIMI.md too, per the design's Phase-1 scope) / 6.1c (kind
-  auto-merge so the yaml stanza isn't needed either, deferred) / 6.1d (CLI-side
-  registry adoption — `providers list/scan` etc. don't see drop-ins yet, deferred).
+  auto-merge so the yaml stanza isn't needed either, deferred) / **6.1d landed
+  2026-09-20**: `providers list|scan` (`main.ts`'s `cmd === "providers"` block) now
+  calls `loadDropInProviders` and registers the result into that call site's local
+  registry, same as the daemon — `main()` was already `async`, so this needed one
+  `await` at one call site, not the wider ~30-site refactor the design ruled out for
+  Phase 1. Scoped to just `providers list|scan`, not the other ~20
+  `createRegistryForProfile` call sites (`switch` verification etc.) — those stay
+  untouched, matching the design's "adopt incrementally" framing. Live-verified: a
+  real `.sm/providers/smoke.mjs` fixture showed up in `providers list` output
+  alongside the builtins; a mesh with no `.sm/providers/` dir (the common case)
+  stayed silent and unaffected.
 - [x] **6.2** `sm kind list|show [id]` — dump resolved kinds (provider ⊎ overlay ⊎ runners) for custom-profile DX
 - [x] **6.3** Completion / help from `resolvedKinds` (not static `CLI_TYPES` list) — `switch`/`handoff`/`set <target> <cli>` and `secretary switch <cli>` tab-complete a profile's `agents.kinds` overlay ids (falls back to the builtin list outside any `.sm/`)
 - [x] **6.4** Prune dual-path: `isOpenCodeCpeResumeCmd`'s regex fallback removed from
