@@ -37,6 +37,26 @@ describe("requireRole / requireCoordRole", () => {
     expect(() => requireRole(loaded, ["manager"], "mini spawn")).not.toThrow();
   });
 
+  it("resolves a custom persona column through layout.base.kinds (TODO 8.6)", () => {
+    const leadLoaded = {
+      profile: { layout: { base: { kinds: { lead: "manager" } } } },
+    } as unknown as LoadedProfile;
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "lead" });
+    expect(() => requireRole(leadLoaded, ["manager"], "mini spawn")).not.toThrow();
+  });
+
+  it("denies a custom persona column not mapped to an allowed kind", () => {
+    const leadLoaded = {
+      profile: { layout: { base: { kinds: { lead: "worker" } } } },
+    } as unknown as LoadedProfile;
+    // @ts-expect-error partial mock
+    vi.mocked(runWhoami).mockReturnValue({ role: "lead" });
+    const { errors } = stubExit();
+    expect(() => requireRole(leadLoaded, ["manager"], "mini spawn")).toThrow("__exit__");
+    expect(errors[0]).toBe("UNAUTHORIZED: mini spawn requires role=manager (you_are=lead)");
+  });
+
   it("prints UNAUTHORIZED + exits 2 for a denied role", () => {
     // @ts-expect-error partial mock
     vi.mocked(runWhoami).mockReturnValue({ role: "worker" });

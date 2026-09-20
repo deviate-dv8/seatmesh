@@ -351,10 +351,24 @@ status-queryability and role-death resilience, not the underlying mechanism.
 - [ ] **8.5** Campaign listing/status must scale to **~100 concurrent campaigns**
   (ticket-style usage means many small campaigns, not a handful) — a status model
   that only answers one campaign at a time (e.g. "ask the supervisor") won't hold up.
-- [ ] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
-  this because You= is this") are a real pain point tied directly to 8.1;
-  `requireRole`/`requireCoordRole` (`packages/tmux/src/agents/authz-guard.ts`) will
-  need to loosen or become persona-aware.
+- [~] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
+  this because You= is this") are a real pain point tied directly to 8.1.
+  `requireCoordRole` was already persona-aware (via `isCoordKind`/`layout.base.kinds`)
+  before this session touched it. **`requireRole` made persona-aware 2026-09-20**:
+  resolves the pane's role through `seatKindFromId`/`layout.base.kinds` before
+  checking the allowed-kinds list, so a custom persona column (e.g.
+  `layout.base.kinds: { lead: manager }`) authorizes correctly without also being
+  literally named `manager` — backward compatible, literal ids still resolve to
+  themselves. Live-verified against a real parsed profile with a `lead: manager`
+  kinds mapping. **`requireInboxLifecycleRole` deliberately left alone**: it has a
+  narrower, tested, documented exclusion (manager-1 + secretary only, NOT
+  manager-2/3 — bouncing inbox from a secondary manager wedges the shared daemon)
+  that `seatKindFromId` can't express, since it collapses manager/manager-2/
+  manager-3 to the same SeatKind. Caught this by running the existing test suite
+  before committing, not by inspection — the first version of this change broke a
+  real, tested safety exclusion. Not solved: how a persona column says "I'm *the*
+  primary manager" vs "*a* manager-tier column" once ids are fully open — needs its
+  own design pass, not decided here.
 - [ ] **8.7** Chat rooms — flagged as "a good concept but hardly effectively executed"
   despite being the most-used `sm` CLI surface. **Partially addressed**: 5.10 landed
   dedupe/`cb=`/`tail`+`get` json+pane+truncate 2026-09-19 — confirm with operator
