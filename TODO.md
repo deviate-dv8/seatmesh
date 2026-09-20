@@ -364,11 +364,20 @@ status-queryability and role-death resilience, not the underlying mechanism.
   (fold/reduce logic + jsonl round-trip) + live-verified full lifecycle
   (create→list→note→reassign→done→show→status-filter) against a real throwaway
   mesh through the actual CLI, not just the core module.
-- [ ] **8.5** Campaign listing/status must scale to **~100 concurrent campaigns**
+- [~] **8.5** Campaign listing/status must scale to **~100 concurrent campaigns**
   (ticket-style usage means many small campaigns, not a handful) — a status model
   that only answers one campaign at a time (e.g. "ask the supervisor") won't hold up.
-  8.4's `campaign list` is a flat read-and-filter over the full jsonl log — fine at
-  today's scale, not proven at ~100 concurrent, no pagination/index yet.
+  **Measured against 8.4's implementation 2026-09-20, not just assumed**: synthetic
+  load of 100 campaigns + ~140 more lifecycle events (notes/status/reassigns, ~240
+  total jsonl lines) — `readCampaigns`'s full fold/reduce took 13ms in-process; the
+  real CLI's `campaign list --status all` over the same data returned all 100 in
+  0.275s wall time (dominated by normal Node/CLI startup, same as any `sm` command,
+  not by the read). The flat read-and-filter approach holds up fine at the target
+  scale — no pagination/index needed yet, contrary to what the item's framing
+  assumed before measuring. Left `[~]` not `[x]`: this is one synthetic load test,
+  not real multi-week usage, and doesn't touch the harder part of 8.5's original
+  concern (a *status query* model beyond flat listing — e.g. "how many campaigns are
+  blocked on X" once dependency edges from 8.2 exist).
 - [~] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
   this because You= is this") are a real pain point tied directly to 8.1.
   `requireCoordRole` was already persona-aware (via `isCoordKind`/`layout.base.kinds`)
