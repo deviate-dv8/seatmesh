@@ -326,14 +326,26 @@ actually answer "what's the status of X?" — supervise/balance themselves are a
 a strength (better than Herdr's equivalent per hands-on comparison); the gap is
 status-queryability and role-death resilience, not the underlying mechanism.
 
-- [ ] **8.1** Personas replace fixed manager/secretary/worker/mini roles as structural
+- [~] **8.1** Personas replace fixed manager/secretary/worker/mini roles as structural
   concepts (ids are already open via P6; this goes further — roles stop being
   hardcoded engine assumptions). Default project = a bare terminal + `npx seatmesh`
   echo, not a pre-built base/workers/minis grid. Window 9 "logs" is still liked and
   should stay — operator says it's "no longer needed" in its *current* form once the
   multi-daemon-per-mesh setup is fully gone (P7) — confirm exactly what changes
   there before touching it; read literally the window existed partly to surface
-  N-daemon log noise.
+  N-daemon log noise. **Scope audit done 2026-09-20, not implemented** — see
+  [docs/HANDOUT-PERSONA-MODEL.md](docs/HANDOUT-PERSONA-MODEL.md). Measured, not
+  guessed: 98 files reference `"manager"`/`"secretary"`/`"worker"`/`"mini"`
+  literally (52 tmux, 22 core, 15 daemon, 9 cli); sampling shows most of these are
+  genuine behavioral branches (cold-start prompts, switch/launch logic, hub
+  display, fanout routing), not just default values — a multi-subsystem migration,
+  not a bounded change like 8.4/8.6. Also found a second, mostly-vestigial closed
+  role-enum system (`slot/types.ts`'s `SlotRole`/`SlotId`, one real caller) separate
+  from the live `SeatKind` one. **Recommendation: do not implement** without a
+  phased plan (broken into 8.1a-d in the design doc) — the "default project" half
+  also needs one more clarifying pass on what the bare-terminal first-run actually
+  says before it's buildable, and its window-9 piece is explicitly sequenced after
+  P7 (7.2/7.4) concluding, which hasn't happened.
 - [~] **8.2** Campaign contract — **TODO slices** (assignable work units, need
   **dependency edges** across balancers/teams — flat lists can't express "this FE
   slice depends on that API slice") + **Objectives** (the missing piece today: lets
