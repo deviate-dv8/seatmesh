@@ -520,11 +520,22 @@ status-queryability and role-death resilience, not the underlying mechanism.
   11.3 — proves the pattern works and gets 9 rarely-used modules' transitive
   dependency weight off the hot path for every other command, without touching
   the large static-import block most commands still share.
-- [~] **11.4** Default project should replace manager-1 with a bare terminal
+- [x] **11.4** Default project should replace manager-1 with a bare terminal
   echoing `seatmesh` (concrete spec from the operator, resolving 8.1's earlier
-  "what does the echo actually say" open question). Scoped, not started this pass
-  — see 8.1's design doc; this needs its own implementation slice against
-  `packages/cli/src/setup/init.ts`'s scaffolding.
+  "what does the echo actually say" open question). **Landed 2026-09-22**: new
+  builtin kind `terminal` (`builtinLaunchLine` in `packages/core/src/agents/
+  kinds.ts`) — `extends: empty` (so it's detected/painted as plain_shell, not a new
+  provider family) with `launch: { builtin: "terminal" }`, a one-line
+  `echo "seatmesh - run: seatmesh ..."` then `exec "${SHELL:-bash}"` into a real
+  interactive shell. Init template's `layout.base.cli.manager` changed from
+  `agent` to `terminal`, with a comment pointing at `sm switch manager agent` for
+  anyone who wants the old behavior back. No new scaffold file needed — `command`-
+  style kinds resolve to a script path relative to workspace, which would have
+  required shipping a new file through `runInit`; a `builtin` avoids that
+  entirely. 1 new unit test + live-verified: fresh `runInit` → `sm kind list`
+  shows `terminal provider=empty launch=builtin:terminal` → `launchCmdFromKind`
+  produces the exact expected one-liner → ran the echo directly to confirm valid
+  bash. Does not touch secretary or any other column's default.
 - [ ] **11.5** Docs for running harness features modular/standalone (mds hosting,
   notifications, etc. — ties to 10.1's split-the-hub vision but asked here as "just
   document how to run these independently" rather than a full architecture split).

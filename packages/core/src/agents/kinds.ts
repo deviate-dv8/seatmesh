@@ -263,6 +263,12 @@ export function builtinLaunchLine(
         : `${LAUNCH_PREFIX} opencode --auto`;
     case "empty":
       return null;
+    case "terminal":
+      // Bare terminal with a one-line hint, not a silent empty shell — the
+      // default-scaffold "manager-1 = terminal, not an agent" shape (TODO 11.4).
+      // Detected as plain_shell same as empty (see kindBase's provider: "empty")
+      // once the echo finishes and the shell settles idle.
+      return `${LAUNCH_PREFIX} bash -lc 'echo "seatmesh - run: seatmesh   (try: seatmesh agent whoami)"; exec "\${SHELL:-bash}"'`;
     default:
       return null;
   }

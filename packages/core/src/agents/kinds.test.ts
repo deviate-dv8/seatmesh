@@ -83,4 +83,14 @@ describe("launchCmdFromKind", () => {
       "env -u NO_COLOR -u FORCE_COLOR COLORTERM=truecolor opencode --auto",
     );
   });
+
+  it("terminal builtin echoes a hint then execs a real shell (TODO 11.4)", () => {
+    const kinds = resolveAgentKinds({
+      fromProviders: { terminal: { provider: "empty", launch: { builtin: "terminal" } } },
+    });
+    const cmd = launchCmdFromKind(kinds.terminal, ws, null);
+    expect(cmd).toContain("echo ");
+    expect(cmd).toContain("seatmesh");
+    expect(cmd).toContain('exec "${SHELL:-bash}"');
+  });
 });

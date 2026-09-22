@@ -27,7 +27,10 @@ layout:
     # Operator types here — daemon holds injects while busy/typing (no mid-keystroke storms).
     humanCoTyped: [manager, secretary]
     cli:
-      manager: agent
+      # Bare terminal by default, not an agent CLI (TODO 11.4/8.1 — "default project
+      # = a bare terminal + seatmesh echo, not a pre-built base/workers/minis grid").
+      # Switch to a real coding-agent kind when you're ready: `sm switch manager agent`.
+      manager: terminal
       secretary: opencode
     coordSync:
       reload: false
@@ -58,6 +61,10 @@ providers:
 agents:
   runners:
     opencode-cpe: scripts/opencode-cpe.sh
+  kinds:
+    terminal:
+      extends: empty
+      launch: { builtin: terminal }
 
 seats:
   root: {{seatsRoot}}
