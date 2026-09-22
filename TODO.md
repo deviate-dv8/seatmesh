@@ -577,6 +577,20 @@ status-queryability and role-death resilience, not the underlying mechanism.
   list (which is what "easily check sessions" actually needs) already worked off
   the global registry regardless. Live-verified through the real `bin/seatmesh`
   entrypoint (not just `main.js` directly) from `/tmp`.
+- [x] **11.8** `seatmesh --skill` — a discovery/capability manifest so another
+  tool or agent (e.g. a different harness wanting to shell out to seatmesh, not
+  a human reading docs) can learn what it does and how to drive it, without any
+  bespoke integration code on seatmesh's side. **Landed**: `--skill`/`skill`
+  (plain and `--json`), name/description/when-to-use/entry-points/integration-
+  notes + the full command list generated from `listHelpEntries()` (same source
+  `docs/COMMANDS.md` uses — not hand-duplicated, stays in sync automatically).
+  Works from anywhere, no `.sm/` workspace needed (added to `bin/seatmesh`'s
+  `allow_outside_mesh`, same as `web`/`host`). Integration shape is plain
+  shell-out (`npx seatmesh <cmd> [--json]` / `sm <cmd>`) — no SDK, no API
+  server; scoped deliberately narrower than a real embeddable plugin API, which
+  would need to know the target tool's own plugin contract first (not
+  attempted here). 8 unit tests + live-verified through the real `bin/seatmesh`
+  entrypoint from outside any workspace, both plain and `--json` output.
 
 ---
 

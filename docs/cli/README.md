@@ -83,6 +83,7 @@ Full catalog: [../COMMANDS.md](../COMMANDS.md)
 | `session` | [session.md](session.md) |
 | `sessions` | [sessions.md](sessions.md) |
 | `set` | [set.md](set.md) |
+| `skill` | [skill.md](skill.md) |
 | `slot-advice` | [slot-advice.md](slot-advice.md) |
 | `spawn` | [spawn.md](spawn.md) |
 | `stack` | [stack.md](stack.md) |

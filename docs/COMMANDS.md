@@ -974,6 +974,20 @@ set <target> <agent|kiro|claude|opencode|empty>
 - Agent: `seatmesh agent help set`
 - File: [cli/set.md](cli/set.md)
 
+## skill
+
+```text
+--skill [--json] (also: seatmesh skill)
+  Discovery/capability manifest for another tool or agent integrating with
+  seatmesh — what it does, when to reach for it, entry points, and the full
+  command list. Plain shell-out integration (no SDK) — works from anywhere,
+  no .sm/ workspace needed. --json for machine-readable output.
+```
+
+- Run: `seatmesh skill --help`
+- Agent: `seatmesh agent help skill`
+- File: [cli/skill.md](cli/skill.md)
+
 ## slot-advice
 
 ```text

@@ -328,6 +328,11 @@ async function main(): Promise<void> {
   // Default help = human-only; `--agents help` = full human+agent surface.
   const helpCmd = cmd === "-h" || cmd === "--help" || cmd === "help";
   const blankCmd = !cmd || (cmd.startsWith("-") && !helpCmd);
+  if (cmd === "--skill" || cmd === "skill") {
+    const { runSkillCommand } = await import("./commands/skill-cli.js");
+    runSkillCommand(rest.includes("--json"));
+    return;
+  }
   if (helpCmd && cmd === "help" && sub && sub !== "--agents") {
     const { printCmdHelp } = await import("./commands/help-text.js");
     if (!printCmdHelp(sub)) process.exit(2);

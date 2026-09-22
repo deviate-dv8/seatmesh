@@ -421,6 +421,12 @@ const HELP: Record<string, string> = {
   Navigation history — recent \`peek <target>\` events (which panes/seats you've
   looked at). log = chronological, summary = grouped by target, most-recent first.`,
 
+  skill: `--skill [--json] (also: seatmesh skill)
+  Discovery/capability manifest for another tool or agent integrating with
+  seatmesh — what it does, when to reach for it, entry points, and the full
+  command list. Plain shell-out integration (no SDK) — works from anywhere,
+  no .sm/ workspace needed. --json for machine-readable output.`,
+
   campaign: `campaign create <title> [--objective "..."] [--assign <seat>] [--json]
   campaign list [--status open|done|cancelled|all] [--json]
   campaign show <id> [--json]
