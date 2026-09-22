@@ -2,6 +2,7 @@
 
 | Date (Asia/Manila) | Package | Notes |
 |--------------------|---------|--------|
+| **2026-09-22** | `seatmesh@1.3.0` | **Fixes real fresh-install crash**: internal `@seat-mesh/*` deps were `file:../x` local paths, meaningless outside this monorepo — every standalone `npm install seatmesh` since the package split has hit `ERR_MODULE_NOT_FOUND: Cannot find package '@seat-mesh/core'` immediately. Now real semver ranges. Also: `sm campaign` (ticket-style work tracking), `sm capture` (read-only pane scrollback), drop-in provider kind auto-merge (no yaml stanza needed for a `.sm/providers/*.mjs`), persona-aware `requireRole` authz, pane banner shows agent kind, daemon drain-tick per-step error isolation (a persistent fault in one step no longer silently freezes border-paint), ~35% faster CLI startup on common commands (lazy-loaded 9 command modules), default `seatmesh init` scaffold is a bare terminal instead of an agent CLI, `seatmesh host up` (opt-in single host-level daemon supervisor), wedge-diagnostics snapshot on health-rescue. |
 | **2026-09-18** | `seatmesh@1.2.5` | CLI declares `yaml` dep — fixes npx/global `ERR_MODULE_NOT_FOUND` on merge-mesh-config |
 | **2026-09-17** | `seatmesh@1.2.4` | Open agent kinds (`kindBase`/`extends`); opencode-cpe extends opencode; prove/satisfy/recovery; act/card hub; wave OC relaunch; Orca credit CONTINUE; cross-mesh inbox restart |
 | **2026-09-17** | `seatmesh@1.2.3` | Republish after connectivity@1.2.2 npm staging E409; same surface as 1.2.2 |
