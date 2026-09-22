@@ -283,6 +283,18 @@ export interface Registry {
       errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/session_ops_controller').default['runFunc']>>>
     }
   }
+  'sessions.ops.kill': {
+    methods: ["POST"]
+    pattern: '/sessions/:id/ops/kill'
+    types: {
+      body: {}
+      paramsTuple: [ParamValue]
+      params: { id: ParamValue }
+      query: {}
+      response: ExtractResponse<Awaited<ReturnType<import('#controllers/session_ops_controller').default['kill']>>>
+      errorResponse: ExtractErrorResponse<Awaited<ReturnType<import('#controllers/session_ops_controller').default['kill']>>>
+    }
+  }
   'mds.index': {
     methods: ["GET","HEAD"]
     pattern: '/mds'

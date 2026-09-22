@@ -132,10 +132,16 @@ export async function forgetGlobalSession(idOrPath: string): Promise<boolean> {
     const reg = readGlobalRegistry();
     const key = idOrPath.trim();
     const next = reg.sessions.filter((s) => {
+      // Same match set as findGlobalSession (session-kill) — was missing
+      // sessionName/label here even though findGlobalSession already had
+      // sessionName; kept the two functions consistent rather than leaving
+      // a "works to find it, not to forget it" gap.
       const hit =
         s.id === key ||
         s.profilePath === key ||
         path.resolve(s.profilePath) === path.resolve(key) ||
+        s.sessionName === key ||
+        s.label === key ||
         s.workspace === key ||
         path.resolve(s.workspace) === path.resolve(key);
       if (hit) removed = true;
@@ -157,6 +163,12 @@ export function findGlobalSession(
       s.profilePath === key ||
       path.resolve(s.profilePath) === path.resolve(key) ||
       s.sessionName === key ||
+      // TODO (session-kill): label is the one field the sidebar/hub/session
+      // list actually display prominently — matching only id/path/sessionName
+      // meant "kill by what you can actually see" never worked. Added here
+      // (findGlobalSession), not just at one call site, so every existing
+      // consumer (attach, forget, kill) gets it for free.
+      s.label === key ||
       s.workspace === key ||
       path.resolve(s.workspace) === path.resolve(key),
   );

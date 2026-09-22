@@ -1,7 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import { clearDaemonHealthCache } from '#services/session_registry'
 import { resolveHubSession } from '#services/resolve_session'
-import { listProfileFuncs, restartSessionInbox, runSessionFunc } from '#services/mesh_ops'
+import { killSession, listProfileFuncs, restartSessionInbox, runSessionFunc } from '#services/mesh_ops'
 
 export default class SessionOpsController {
   async show({ inertia, params, response }: HttpContext) {
@@ -69,6 +69,40 @@ export default class SessionOpsController {
       return response.redirect().toPath(returnTo)
     }
     return response.redirect().back()
+  }
+
+  async kill({ params, request, response, session: httpSession }: HttpContext) {
+    const resolved = await resolveHubSession(String(params.id), { probe: false })
+    if (!resolved.session) {
+      if (request.accepts(['html', 'json']) === 'json') {
+        return response.status(404).json({ error: `session not found: ${params.id}` })
+      }
+      httpSession.flash('error', 'Session not found')
+      return response.redirect().toRoute('sessions.index')
+    }
+    const session = resolved.session
+
+    const result = await killSession(session.profilePath)
+    clearDaemonHealthCache(session.daemonPort)
+    const detail = (result.stderr || result.stdout || `exit ${result.code}`).trim().slice(0, 400)
+
+    if (request.accepts(['html', 'json']) === 'json') {
+      return response.status(result.code === 0 ? 200 : 422).json({
+        ok: result.code === 0,
+        sessionId: session.id,
+        label: session.label,
+        error: result.code === 0 ? undefined : detail || 'Kill failed',
+      })
+    }
+
+    if (result.code === 0) {
+      httpSession.flash('success', `Killed session ${session.label} (${session.sessionName})`)
+    } else {
+      httpSession.flash('error', `Kill failed: ${detail}`)
+    }
+    // Session is gone (or was already) — always land back on the list, never
+    // its own now-dead detail/ops page.
+    return response.redirect().toRoute('sessions.index')
   }
 
   async runFunc({ params, request, response, session: httpSession }: HttpContext) {

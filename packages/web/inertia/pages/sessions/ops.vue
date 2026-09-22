@@ -24,9 +24,30 @@ const toast = useToast()
 const { isRestarting, restartInbox: queueRestart } = useInboxRestartQueue({ toast })
 const runningId = ref<string | null>(null)
 const funcArgs = ref<Record<string, string>>({})
+const isKilling = ref(false)
 
 function restartInbox() {
   void queueRestart(props.session.id)
+}
+
+function killSession() {
+  if (!confirm(`Kill session "${props.session.label}" (${props.session.sessionName})? This ends the tmux session and daemon.`)) {
+    return
+  }
+  isKilling.value = true
+  router.post(
+    `/sessions/${props.session.id}/ops/kill`,
+    {},
+    {
+      preserveScroll: true,
+      onFinish: () => {
+        isKilling.value = false
+      },
+      onError: () => {
+        toast.add({ title: 'Kill failed', color: 'error' })
+      },
+    }
+  )
 }
 
 function runFunc(id: string) {
@@ -118,6 +139,18 @@ function runFunc(id: string) {
         </li>
       </ul>
       <p v-else class="px-4 py-8 text-center text-sm text-zinc-400">No funcs in profile.</p>
+    </div>
+
+    <div class="sm-panel p-4 space-y-3 border-red-200">
+      <h2 class="text-sm font-semibold text-red-900">Danger zone</h2>
+      <p class="text-sm text-zinc-500 text-pretty">
+        Kills the tmux session and stops the daemon for this workspace — same as
+        <code class="sm-mono text-xs">session down</code>. No undo; agents lose whatever
+        wasn't saved.
+      </p>
+      <UButton color="error" variant="solid" :loading="isKilling" @click="killSession">
+        Kill session
+      </UButton>
     </div>
   </div>
 </template>

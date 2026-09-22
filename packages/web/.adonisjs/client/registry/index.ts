@@ -144,6 +144,12 @@ const routes = {
     tokens: [{"old":"/sessions/:id/ops/func","type":0,"val":"sessions","end":""},{"old":"/sessions/:id/ops/func","type":1,"val":"id","end":""},{"old":"/sessions/:id/ops/func","type":0,"val":"ops","end":""},{"old":"/sessions/:id/ops/func","type":0,"val":"func","end":""}],
     types: placeholder as Registry['sessions.ops.func']['types'],
   },
+  'sessions.ops.kill': {
+    methods: ["POST"],
+    pattern: '/sessions/:id/ops/kill',
+    tokens: [{"old":"/sessions/:id/ops/kill","type":0,"val":"sessions","end":""},{"old":"/sessions/:id/ops/kill","type":1,"val":"id","end":""},{"old":"/sessions/:id/ops/kill","type":0,"val":"ops","end":""},{"old":"/sessions/:id/ops/kill","type":0,"val":"kill","end":""}],
+    types: placeholder as Registry['sessions.ops.kill']['types'],
+  },
   'mds.index': {
     methods: ["GET","HEAD"],
     pattern: '/mds',

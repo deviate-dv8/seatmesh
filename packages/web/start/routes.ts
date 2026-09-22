@@ -49,6 +49,7 @@ router
   .post('/sessions/:id/ops/inbox-restart', [controllers.SessionOps, 'restartInbox'])
   .as('sessions.ops.inboxRestart')
 router.post('/sessions/:id/ops/func', [controllers.SessionOps, 'runFunc']).as('sessions.ops.func')
+router.post('/sessions/:id/ops/kill', [controllers.SessionOps, 'kill']).as('sessions.ops.kill')
 
 router.get('/mds', [controllers.Mds, 'index']).as('mds.index')
 router.get('/mds/:sessionId/*', [controllers.Mds, 'show']).as('mds.show')

@@ -270,12 +270,33 @@ export async function runSessionsCommand(
   if (sub === "forget") {
     const target = tail.filter((a) => !a.startsWith("-"))[0];
     if (!target) {
-      console.error("usage: sessions forget <id|profilePath|workspace>");
+      console.error("usage: sessions forget <id|label|sessionName|profilePath|workspace>");
       return 2;
     }
     const ok = await forgetGlobalSession(target);
     console.log(ok ? `OK: removed ${target}` : `not found: ${target}`);
     return ok ? 0 : 1;
+  }
+
+  if (sub === "kill" || sub === "stop" || sub === "down") {
+    const target = tail.find((a) => !a.startsWith("-"));
+    const keepInbox = tail.includes("--keep-inbox");
+    if (!target) {
+      console.error("usage: sessions kill <id|label|sessionName|profilePath|workspace> [--keep-inbox]");
+      console.error("hint: seatmesh sessions list   # see labels/ids");
+      return 2;
+    }
+    try {
+      const { killRegisteredSession } = await import("@seat-mesh/tmux");
+      const r = killRegisteredSession(target, { keepInbox });
+      console.log(
+        `OK: killed ${r.label} (${r.sessionName}) sessionKilled=${r.sessionKilled} inboxStopped=${r.inboxStopped}`,
+      );
+      return 0;
+    } catch (e) {
+      console.error((e as Error).message);
+      return 1;
+    }
   }
 
   if (sub === "attach") {
@@ -311,6 +332,6 @@ export async function runSessionsCommand(
     return 0;
   }
 
-  console.error("usage: sessions [pick|list|attach|forget] [--json]");
+  console.error("usage: sessions [pick|list|attach|forget|kill] [--json]");
   return 2;
 }

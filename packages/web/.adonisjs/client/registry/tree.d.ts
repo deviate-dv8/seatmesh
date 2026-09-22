@@ -33,6 +33,7 @@ export interface ApiDefinition {
     ops: typeof routes['sessions.ops'] & {
       inboxRestart: typeof routes['sessions.ops.inboxRestart']
       func: typeof routes['sessions.ops.func']
+      kill: typeof routes['sessions.ops.kill']
     }
   }
   notifications: {

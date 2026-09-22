@@ -1,7 +1,14 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { managerPaneWelcomeShell, parseGridSpec, type LoadedProfile } from "@seat-mesh/core";
+import {
+  findGlobalSession,
+  loadProfile,
+  managerPaneWelcomeShell,
+  parseGridSpec,
+  readGlobalRegistry,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import { managerStack, realignBaseLayout } from "./base-layout.js";
 import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
@@ -193,6 +200,29 @@ function spawnDetachedSessionFinish(loaded: LoadedProfile): void {
     // it inline so the mesh still ends up launched, just not lazily.
     finishSessionUp(loaded);
   }
+}
+
+/**
+ * Kill any *registered* session by id/label/sessionName/profilePath/workspace
+ * — resolved via the global registry, not the caller's cwd/--profile. Lets an
+ * operator kill session B while sitting in project A's directory (or from
+ * outside any project at all), the same way `sm sessions forget`/`attach`
+ * already work, instead of needing to `cd`/`--profile` into the target first.
+ * Reuses `sessionDown` unchanged once resolved — same tmux-kill + inbox-stop
+ * behavior, not a separate code path.
+ */
+export function killRegisteredSession(
+  target: string,
+  opts: { keepInbox?: boolean } = {},
+): { sessionKilled: boolean; inboxStopped: boolean; label: string; sessionName: string } {
+  const reg = readGlobalRegistry();
+  const entry = findGlobalSession(reg, target);
+  if (!entry) {
+    throw new Error(`no registered session matches "${target}" (try: seatmesh sessions list)`);
+  }
+  const loaded = loadProfile(entry.profilePath);
+  const result = sessionDown(loaded, opts);
+  return { ...result, label: entry.label, sessionName: entry.sessionName };
 }
 
 /**

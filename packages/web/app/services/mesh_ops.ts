@@ -70,6 +70,11 @@ export async function restartSessionInbox(profilePath: string) {
   return runSeatmesh(profilePath, ['inbox', 'restart'], { timeoutMs: 90_000 })
 }
 
+/** Kill this session's tmux + daemon — same `session down` an operator would run. */
+export async function killSession(profilePath: string) {
+  return runSeatmesh(profilePath, ['session', 'down'], { timeoutMs: 30_000 })
+}
+
 export async function runSessionFunc(profilePath: string, id: string, args: string[] = []) {
   if (!/^[a-zA-Z0-9._-]+$/.test(id)) {
     return { code: 2, stdout: '', stderr: 'invalid func id' }

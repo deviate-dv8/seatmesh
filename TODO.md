@@ -711,6 +711,35 @@ status-queryability and role-death resilience, not the underlying mechanism.
   would need to know the target tool's own plugin contract first (not
   attempted here). 8 unit tests + live-verified through the real `bin/seatmesh`
   entrypoint from outside any workspace, both plain and `--json` output.
+- [x] **11.9** Kill a registered session from CLI or web — "so i dont have to go
+  to tmux" (operator, 2026-09-23). **Landed**: `sm sessions kill <id|label|
+  sessionName|profilePath|workspace> [--keep-inbox]` (aliases `stop`/`down`) —
+  resolves the target through the global registry (`findGlobalSession`, now
+  also matching by `label`, not just id/profilePath/sessionName/workspace),
+  loads that session's own profile, and runs the same `sessionDown()` an
+  operator would from inside it (`killRegisteredSession` in
+  `packages/tmux/src/session/session.ts`). `forgetGlobalSession` got the same
+  label/sessionName matching fix it was missing. Blocked for in-pane agents
+  (`SEATMESH_AGENT_GATEWAY=1` → `UNAUTHORIZED`, same gate as `attach`/`forget`)
+  — this is an operator-only action. Web: `POST /sessions/:id/ops/kill`
+  (`session_ops_controller.ts`), a "Danger zone" panel + confirm-then-kill
+  button on the session's Ops page, redirects to the sessions list afterward
+  (never back to the now-dead detail page) — reuses `resolveHubSession`, so no
+  new lookup path, and uses the correct `accepts(['html','json']) === 'json'`
+  content-negotiation pattern from the start (10.1a's bug already fixed this
+  once). 10 new unit tests (6 registry-matching, 4 `killRegisteredSession`).
+  Live-verified end to end, not assumed: CLI — killed a real throwaway session
+  by label from a different cwd with no `--profile`, confirmed tmux gone +
+  daemon port refused + real `~/.config/seatmesh/sessions.json` untouched
+  after. Web — spun up an isolated hub instance (own `XDG_CONFIG_HOME`, port
+  3199, separate from the operator's live :3190 dev hub) against a real
+  registered test session, drove the actual POST route with a real CSRF
+  token: bogus id → 404 JSON, real id with a browser Accept header → 302 to
+  `/sessions` (not the dead page), then confirmed the session was actually
+  gone (`tmux has-session` fails, daemon health curl refused, hub's own
+  `/sessions` reflects `tmuxLive:false daemonUp:false`). `tsc --noEmit` in
+  `packages/web`: zero new errors vs. baseline. Full build + vitest
+  (156 files, 795/796 tests, 1 known-skip) green after.
 
 ---
 

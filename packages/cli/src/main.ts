@@ -636,11 +636,13 @@ async function main(): Promise<void> {
     const { runSessionsCommand, printAgentSessionsList } = await import(
       "./commands/sessions-cli.js"
     );
-    // After `agent sessions` strip: only list/json — never attach/pick/forget/register.
+    // After `agent sessions` strip: only list/json — never attach/pick/forget/
+    // register/kill. kill especially: an agent must never be able to tear down
+    // its own or another mesh's session through the gateway.
     const fromAgent = process.env.SEATMESH_AGENT_GATEWAY === "1";
     if (fromAgent) {
       const action = (sub ?? "list").toLowerCase();
-      if (["attach", "forget", "register", "pick", "add"].includes(action)) {
+      if (["attach", "forget", "register", "pick", "add", "kill", "stop", "down"].includes(action)) {
         console.error(
           `UNAUTHORIZED: sessions ${action} is operator-only — run without agent: seatmesh sessions ${action} …`,
         );
