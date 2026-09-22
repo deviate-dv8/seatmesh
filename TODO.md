@@ -500,9 +500,28 @@ status-queryability and role-death resilience, not the underlying mechanism.
   core` (session registry, mds, host-supervisor meta). What's actually coupled
   to `packages/web` is the *render* step (`inertia.render(...)` everywhere, no
   JSON content-negotiation) — the real gap is a missing JSON API, not tangled
-  code needing a physical package split. Recommendation: add JSON output to the
-  routes a standalone consumer would want (bounded, low-risk), not a`packages/
-  web` split (bigger, lower value than it looks given the finding above).
+  code needing a physical package split.
+  **10.1a landed 2026-09-23**: JSON content-negotiation on `/sessions`,
+  `/sessions/:id`, `/mds`, `/mds/:sessionId/*`, `/notifications` — reused the
+  exact `request.accepts([...])` pattern already proven in
+  `session_ops_controller.ts`'s `restartInbox`. **Caught a real bug before
+  shipping it, not after**: the first version used `request.accepts(['json'])`
+  alone, copying that pattern too literally — verified live (started the real
+  hub, hit it with `curl`) and found *every plain browser request* (real
+  browsers always send `Accept: …,*/*;q=0.8`, and even bare `curl` defaults to
+  `*/*`) matched `accepts(['json'])` and returned raw JSON instead of the
+  Inertia-rendered page. Would have broken the live dashboard/sessions/mds/
+  notifications pages for any normal page load. The original pattern is safe
+  *only* because it's on a POST action endpoint hit exclusively via the SPA's
+  own `fetch()` calls with a controlled, explicit Accept header — not a GET
+  route that's also the page's primary navigation target. Fixed to
+  `request.accepts(['html', 'json']) === 'json'` (offer both as candidates,
+  let priority-ordered negotiation actually decide) and re-verified all 4
+  scenarios live: plain curl → HTML, real browser Accept header → HTML,
+  Inertia's own `X-Inertia` navigation → correct Inertia partial response,
+  explicit `Accept: application/json` → JSON. `tsc --noEmit` on `@seat-mesh/
+  web` shows zero new errors (same pre-existing set as before). Physical
+  package split still not recommended — same reasoning as before.
 - [~] **10.2** Wormux-like session sidebar: open a seatmesh session, spawn the
   sidebar, see a list of sessions, each with a dropdown of which agents are in it.
   Distinct from the operator hub (:3190) — lighter, always-present picker.

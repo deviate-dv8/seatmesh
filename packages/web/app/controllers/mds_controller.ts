@@ -21,7 +21,7 @@ function loadSessionProfile(sessionId: string, sessions: Awaited<ReturnType<type
 }
 
 export default class MdsController {
-  async index({ inertia }: HttpContext) {
+  async index({ inertia, request, response }: HttpContext) {
     const sessions = await listHubSessions({ probe: false })
     const items: Array<{
       title: string
@@ -54,10 +54,12 @@ export default class MdsController {
 
     items.sort((a, b) => (a.when < b.when ? 1 : -1))
 
-    return inertia.render('mds/index', {
-      note: `Job-grouped docs — start at INDEX. Mirror: .sm/mds/docs/. ${defaultHubOrigin()}/mds`,
-      items,
-    })
+    const note = `Job-grouped docs — start at INDEX. Mirror: .sm/mds/docs/. ${defaultHubOrigin()}/mds`
+    // TODO 10.1 — same JSON content-negotiation as mesh_sessions_controller.ts.
+    if (request.accepts(['html', 'json']) === 'json') {
+      return response.json({ note, items })
+    }
+    return inertia.render('mds/index', { note, items })
   }
 
   async show({ inertia, params, response, request }: HttpContext) {
@@ -81,16 +83,23 @@ export default class MdsController {
 
     const doc = readHostedMd(loaded, slug)
     if (!doc) {
+      if (request.accepts(['html', 'json']) === 'json') {
+        return response.status(404).json({ error: `md not found: ${slug}` })
+      }
       return response.notFound({ error: `md not found: ${slug}` })
     }
 
-    return inertia.render('mds/show', {
+    const payload = {
       title: doc.title,
       body: doc.body,
       slug,
       mesh: loaded.profile.name,
       sessionId,
       file: doc.absPath,
-    })
+    }
+    if (request.accepts(['html', 'json']) === 'json') {
+      return response.json(payload)
+    }
+    return inertia.render('mds/show', payload)
   }
 }

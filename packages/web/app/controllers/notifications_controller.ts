@@ -114,15 +114,17 @@ function alertsFromSessions(sessions: HubSession[]): NotifRow[] {
 }
 
 export default class NotificationsController {
-  async index({ inertia }: HttpContext) {
+  async index({ inertia, request, response }: HttpContext) {
     const sessions = await listHubSessions({ probe: true })
     const healthItems = alertsFromSessions(sessions)
     const savedItems = await fetchSavedNotifyRows(sessions)
     const items = [...savedItems, ...healthItems].sort((a, b) => b.when.localeCompare(a.when))
-    return inertia.render('notifications/index', {
-      note: 'Saved agent notify history (per session) + live health alerts. Session detail: /sessions/:id/notifications',
-      items,
-      pollMs: 10000,
-    })
+    const note =
+      'Saved agent notify history (per session) + live health alerts. Session detail: /sessions/:id/notifications'
+    // TODO 10.1 — same JSON content-negotiation as mesh_sessions_controller.ts.
+    if (request.accepts(['html', 'json']) === 'json') {
+      return response.json({ note, items })
+    }
+    return inertia.render('notifications/index', { note, items, pollMs: 10000 })
   }
 }
