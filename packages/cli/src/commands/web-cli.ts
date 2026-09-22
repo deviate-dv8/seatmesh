@@ -196,14 +196,27 @@ function sessionHref(sessionId: string, sub = ""): string {
   return `${base}/sessions/${encodeURIComponent(sessionId)}${p}`;
 }
 
-export function printWebStatus(loaded: LoadedProfile, opts?: { json?: boolean }): number {
+/**
+ * `loaded` is optional (TODO: `web` works from anywhere, not just inside a
+ * `.sm/` workspace — it's a host-level view over the global session registry,
+ * same spirit as `seatmesh host`, not tied to any one project). When null,
+ * this-project-specific fields (daemon health, session shortcuts) are skipped
+ * entirely rather than guessed — the global registry's session list still
+ * shows every registered mesh either way.
+ */
+export function printWebStatus(loaded: LoadedProfile | null, opts?: { json?: boolean }): number {
   const base = hubBaseUrl();
   const hubPort = hubPortFromBase(base);
-  const port = meshInboxPort(loaded);
-  ensureMeshInbox(loaded, { quiet: true });
-  const probe = probeInbox(port);
-  const health = inboxHealthRelaxed(port);
-  const daemonUp = Boolean(health && health.engine === "@seat-mesh/daemon");
+  const port = loaded ? meshInboxPort(loaded) : null;
+  let probe: ReturnType<typeof probeInbox> | null = null;
+  let health: ReturnType<typeof inboxHealthRelaxed> | null = null;
+  let daemonUp = false;
+  if (loaded && port != null) {
+    ensureMeshInbox(loaded, { quiet: true });
+    probe = probeInbox(port);
+    health = inboxHealthRelaxed(port);
+    daemonUp = Boolean(health && health.engine === "@seat-mesh/daemon");
+  }
   const hubUp = hubListening(hubPort);
   const pid = readPid(hubPort);
   const pidAlive = pid != null && processAlive(pid);
@@ -218,15 +231,17 @@ export function printWebStatus(loaded: LoadedProfile, opts?: { json?: boolean })
         tmuxLive: tmuxHasSession(s.sessionName),
         daemonPort: s.daemonPort,
       }))
-    : [
-        {
-          id: loaded.sessionName,
-          label: loaded.profile.name,
-          profile: loaded.profileDir,
-          tmuxLive: tmuxHasSession(loaded.sessionName),
-          daemonPort: port,
-        },
-      ];
+    : loaded
+      ? [
+          {
+            id: loaded.sessionName,
+            label: loaded.profile.name,
+            profile: loaded.profileDir,
+            tmuxLive: tmuxHasSession(loaded.sessionName),
+            daemonPort: port ?? 0,
+          },
+        ]
+      : [];
 
   if (opts?.json) {
     console.log(
@@ -236,8 +251,8 @@ export function printWebStatus(loaded: LoadedProfile, opts?: { json?: boolean })
           hubUp,
           hubPid: pidAlive ? pid : null,
           webRoot,
-          profile: loaded.profile.name,
-          session: loaded.sessionName,
+          profile: loaded?.profile.name ?? null,
+          session: loaded?.sessionName ?? null,
           daemonPort: port,
           daemonUp,
           probe,
@@ -251,17 +266,23 @@ export function printWebStatus(loaded: LoadedProfile, opts?: { json?: boolean })
           sessions,
           restart: {
             hub: "npx seatmesh web restart   # or: web up / web down",
-            inbox: `seatmesh --profile ${loaded.profileDir} inbox restart`,
+            inbox: loaded
+              ? `seatmesh --profile ${loaded.profileDir} inbox restart`
+              : "cd <project> && seatmesh inbox restart",
             session: "seatmesh session attach|up",
           },
           routes: [
             "/",
             "/sessions",
-            `/sessions/${loaded.sessionName}`,
-            `/sessions/${loaded.sessionName}/ops`,
-            `/sessions/${loaded.sessionName}/queues`,
-            `/sessions/${loaded.sessionName}/terminals`,
-            `/sessions/${loaded.sessionName}/config`,
+            ...(loaded
+              ? [
+                  `/sessions/${loaded.sessionName}`,
+                  `/sessions/${loaded.sessionName}/ops`,
+                  `/sessions/${loaded.sessionName}/queues`,
+                  `/sessions/${loaded.sessionName}/terminals`,
+                  `/sessions/${loaded.sessionName}/config`,
+                ]
+              : []),
             "/notifications",
             "/tools",
             "/mds",
@@ -278,23 +299,32 @@ export function printWebStatus(loaded: LoadedProfile, opts?: { json?: boolean })
   if (pidAlive) console.log(`  pid=${pid}  log=${webLogPath(hubPort)}`);
   else if (hubUp) console.log(`  pid=(unknown — listening but no pidfile)`);
   console.log(`  webRoot=${webRoot ?? "(missing — set SEATMESH_WEB_ROOT or run from seatmesh checkout)"}`);
-  console.log(`  profile=${loaded.profile.name}  session=${loaded.sessionName}`);
-  console.log(`  ${meshInboxStatusLine(loaded, health)}`);
-  if (!daemonUp) console.log(`  fix daemon: seatmesh inbox restart`);
+  if (loaded) {
+    console.log(`  profile=${loaded.profile.name}  session=${loaded.sessionName}`);
+    console.log(`  ${meshInboxStatusLine(loaded, health)}`);
+    if (!daemonUp) console.log(`  fix daemon: seatmesh inbox restart`);
+  } else {
+    console.log(`  (no project in cwd — this-mesh daemon status skipped; showing registry + hub only)`);
+  }
   if (!hubUp) console.log(`  fix hub:    npx seatmesh web up`);
   console.log(`  open:       seatmesh web open`);
   console.log(`  sessions:   seatmesh sessions`);
-  console.log("");
-  console.log("hub routes (this session):");
-  console.log(`  dashboard     ${base}/`);
-  console.log(`  session       ${sessionHref(loaded.sessionName)}`);
-  console.log(`  ops/restart   ${sessionHref(loaded.sessionName, "/ops")}`);
-  console.log(`  queues        ${sessionHref(loaded.sessionName, "/queues")}`);
-  console.log(`  terminals     ${sessionHref(loaded.sessionName, "/terminals")}`);
-  console.log(`  config        ${sessionHref(loaded.sessionName, "/config")}`);
-  console.log(`  notifications ${base}/notifications`);
-  console.log(`  tools         ${base}/tools`);
-  console.log(`  mds           ${base}/mds`);
+  if (loaded) {
+    console.log("");
+    console.log("hub routes (this session):");
+    console.log(`  dashboard     ${base}/`);
+    console.log(`  session       ${sessionHref(loaded.sessionName)}`);
+    console.log(`  ops/restart   ${sessionHref(loaded.sessionName, "/ops")}`);
+    console.log(`  queues        ${sessionHref(loaded.sessionName, "/queues")}`);
+    console.log(`  terminals     ${sessionHref(loaded.sessionName, "/terminals")}`);
+    console.log(`  config        ${sessionHref(loaded.sessionName, "/config")}`);
+    console.log(`  notifications ${base}/notifications`);
+    console.log(`  tools         ${base}/tools`);
+    console.log(`  mds           ${base}/mds`);
+  } else {
+    console.log("");
+    console.log(`hub routes: ${base}/  ·  ${base}/sessions  ·  ${base}/notifications  ·  ${base}/tools  ·  ${base}/mds`);
+  }
   if (sessions.length) {
     console.log("");
     console.log(`registered sessions (${sessions.length}):`);
@@ -437,7 +467,7 @@ export function runWebRestart(opts?: { open?: boolean }): number {
 }
 
 export async function runWebCommand(
-  loaded: LoadedProfile,
+  loaded: LoadedProfile | null,
   sub: string | undefined,
   tail: string[],
 ): Promise<number> {

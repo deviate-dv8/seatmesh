@@ -44,6 +44,7 @@ import {
   listSessionPanes,
   sessionAttach,
   sessionUp,
+  finishSessionUp,
   sessionDown,
   sessionStatus,
   sessionSync,
@@ -775,6 +776,14 @@ async function main(): Promise<void> {
       printMeshInboxStatus(loaded);
       return;
     }
+    if (sub === "finish-up") {
+      // Internal — spawned detached by sessionUp so `start`/`session up` can
+      // attach immediately instead of blocking on every seat's agent CLI
+      // booting. Not meant for direct interactive use, same spirit as `sync`.
+      finishSessionUp(loaded);
+      console.log(`OK: session finish-up ${loaded.sessionName}`);
+      return;
+    }
     if (sub === "status") {
       sessionStatus(loaded);
       return;
@@ -825,7 +834,15 @@ async function main(): Promise<void> {
   }
 
   if (cmd === "web" || cmd === "open-web") {
-    const loaded = meshLoaded(profileArg);
+    // Host-level view over the global session registry (same spirit as
+    // `seatmesh host`), not tied to any one project — works from anywhere,
+    // .sm/ workspace or not.
+    let loaded: ReturnType<typeof meshLoaded> | null = null;
+    try {
+      loaded = meshLoaded(profileArg);
+    } catch {
+      /* no project in cwd — web-cli.ts handles null loaded */
+    }
     const { runWebCommand, runWebOpen } = await import("./commands/web-cli.js");
     if (cmd === "open-web") {
       process.exit(runWebOpen(sub));

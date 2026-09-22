@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { managerPaneWelcomeShell, parseGridSpec, type LoadedProfile } from "@seat-mesh/core";
@@ -7,7 +7,12 @@ import { applyMeshSessionBorders } from "./borders.js";
 import { labelMeshSession } from "./labels.js";
 import { ensureMeshInbox, stopMeshInbox } from "../comms/inbox-bridge.js";
 import { launchSession } from "../agents/launch.js";
-import { ensureMeshSessionEnv, installSessionSaveHooks, spawnDetachedSessionSync } from "./session-env.js";
+import {
+  ensureMeshSessionEnv,
+  installSessionSaveHooks,
+  resolveSeatmeshCliEntry,
+  spawnDetachedSessionSync,
+} from "./session-env.js";
 import { ensureLogsWindow } from "./logs-window.js";
 import { pasteWelcomeScript } from "./welcome-paste.js";
 import { saveMeshSession } from "./save-session.js";
@@ -135,17 +140,58 @@ export function sessionUp(loaded: LoadedProfile): void {
 
   // Manager stays a terminal with onboarding echoes (whoami + switch). Other seats may launch.
   paintManagerWelcome(loaded, session);
+  installSessionSaveHooks(session, loaded);
 
+  // Launching every seat's agent CLI and starting the daemon is the slow part —
+  // launchSession alone waits up to 180s for every pane's CLI to become
+  // composer-ready before returning. Doing that before ever attaching is why
+  // `start` on a fresh session used to take 1min+ just to reach tmux — the
+  // operator stared at a blank terminal instead of watching their own panes
+  // boot live. Same "attach first, finish in a detached child" pattern
+  // sessionAttach's re-attach path already uses (spawnDetachedSessionSync ->
+  // `session sync`) — extended here to cover first-time session creation too.
+  // SEATMESH_ATTACH_SYNC=1 forces the old fully-synchronous behavior (same
+  // escape hatch sessionAttach already honors for re-attach).
+  if (process.env.SEATMESH_ATTACH_SYNC === "1") {
+    finishSessionUp(loaded);
+  } else {
+    spawnDetachedSessionFinish(loaded);
+  }
+}
+
+/** The slow part of sessionUp: launch every seat's agent CLI + start the daemon. */
+export function finishSessionUp(loaded: LoadedProfile): void {
   if (process.env.MESH_SKIP_LAUNCH !== "1") {
     launchSession(loaded);
   }
-
   ensureMeshInbox(loaded, { quiet: true });
-  installSessionSaveHooks(session, loaded);
   try {
     saveMeshSession(loaded, createRegistryForProfile(loaded.profile));
   } catch {
     /* non-fatal */
+  }
+}
+
+/** Run finishSessionUp in a detached child so tmux attach is not blocked on it. */
+function spawnDetachedSessionFinish(loaded: LoadedProfile): void {
+  const cli = resolveSeatmeshCliEntry();
+  const env = { ...process.env, SEATMESH_SKIP_VERSION_CHECK: "1" };
+  const args = ["--profile", loaded.profilePath, "session", "finish-up"];
+  try {
+    const child =
+      cli === "seatmesh"
+        ? spawn("seatmesh", args, { detached: true, stdio: "ignore", cwd: loaded.workspace, env })
+        : spawn(process.execPath, [cli, ...args], {
+            detached: true,
+            stdio: "ignore",
+            cwd: loaded.workspace,
+            env,
+          });
+    child.unref();
+  } catch {
+    // Never let a failed background spawn block attach — fall back to doing
+    // it inline so the mesh still ends up launched, just not lazily.
+    finishSessionUp(loaded);
   }
 }
 

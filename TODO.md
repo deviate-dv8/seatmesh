@@ -551,6 +551,32 @@ status-queryability and role-death resilience, not the underlying mechanism.
   to run "just mds hosting" as its own smaller process today; that's what TODO
   10.1 (long-term, not scoped) would actually change. This doc is the "how to use
   what exists" answer, not a preview of that split.
+- [x] **11.6** `start`/`session up` on a fresh (never-created) session took 1min+
+  to reach `tmux attach` — `sessionUp()` called `launchSession()` (waits up to
+  180s for every seat's agent CLI to become composer-ready) and `ensureMeshInbox()`
+  synchronously, before ever attaching. **Landed**: split into fast tmux
+  scaffolding (unchanged, stays sync) + `finishSessionUp()` (launch + inbox +
+  save), the latter now spawned as a **detached child** (`session finish-up`,
+  internal) so attach isn't blocked on it — same "attach first, finish in the
+  background" pattern `sessionAttach`'s re-attach path already used
+  (`spawnDetachedSessionSync` -> `session sync`), extended to first-time
+  creation. `SEATMESH_ATTACH_SYNC=1` forces the old fully-synchronous behavior
+  (same escape hatch already used for re-attach). Live-verified: fresh session
+  now reaches the attach point in ~5s (measured via `SEATMESH_ATTACH_DRY=1`,
+  down from 1min+); confirmed the detached child actually completes the deferred
+  work correctly (daemon went healthy, secretary's agent CLI launched) by
+  watching it run to completion, not just checking it was spawned.
+- [x] **11.7** `npx seatmesh web` from outside any `.sm/` workspace refused with
+  "no mesh workspace here", even though the hub is a host-level view over the
+  global session registry (same spirit as `seatmesh host`), not tied to any one
+  project. **Landed**: added `web`/`open-web` to `bin/seatmesh`'s
+  `allow_outside_mesh` gate (the actual source of the error — a bash-level check
+  before Node ever runs); made `loaded` optional throughout `web-cli.ts` so
+  `web status`'s per-project shortcuts/daemon-health section is skipped cleanly
+  (not guessed) when there's no project in cwd, while the registered-sessions
+  list (which is what "easily check sessions" actually needs) already worked off
+  the global registry regardless. Live-verified through the real `bin/seatmesh`
+  entrypoint (not just `main.js` directly) from `/tmp`.
 
 ---
 

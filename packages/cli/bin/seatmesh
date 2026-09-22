@@ -133,7 +133,7 @@ in_mesh_context() {
 allow_outside_mesh() {
   local a0="${ARGS[0]:-}"
   case "$a0" in
-    ""|help|-h|--help|start|attach|session|sessions|init|version|install|update|completion|migrate-runtime|roles|host) return 0 ;;
+    ""|help|-h|--help|start|attach|session|sessions|init|version|install|update|completion|migrate-runtime|roles|host|web|open-web) return 0 ;;
   esac
   return 1
 }
