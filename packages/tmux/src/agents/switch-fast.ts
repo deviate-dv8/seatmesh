@@ -65,7 +65,7 @@ function cheapLiveType(paneId: string): string {
 }
 
 /** Built-in launch one-liners — no kinds JSON / providers resolve. */
-function fastLaunchCmd(
+export function fastLaunchCmd(
   type: string,
   workspace: string,
   resumeId?: string | null,
@@ -76,13 +76,13 @@ function fastLaunchCmd(
   switch (t) {
     case "opencode":
       return resumeId
-        ? `${LAUNCH_PREFIX} ${cd} opencode --session ${q(resumeId)}`
-        : `${LAUNCH_PREFIX} ${cd} opencode --auto`;
+        ? `${cd} ${LAUNCH_PREFIX} opencode --session ${q(resumeId)}`
+        : `${cd} ${LAUNCH_PREFIX} opencode --auto`;
     case "opencode-cpe": {
       const sh = `${workspace}/scripts/opencode-cpe.sh`;
       return resumeId
-        ? `${LAUNCH_PREFIX} ${cd} ${q(sh)} --session ${q(resumeId)}`
-        : `${LAUNCH_PREFIX} ${cd} ${q(sh)} --auto`;
+        ? `${cd} ${LAUNCH_PREFIX} ${q(sh)} --session ${q(resumeId)}`
+        : `${cd} ${LAUNCH_PREFIX} ${q(sh)} --auto`;
     }
     case "agent":
     case "cursor-agent":

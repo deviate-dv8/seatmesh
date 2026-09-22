@@ -740,6 +740,26 @@ status-queryability and role-death resilience, not the underlying mechanism.
   `/sessions` reflects `tmuxLive:false daemonUp:false`). `tsc --noEmit` in
   `packages/web`: zero new errors vs. baseline. Full build + vitest
   (156 files, 795/796 tests, 1 known-skip) green after.
+- [x] **11.10** `sm agent spawn here opencode` (fast-switch path) pasted a
+  launch line that always failed to `cd`: `env -u NO_COLOR -u FORCE_COLOR
+  COLORTERM=truecolor cd <workspace> && opencode --auto` — `env` execs its
+  first bare argument as a binary, and `cd` isn't one (`env: 'cd': No such
+  file or directory`), so any fast-switch into `opencode`/`opencode-cpe` in a
+  workspace other than the pane's current cwd landed the operator on a dead
+  shell instead of a running agent. Reported live by the operator
+  (2026-09-23) — pasted the actual failing pane output, not a guess.
+  **Root cause**: `fastLaunchCmd` in `packages/tmux/src/agents/switch-fast.ts`
+  put `${LAUNCH_PREFIX} ${cd} …` (env prefix before cd) for exactly these two
+  cases; the other two command builders that combine cd with the same env
+  prefix (`packages/core/src/agents/{kinds,runners}.ts`) already had the
+  correct order (`cd … && ${LAUNCH_PREFIX} …`) — this was a local ordering
+  bug in one of four near-duplicate `LAUNCH_PREFIX` definitions, not a
+  systemic one. **Fixed**: swapped to `${cd} ${LAUNCH_PREFIX} …` for both
+  cases. 3 new unit tests (`fastLaunchCmd` exported for direct testing)
+  asserting `cd` always precedes the `env` prefix, for opencode (fresh +
+  resume) and opencode-cpe. Full build + vitest green after (one known-flaky,
+  unrelated `secretary-auto-restart.test.ts` timeout under heavy same-machine
+  load, confirmed passing in isolation).
 
 ---
 
