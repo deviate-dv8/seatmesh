@@ -222,10 +222,18 @@ export const MeshProfileSchema = z.object({
           minInterval: z.string().default("5m"),
         })
         .default({}),
-      /** Same sender + same body within this window is not re-appended/re-fanned-out. */
+      /**
+       * Same sender + same body within this window is not re-appended/re-fanned-out.
+       * Default bumped from 20s (TODO 8.7, 2026-09-23) — real production room data
+       * (zsign's "managers" room) showed the same sender re-posting near-identical
+       * DONE text ~2-5 minutes apart, well past the old 20s window, going
+       * undeduped. 3m sits comfortably above that observed gap while staying well
+       * under this schema's own `thinNotify.minInterval` (5m default) precedent for
+       * "cooldown, not instant-only" noise suppression in this same config.
+       */
       dedupe: z
         .object({
-          window: z.string().default("20s"),
+          window: z.string().default("3m"),
         })
         .default({}),
     })

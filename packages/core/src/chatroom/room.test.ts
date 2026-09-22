@@ -319,6 +319,27 @@ describe("room file ops", () => {
     expect(lines).toHaveLength(4);
   });
 
+  it("dedupe window defaults to 3m when chatRooms/dedupe is absent from the profile (TODO 8.7)", () => {
+    // Real production evidence (zsign's "managers" room, 2026-09-23): the same
+    // sender re-posted near-identical DONE text ~2-5 min apart, past the old
+    // 20s default, going undeduped. Most real profiles never set
+    // chatRooms.dedupe.window explicitly — this is the effective default for
+    // them, not just the zod schema's (which only kicks in once chatRooms.dedupe
+    // is present in parsed YAML at all).
+    const minimalProfile = {
+      name: "t",
+      workspace: ".",
+      session: { name: "mesh", scope: "workspace", idLength: 6, workerCount: 4, miniMax: 4 },
+      seats: { root: "seats", templates: ["FOCUS"], dirs: {} },
+      state: { agentsJson: "a.json", meshAgentsJson: "m.json" },
+      roles: { dir: "roles" },
+      providers: ["empty"],
+      // chatRooms intentionally omitted — the common case.
+    } as unknown as Parameters<typeof chatRoomConfig>[0];
+    const derived = chatRoomConfig(minimalProfile);
+    expect(derived.dedupeWindowMs).toBe(180_000);
+  });
+
   it("skipDedupe bypasses the window", async () => {
     createRoom({ workspace, cfg, slug: "dedupe-3", createdBy: "mini-1" });
     await sayInRoom(workspace, cfg, "dedupe-3", "mini-2", "FYI: same line", { armCheckback: false });

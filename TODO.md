@@ -423,10 +423,29 @@ status-queryability and role-death resilience, not the underlying mechanism.
   literal-id matching at all, just ordinal position. 1 new test (custom persona
   column declared first vs second) + live-verified against a real parsed profile.
   All of 8.6 is now landed.
-- [ ] **8.7** Chat rooms — flagged as "a good concept but hardly effectively executed"
-  despite being the most-used `sm` CLI surface. **Partially addressed**: 5.10 landed
-  dedupe/`cb=`/`tail`+`get` json+pane+truncate 2026-09-19 — confirm with operator
-  whether that's what was meant, or more rework is wanted.
+- [~] **8.7** Chat rooms — flagged as "a good concept but hardly effectively executed"
+  despite being the most-used `sm` CLI surface. 5.10 landed dedupe/`cb=`/`tail`+`get`
+  json+pane+truncate 2026-09-19.
+  **Real evidence found 2026-09-23**, not guessed: read zsign's actual production
+  `managers` room log (315 real messages) instead of speculating what "hardly
+  effectively executed" means. Found concrete spam: the same sender (`mini-4`)
+  posted near-identical "DONE: mini-2 ... gate ... orphan wired ..." text twice,
+  ~5 minutes apart — well past the dedupe window, going undeduped, alongside
+  near-duplicate reports from `mini-1`/`mini-2` about the same underlying event.
+  Root cause: `dedupe.window` defaulted to `20s` — far shorter than real repost
+  gaps. **Also found the fix needed two edits, not one**: the zod schema's own
+  `.default("20s")` only applies once `chatRooms.dedupe` is present in parsed
+  YAML at all — `room.ts`'s `chatRoomConfig()` has a *separate*, hardcoded
+  `?? "20s"` fallback that's the actual effective default for any profile that
+  never sets `chatRooms` explicitly (the common case, including pia/zsign).
+  Bumped both to `3m` (comfortably above the observed 2-5min real gap, well
+  under this same schema's own `thinNotify.minInterval` 5m precedent). 1 new
+  test asserting the *real* default (`chatRoomConfig()` output, not just the
+  schema) is 180,000ms — would have caught the schema-only fix being
+  incomplete. Left `[~]` not `[x]`: this is one concrete, evidenced fix, not a
+  full "rework" — whether more is wanted needs the operator's own read on
+  whether this addresses "hardly effectively executed," same open question
+  5.10 already left.
 
 ---
 

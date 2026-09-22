@@ -53,9 +53,17 @@ export function chatRoomConfig(profile: MeshProfile): ChatRoomConfig {
         : 3,
     thinNotifyMinMs:
       thinSec != null && thinSec >= 30 ? thinSec * 1000 : 5 * 60 * 1000,
+    // Default "3m" — bumped from "20s" (TODO 8.7, 2026-09-23): real production
+    // room data showed the same sender re-posting near-identical DONE text
+    // ~2-5 minutes apart, past the old 20s window, going undeduped. This
+    // fallback exists separately from the zod schema's own default because
+    // `profile.chatRooms` (and `.dedupe`) are optional — most real profiles
+    // never set them explicitly, so THIS is the effective default, not the
+    // schema's (which only applies once `chatRooms.dedupe` is present in the
+    // parsed YAML at all) — keep both in sync, this is the one that matters.
     dedupeWindowMs: (() => {
-      const sec = parseDurationToSeconds(cr?.dedupe?.window ?? "20s");
-      return sec != null && sec >= 0 ? sec * 1000 : 20_000;
+      const sec = parseDurationToSeconds(cr?.dedupe?.window ?? "3m");
+      return sec != null && sec >= 0 ? sec * 1000 : 180_000;
     })(),
     inboxBase: `http://127.0.0.1:${profile.daemon?.port ?? 31670}`,
   };
