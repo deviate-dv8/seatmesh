@@ -118,6 +118,36 @@ describe("requireRole / requireCoordRole", () => {
     }
   });
 
+  it("requireInboxLifecycleRole allows a custom persona column declared first (primary manager), denies one declared second (TODO 8.6)", () => {
+    const prev = process.env.TMUX_PANE;
+    process.env.TMUX_PANE = "%1";
+    try {
+      const leadFirstLoaded = {
+        profile: {
+          layout: {
+            base: {
+              columns: ["lead", "backup-lead", "secretary"],
+              kinds: { lead: "manager", "backup-lead": "manager" },
+            },
+          },
+        },
+      } as unknown as LoadedProfile;
+
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "lead" });
+      expect(() => requireInboxLifecycleRole(leadFirstLoaded, "inbox restart")).not.toThrow();
+
+      // @ts-expect-error partial mock
+      vi.mocked(runWhoami).mockReturnValue({ role: "backup-lead" });
+      const { errors } = stubExit();
+      expect(() => requireInboxLifecycleRole(leadFirstLoaded, "inbox restart")).toThrow("__exit__");
+      expect(errors[0]).toContain("you_are=backup-lead");
+    } finally {
+      if (prev === undefined) delete process.env.TMUX_PANE;
+      else process.env.TMUX_PANE = prev;
+    }
+  });
+
   it("requireInboxLifecycleRole allows cross-mesh TMUX_PANE (pane not in this profile)", () => {
     const prev = process.env.TMUX_PANE;
     process.env.TMUX_PANE = "%32";

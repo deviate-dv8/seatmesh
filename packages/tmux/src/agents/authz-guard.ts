@@ -1,4 +1,10 @@
-import { isCoordKind, seatKindFromId, type LoadedProfile } from "@seat-mesh/core";
+import {
+  isCoordKind,
+  isSecretaryKind,
+  primaryManagerColumn,
+  seatKindFromId,
+  type LoadedProfile,
+} from "@seat-mesh/core";
 import { tmux } from "../lib/tmux-run.js";
 import { runWhoami } from "./whoami.js";
 
@@ -52,13 +58,21 @@ export function requireCoordRole(loaded: LoadedProfile, cmdLabel: string): void 
 }
 
 /**
- * Inbox lifecycle (start/stop/restart) — manager-1 + secretary only. Deliberately
- * narrower than `requireCoordRole`'s coord tier: manager-2/3 bouncing inbox on
- * first blip wedges the shared daemon for everyone, and `seatKindFromId` collapses
- * manager/manager-2/manager-3 to the same SeatKind (TODO 8.6 note: this specific
- * exclusion doesn't generalize under the current kind-mapping model without a way
- * to say "the primary manager column, not just any manager-tier column" — not
- * solved here, kept as literal-id matching on purpose, not an oversight).
+ * Inbox lifecycle (start/stop/restart) — primary manager + secretary only.
+ * Deliberately narrower than `requireCoordRole`'s coord tier: manager-2/3
+ * bouncing inbox on first blip wedges the shared daemon for everyone, and plain
+ * `seatKindFromId` collapses manager/manager-2/manager-3 to the same SeatKind —
+ * can't distinguish "the primary manager column" from "a manager-tier column"
+ * on its own (TODO 8.6's earlier note on this). Fixed by using
+ * `primaryManagerColumn(layout)` (the first manager-kind id in `layout.base.
+ * columns`, already the established "which manager is primary" convention —
+ * same one `base-layout.ts`'s `managerStack()` uses) instead of a hardcoded
+ * `"manager"` string comparison — so a custom persona column that's declared
+ * *first* among manager-tier columns is correctly treated as primary, while a
+ * second/third manager-tier column still isn't, regardless of what any of them
+ * are named. Secretary side uses `isSecretaryKind` (any secretary-tier column)
+ * since there's no documented "secretary-2 shouldn't restart inbox" concern —
+ * only manager-2/3 was ever called out.
  * Outside tmux (operator shell) is always allowed.
  * Cross-mesh: TMUX_PANE from another session (e.g. seatmesh pane + pia --profile)
  * is treated as operator — otherwise whoami throws "pane %N not found".
@@ -67,7 +81,10 @@ export function requireInboxLifecycleRole(loaded: LoadedProfile, cmdLabel: strin
   if (!process.env.TMUX_PANE) return;
   const w = whoamiHereOrOperator(loaded);
   if (!w) return;
-  if (w.role === "manager" || w.role === "secretary") return;
+  const kinds = loaded.profile?.layout?.base.kinds;
+  if (w.role === primaryManagerColumn(loaded.profile?.layout) || isSecretaryKind(w.role, kinds)) {
+    return;
+  }
   console.error(
     `UNAUTHORIZED: ${cmdLabel} requires role=manager|secretary (you_are=${w.role})`,
   );

@@ -394,7 +394,7 @@ status-queryability and role-death resilience, not the underlying mechanism.
   not real multi-week usage, and doesn't touch the harder part of 8.5's original
   concern (a *status query* model beyond flat listing — e.g. "how many campaigns are
   blocked on X" once dependency edges from 8.2 exist).
-- [~] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
+- [x] **8.6** `sm` CLI authz simplification — role-gated restrictions ("you can't run
   this because You= is this") are a real pain point tied directly to 8.1.
   `requireCoordRole` was already persona-aware (via `isCoordKind`/`layout.base.kinds`)
   before this session touched it. **`requireRole` made persona-aware 2026-09-20**:
@@ -403,15 +403,26 @@ status-queryability and role-death resilience, not the underlying mechanism.
   `layout.base.kinds: { lead: manager }`) authorizes correctly without also being
   literally named `manager` — backward compatible, literal ids still resolve to
   themselves. Live-verified against a real parsed profile with a `lead: manager`
-  kinds mapping. **`requireInboxLifecycleRole` deliberately left alone**: it has a
+  kinds mapping. `requireInboxLifecycleRole` initially left alone: it has a
   narrower, tested, documented exclusion (manager-1 + secretary only, NOT
   manager-2/3 — bouncing inbox from a secondary manager wedges the shared daemon)
-  that `seatKindFromId` can't express, since it collapses manager/manager-2/
-  manager-3 to the same SeatKind. Caught this by running the existing test suite
-  before committing, not by inspection — the first version of this change broke a
-  real, tested safety exclusion. Not solved: how a persona column says "I'm *the*
-  primary manager" vs "*a* manager-tier column" once ids are fully open — needs its
-  own design pass, not decided here.
+  that `seatKindFromId` can't express on its own, since it collapses manager/
+  manager-2/manager-3 to the same SeatKind. Caught this by running the existing
+  test suite before committing, not by inspection — the first version of that
+  change broke a real, tested safety exclusion.
+  **`requireInboxLifecycleRole` fixed too, 2026-09-23**: found the missing piece
+  was already sitting in the codebase — `primaryManagerColumn(layout)`
+  (`packages/core/src/schema/seat-kind.ts`), the first manager-kind id in
+  `layout.base.columns`, already the established "which manager is primary"
+  convention (`base-layout.ts`'s `managerStack()` already used it). Swapped the
+  hardcoded `w.role === "manager"` check for `w.role === primaryManagerColumn(...)`
+  + `isSecretaryKind` for the secretary side — a custom persona column declared
+  *first* among manager-tier columns is now correctly primary, a second/third one
+  still isn't, regardless of what any of them are named; manager-2/3's literal-id
+  exclusion still holds (same test still passes unchanged) since it's no longer
+  literal-id matching at all, just ordinal position. 1 new test (custom persona
+  column declared first vs second) + live-verified against a real parsed profile.
+  All of 8.6 is now landed.
 - [ ] **8.7** Chat rooms — flagged as "a good concept but hardly effectively executed"
   despite being the most-used `sm` CLI surface. **Partially addressed**: 5.10 landed
   dedupe/`cb=`/`tail`+`get` json+pane+truncate 2026-09-19 — confirm with operator
