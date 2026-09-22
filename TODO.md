@@ -536,9 +536,21 @@ status-queryability and role-death resilience, not the underlying mechanism.
   shows `terminal provider=empty launch=builtin:terminal` → `launchCmdFromKind`
   produces the exact expected one-liner → ran the echo directly to confirm valid
   bash. Does not touch secretary or any other column's default.
-- [ ] **11.5** Docs for running harness features modular/standalone (mds hosting,
+- [x] **11.5** Docs for running harness features modular/standalone (mds hosting,
   notifications, etc. — ties to 10.1's split-the-hub vision but asked here as "just
   document how to run these independently" rather than a full architecture split).
+  **Landed 2026-09-22**: [docs/HANDOUT-MODULAR-HARNESS-FEATURES.md](docs/HANDOUT-MODULAR-HARNESS-FEATURES.md).
+  Verified by reading the actual controllers/CLI code, not assuming: `sm web up`
+  (`packages/web`) already runs mds hosting + notification-card viewing standalone
+  — no live tmux session or daemon needed to start it or to view hosted markdown/
+  Info cards (`mds_controller.ts` reads `.sm/mds/` straight off disk with
+  `probe: false`; `mds-cli.ts`/`notify-cli.ts` have no daemon HTTP calls at all).
+  The one real nuance: a notification card's Yes/No/Run **action buttons** do need
+  that mesh's daemon reachable *at click time* to actually deliver/run something.
+  What's genuinely not standalone yet: `packages/web` is one bundled app — no way
+  to run "just mds hosting" as its own smaller process today; that's what TODO
+  10.1 (long-term, not scoped) would actually change. This doc is the "how to use
+  what exists" answer, not a preview of that split.
 
 ---
 
