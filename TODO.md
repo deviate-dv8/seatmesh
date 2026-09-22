@@ -490,13 +490,32 @@ status-queryability and role-death resilience, not the underlying mechanism.
 
 ## P10 — modular architecture + sidebar UI (long-term vision, operator direction 2026-09-19 — not scoped, explicitly "in the future" not near-term)
 
-- [ ] **10.1** Split the web hub / markdown hosting / notifications so they're usable
+- [~] **10.1** Split the web hub / markdown hosting / notifications so they're usable
   standalone or composed with a different core engine (name-dropped: "workmux", a
   separate/adjacent tool, not part of this repo) — seatmesh-the-engine and
-  seatmesh-the-tooling-pieces become separable.
-- [ ] **10.2** Wormux-like session sidebar: open a seatmesh session, spawn the
+  seatmesh-the-tooling-pieces become separable. **Design done 2026-09-23**: see
+  [docs/HANDOUT-SIDEBAR-AND-WEB-SPLIT.md](docs/HANDOUT-SIDEBAR-AND-WEB-SPLIT.md).
+  Real finding from reading the actual controllers: the hard part (data access)
+  is already separated — every controller is a thin wrapper over `@seat-mesh/
+  core` (session registry, mds, host-supervisor meta). What's actually coupled
+  to `packages/web` is the *render* step (`inertia.render(...)` everywhere, no
+  JSON content-negotiation) — the real gap is a missing JSON API, not tangled
+  code needing a physical package split. Recommendation: add JSON output to the
+  routes a standalone consumer would want (bounded, low-risk), not a`packages/
+  web` split (bigger, lower value than it looks given the finding above).
+- [~] **10.2** Wormux-like session sidebar: open a seatmesh session, spawn the
   sidebar, see a list of sessions, each with a dropdown of which agents are in it.
   Distinct from the operator hub (:3190) — lighter, always-present picker.
+  **Design done 2026-09-23** (same doc as 10.1, turned out to share a finding):
+  doesn't need `packages/web` at all — `sm sessions list --json` (session list)
+  +`sm contexts --json` (live-verified against pia; per-seat task data) already
+  give most of what a sidebar needs, same "shell out, no SDK" shape TODO 11.8's
+  `--skill` manifest established. One real gap found, not assumed: the
+  literal "which agents" (kind per pane) data is `sm providers scan`, not
+  `contexts` — and `providers scan` has no `--json` today (small, separable
+  prerequisite). Buildable independently of 10.1; the only real open question
+  left is the render target (tray app / TUI / page), an operator preference,
+  not an engineering one.
 
 ---
 
