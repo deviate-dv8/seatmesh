@@ -354,6 +354,7 @@ function paintOnePaneBorder(
   tmuxSet(paneId, "@mesh_ack", ack);
 
   tmuxSet(paneId, "@mesh_status", borderStatus);
+  if (prov?.id) tmuxSet(paneId, "@mesh_kind", prov.id);
   tmuxSet(
     paneId,
     "@mesh_banner",
@@ -362,6 +363,7 @@ function paintOnePaneBorder(
       tasks,
       inbox,
       ack: ackOpen > 0 ? ack : "",
+      kind: prov?.id,
       status: borderStatus,
     }),
   );

@@ -466,6 +466,71 @@ status-queryability and role-death resilience, not the underlying mechanism.
 
 ---
 
+## P11 — live bug fixes (operator hands-on, 2026-09-22)
+
+- [x] **11.1** Pane banner shows no agent kind at all. **Landed**: `@mesh_kind`
+  tmux option + a `kind` segment in the banner line (`name | kind | tasks | inbox |
+  ack | status`), sourced from the already-detected `prov.id` in
+  `paintOnePaneBorder` — no new per-tick resolution added. Dropped first (before
+  tasks/inbox) when the pane's too narrow, since it's the newest/lowest-priority
+  field. 3 new unit tests in `borders.test.ts` (present when there's room, cleanly
+  omitted when absent, dropped-not-truncated when narrow).
+- [x] **11.2** Banners reported as "stuck on idle, not updating" after trying a new
+  feature. Root-caused, not reproduced live (no active daemon/tmux at
+  investigation time — see reasoning below, not a guess): `orchestratorDrainTick(Async)`
+  runs 9 steps in sequence ending with border-paint, with **no error isolation
+  between them** — a persistent (not just transient) exception in any earlier step
+  (inbox/peer/checkback/target/ack draining) would silently prevent painting from
+  ever running again, every tick, with zero log signal. That's a real,
+  independently-justified reliability gap regardless of what specifically threw —
+  the same "daemon opacity" pattern as TODO 7.6. **Fixed**: each step now runs
+  through `step-isolation.ts`'s `runStep`/`runStepAsync` — catches, logs once per
+  step-label per 60s (not every tick), returns a safe fallback, and always
+  continues to the next step, so paint always gets its turn even if something
+  earlier is persistently broken. 11 new unit tests. Does not fix whatever the
+  *original* throwing step was (unknown, not reproduced) — fixes the class of bug
+  where one broken step can silently take banners down with it.
+- [ ] **11.3** CLI startup is slow on every invocation ("slow as hell, existing
+  sessions"). **Measured, not guessed**: `sm kind list` ≈0.78s, `sm --help` ≈1.2s,
+  vs ≈0.14s bare `node -e 1` baseline. CPU profile of a real invocation shows the
+  time is ~entirely Node's own ESM module-resolution/compile machinery
+  (`compileSourceTextModule`, `internalModuleStat`, `realpathSync`,
+  `getPackageScopeConfig`, …), not application logic — `main.ts` statically
+  `import`s essentially every command module at the top of the file regardless of
+  which single command actually runs, so every command pays for the whole CLI's
+  transitive dependency graph. This session's own new commands (`campaign`,
+  `capture`, `nav`, `schedule`) each added to that fixed cost for *every*
+  invocation, not just their own. Real fix is converting `main.ts`'s command
+  dispatch to lazy `await import()` per branch — mechanical but large (the file is
+  2700+ lines with dozens of branches); not attempted wholesale in this pass, see
+  11.3a below for what *did* land.
+- [x] **11.3a** Lazy-loaded 9 command builders (`campaign`, `nav`, `room`,
+  `contract`, `chat`, `notify`, `preview`, `schedule`, `mds`; `host` was already
+  lazy) — each was already dynamically dispatched through a
+  `buildXCommands(getLoaded)` factory pattern, so converting their **module-level**
+  import to a `dynamic import()` inside each `if (cmd === "...")` branch was safe
+  and mechanical, not a redesign. **Measured real improvement**: `sm kind list` (a
+  command that uses none of these 9 modules) dropped from ~0.78s to ~0.5-0.65s
+  just from shrinking the baseline import graph every command pays for; `sm help
+  spawn` (the one with an existing 1000ms CI budget test,
+  `cli-speed.test.ts`) now runs consistently 0.5-0.74s locally, down from the
+  ~1.2s this investigation started with. Full test suite + Docker CI both green
+  (one known-flaky, unrelated timeout on `secretary-auto-restart.test.ts` under
+  heavy same-session Docker load, confirmed by rerun). Smaller, bounded slice of
+  11.3 — proves the pattern works and gets 9 rarely-used modules' transitive
+  dependency weight off the hot path for every other command, without touching
+  the large static-import block most commands still share.
+- [~] **11.4** Default project should replace manager-1 with a bare terminal
+  echoing `seatmesh` (concrete spec from the operator, resolving 8.1's earlier
+  "what does the echo actually say" open question). Scoped, not started this pass
+  — see 8.1's design doc; this needs its own implementation slice against
+  `packages/cli/src/setup/init.ts`'s scaffolding.
+- [ ] **11.5** Docs for running harness features modular/standalone (mds hosting,
+  notifications, etc. — ties to 10.1's split-the-hub vision but asked here as "just
+  document how to run these independently" rather than a full architecture split).
+
+---
+
 ## Prove bar (every closed row)
 
 ```bash

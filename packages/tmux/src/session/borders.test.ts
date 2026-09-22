@@ -46,6 +46,39 @@ describe("mesh banner format", () => {
     expect(compactBannerInbox("inbox 2 cb 1 wait")).toBe("i2·1w");
   });
 
+  it("includes kind when there's room", () => {
+    const wide = {
+      name: "manager",
+      tasks: "tasks 3",
+      inbox: "inbox 2 cb 1",
+      kind: "opencode",
+      status: "idle",
+    };
+    expect(fitBannerLine(120, wide)).toBe(
+      "manager  |  opencode  |  tasks 3  |  inbox 2 cb 1  |  idle",
+    );
+  });
+
+  it("omits kind cleanly when not provided (backward compatible)", () => {
+    const wide = { name: "manager", tasks: "tasks 0", inbox: "inbox 0 cb 0", status: "idle" };
+    expect(fitBannerLine(120, wide)).toBe("manager  |  tasks 0  |  inbox 0 cb 0  |  idle");
+  });
+
+  it("drops kind before tasks/inbox when the pane is too narrow for everything", () => {
+    const wide = {
+      name: "slot-3",
+      tasks: "tasks 2",
+      inbox: "inbox 1 cb 0",
+      kind: "opencode-cpe",
+      status: "BUSY",
+    };
+    // Wide enough for name+tasks+inbox+status but not the long kind id too.
+    const line = fitBannerLine(30, wide);
+    expect(line).not.toContain("opencode-cpe");
+    expect(line).toContain("BUSY");
+    expect(line.length).toBeLessThanOrEqual(30);
+  });
+
   it("formats field labels", () => {
     expect(formatBannerTasks(3)).toBe("tasks 3");
     expect(formatBannerInbox(2)).toBe("inbox 2 cb 0");

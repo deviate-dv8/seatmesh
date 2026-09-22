@@ -48,6 +48,7 @@ import {
   repaintMeshPaneBorder,
   type BorderPaintConnectivity,
 } from "../border/border-paint.js";
+import { createStepErrorLog } from "./step-isolation.js";
 import { fireDueTargets } from "../target/target-fire.js";
 import { deliverToPane } from "../inject/inject-delivery.js";
 import {
@@ -719,42 +720,58 @@ function yieldEventLoop(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+const EMPTY_DRAIN_COUNT = { attempted: 0, delivered: 0, held: 0 };
+
+/**
+ * One drain-tick step must never starve the rest — in particular, border-paint
+ * runs last in this list, so an exception anywhere earlier (inbox/peer/checkback/
+ * target/ack draining) used to silently skip painting for that entire tick. See
+ * step-isolation.ts for why and the throttled-logging behavior.
+ */
+const stepErrorLog = createStepErrorLog();
+function runStep<T>(ctx: MeshOrchestratorCtx, label: string, fallback: T, fn: () => T): T {
+  return stepErrorLog.runStep(label, fallback, fn, ctx.log);
+}
+
 export function orchestratorDrainTick(ctx: MeshOrchestratorCtx): DrainTickResult {
-  pollSecretaryAutoRestart({
-    loaded: ctx.loaded,
-    registry: ctx.registry,
-    session: ctx.session,
-    baseWindow: ctx.baseWindow,
-    log: ctx.log,
-  });
-  pollPaneAutoRevive({
-    loaded: ctx.loaded,
-    registry: ctx.registry,
-    log: ctx.log,
-  });
-  pollLayoutAutoScale({
-    loaded: ctx.loaded,
-    log: ctx.log,
-  });
+  runStep(ctx, "secretary-auto-restart", undefined, () =>
+    pollSecretaryAutoRestart({
+      loaded: ctx.loaded,
+      registry: ctx.registry,
+      session: ctx.session,
+      baseWindow: ctx.baseWindow,
+      log: ctx.log,
+    }),
+  );
+  runStep(ctx, "pane-auto-revive", undefined, () =>
+    pollPaneAutoRevive({ loaded: ctx.loaded, registry: ctx.registry, log: ctx.log }),
+  );
+  runStep(ctx, "layout-auto-scale", undefined, () =>
+    pollLayoutAutoScale({ loaded: ctx.loaded, log: ctx.log }),
+  );
   if (ctx.paneOps) {
-    drainPaneOpsOnce(ctx.paneOps);
+    runStep(ctx, "pane-ops-drain", undefined, () => drainPaneOpsOnce(ctx.paneOps!));
   }
-  const a = drainInboxOnce(ctx);
-  const b = drainPeerOnce(ctx);
-  fireDueCheckbacks(ctx);
-  fireDueTargets({ store: ctx.store, loaded: ctx.loaded, log: ctx.log });
-  ackSweepTick(ctx);
-  paintMeshBorders(
-    ctx.loaded,
-    ctx.registry,
-    ctx.store,
-    ctx.session,
-    ctx.baseWindow,
-    ctx.workersWindow,
-    ctx.minisWindow,
-    new Set(),
-    borderConnectivity(ctx),
-    ctx.store.stateDir,
+  const a = runStep(ctx, "drain-inbox", EMPTY_DRAIN_COUNT, () => drainInboxOnce(ctx));
+  const b = runStep(ctx, "drain-peer", EMPTY_DRAIN_COUNT, () => drainPeerOnce(ctx));
+  runStep(ctx, "checkbacks-due", undefined, () => fireDueCheckbacks(ctx));
+  runStep(ctx, "targets-due", undefined, () =>
+    fireDueTargets({ store: ctx.store, loaded: ctx.loaded, log: ctx.log }),
+  );
+  runStep(ctx, "ack-sweep", undefined, () => ackSweepTick(ctx));
+  runStep(ctx, "border-paint", undefined, () =>
+    paintMeshBorders(
+      ctx.loaded,
+      ctx.registry,
+      ctx.store,
+      ctx.session,
+      ctx.baseWindow,
+      ctx.workersWindow,
+      ctx.minisWindow,
+      new Set(),
+      borderConnectivity(ctx),
+      ctx.store.stateDir,
+    ),
   );
   return {
     attempted: a.attempted + b.attempted,
@@ -763,49 +780,64 @@ export function orchestratorDrainTick(ctx: MeshOrchestratorCtx): DrainTickResult
   };
 }
 
-/** Yield between heavy steps so daemon /health can answer during drain. */
+function runStepAsync<T>(
+  ctx: MeshOrchestratorCtx,
+  label: string,
+  fallback: T,
+  fn: () => Promise<T> | T,
+): Promise<T> {
+  return stepErrorLog.runStepAsync(label, fallback, fn, ctx.log);
+}
+
+/**
+ * Yield between heavy steps so daemon /health can answer during drain. Same
+ * per-step isolation as `orchestratorDrainTick` — see `runStep`'s comment.
+ */
 export async function orchestratorDrainTickAsync(ctx: MeshOrchestratorCtx): Promise<DrainTickResult> {
-  pollSecretaryAutoRestart({
-    loaded: ctx.loaded,
-    registry: ctx.registry,
-    session: ctx.session,
-    baseWindow: ctx.baseWindow,
-    log: ctx.log,
-  });
-  pollPaneAutoRevive({
-    loaded: ctx.loaded,
-    registry: ctx.registry,
-    log: ctx.log,
-  });
-  pollLayoutAutoScale({
-    loaded: ctx.loaded,
-    log: ctx.log,
-  });
+  await runStepAsync(ctx, "secretary-auto-restart", undefined, () =>
+    pollSecretaryAutoRestart({
+      loaded: ctx.loaded,
+      registry: ctx.registry,
+      session: ctx.session,
+      baseWindow: ctx.baseWindow,
+      log: ctx.log,
+    }),
+  );
+  await runStepAsync(ctx, "pane-auto-revive", undefined, () =>
+    pollPaneAutoRevive({ loaded: ctx.loaded, registry: ctx.registry, log: ctx.log }),
+  );
+  await runStepAsync(ctx, "layout-auto-scale", undefined, () =>
+    pollLayoutAutoScale({ loaded: ctx.loaded, log: ctx.log }),
+  );
   if (ctx.paneOps) {
-    drainPaneOpsOnce(ctx.paneOps);
+    await runStepAsync(ctx, "pane-ops-drain", undefined, () => drainPaneOpsOnce(ctx.paneOps!));
   }
   await yieldEventLoop();
-  const a = drainInboxOnce(ctx);
+  const a = await runStepAsync(ctx, "drain-inbox", EMPTY_DRAIN_COUNT, () => drainInboxOnce(ctx));
   await yieldEventLoop();
-  const b = drainPeerOnce(ctx);
+  const b = await runStepAsync(ctx, "drain-peer", EMPTY_DRAIN_COUNT, () => drainPeerOnce(ctx));
   await yieldEventLoop();
-  fireDueCheckbacks(ctx);
+  await runStepAsync(ctx, "checkbacks-due", undefined, () => fireDueCheckbacks(ctx));
   await yieldEventLoop();
-  fireDueTargets({ store: ctx.store, loaded: ctx.loaded, log: ctx.log });
+  await runStepAsync(ctx, "targets-due", undefined, () =>
+    fireDueTargets({ store: ctx.store, loaded: ctx.loaded, log: ctx.log }),
+  );
   await yieldEventLoop();
-  ackSweepTick(ctx);
+  await runStepAsync(ctx, "ack-sweep", undefined, () => ackSweepTick(ctx));
   await yieldEventLoop();
-  await paintMeshBordersAsync(
-    ctx.loaded,
-    ctx.registry,
-    ctx.store,
-    ctx.session,
-    ctx.baseWindow,
-    ctx.workersWindow,
-    ctx.minisWindow,
-    new Set(),
-    borderConnectivity(ctx),
-    ctx.store.stateDir,
+  await runStepAsync(ctx, "border-paint", undefined, () =>
+    paintMeshBordersAsync(
+      ctx.loaded,
+      ctx.registry,
+      ctx.store,
+      ctx.session,
+      ctx.baseWindow,
+      ctx.workersWindow,
+      ctx.minisWindow,
+      new Set(),
+      borderConnectivity(ctx),
+      ctx.store.stateDir,
+    ),
   );
   return {
     attempted: a.attempted + b.attempted,

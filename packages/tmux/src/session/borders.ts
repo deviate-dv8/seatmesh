@@ -45,6 +45,8 @@ export interface BannerLineInput {
   inbox: string;
   /** Open unanswered asks; omit when zero. */
   ack?: string;
+  /** Detected agent kind/provider id (e.g. opencode, claude, kimi); omit when unknown. */
+  kind?: string;
   status: string;
 }
 
@@ -87,7 +89,8 @@ function joinBannerSegs(...parts: string[]): string {
 export function fitBannerLine(width: number, input: BannerLineInput): string {
   const w = Math.max(8, Math.floor(width));
   const ack = input.ack?.trim() ?? "";
-  const full = joinBannerSegs(input.name, input.tasks, input.inbox, ack, input.status);
+  const kind = input.kind?.trim() ?? "";
+  const full = joinBannerSegs(input.name, kind, input.tasks, input.inbox, ack, input.status);
   if (full.length <= w) return full;
 
   const compact: BannerLineInput = {
@@ -97,8 +100,12 @@ export function fitBannerLine(width: number, input: BannerLineInput): string {
     ack: ack ? compactBannerAck(ack) : "",
   };
   const cAck = compact.ack?.trim() ?? "";
-  const cFull = joinBannerSegs(compact.name, compact.tasks, compact.inbox, cAck, compact.status);
+  const cFull = joinBannerSegs(compact.name, kind, compact.tasks, compact.inbox, cAck, compact.status);
   if (cFull.length <= w) return cFull;
+
+  // Kind is the newest, lowest-priority field — drop it before touching tasks/inbox.
+  const dropKind = joinBannerSegs(compact.name, compact.tasks, compact.inbox, cAck, compact.status);
+  if (dropKind.length <= w) return dropKind;
 
   const dropTasks = joinBannerSegs(compact.name, compact.inbox, cAck, compact.status);
   if (dropTasks.length <= w) return dropTasks;

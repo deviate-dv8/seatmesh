@@ -142,7 +142,6 @@ import {
   kindsForLoaded,
 } from "@seat-mesh/tmux";
 import { parseAgentApplyArgs, lookupResolvedKind } from "@seat-mesh/core";
-import { buildChatCommands } from "./commands/chat-cli.js";
 import { buildCheckbackCommands } from "./commands/checkback-cli.js";
 import { buildTargetCommands } from "./commands/target-cli.js";
 import { buildAckCommands } from "./commands/ack-cli.js";
@@ -152,14 +151,6 @@ import {
 } from "./commands/ack-reply.js";
 import { buildLimitCommands } from "./commands/limit-cli.js";
 import { buildRolesCommands } from "./commands/roles-cli.js";
-import { buildNotifyCommand } from "./commands/notify-cli.js";
-import { buildPreviewCommand } from "./commands/preview-cli.js";
-import { buildScheduleCommand } from "./commands/schedule-cli.js";
-import { buildNavCommands } from "./commands/nav-cli.js";
-import { buildCampaignCommands } from "./commands/campaign-cli.js";
-import { runMdsCommand } from "./commands/mds-cli.js";
-import { buildContractLockCommands } from "./commands/contract-lock-cli.js";
-import { buildRoomCommands } from "./commands/room-cli.js";
 import { runInit } from "./setup/init.js";
 import { runAgentContextInit } from "./setup/agent-context-init.js";
 import {
@@ -2592,10 +2583,10 @@ async function main(): Promise<void> {
     const getLoaded = () => loaded;
     const branch =
       cmd === "room"
-        ? buildRoomCommands(getLoaded)
+        ? (await import("./commands/room-cli.js")).buildRoomCommands(getLoaded)
         : cmd === "contract"
-          ? buildContractLockCommands(getLoaded)
-          : buildChatCommands(getLoaded);
+          ? (await import("./commands/contract-lock-cli.js")).buildContractLockCommands(getLoaded)
+          : (await import("./commands/chat-cli.js")).buildChatCommands(getLoaded);
     // contract with no sub → status (simple agent path)
     if (!sub && cmd === "contract") {
       try {
@@ -2712,7 +2703,7 @@ async function main(): Promise<void> {
   if (cmd === "notify") {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
-    const branch = buildNotifyCommand(getLoaded);
+    const branch = (await import("./commands/notify-cli.js")).buildNotifyCommand(getLoaded);
     try {
       await branch.parseAsync(rest.slice(1), { from: "user" });
     } catch (e) {
@@ -2725,13 +2716,14 @@ async function main(): Promise<void> {
 
   if (cmd === "mds") {
     const loaded = meshLoaded(profileArg);
+    const { runMdsCommand } = await import("./commands/mds-cli.js");
     process.exit(await runMdsCommand(loaded, rest.slice(1)));
   }
 
   if (cmd === "preview") {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
-    const branch = buildPreviewCommand(getLoaded);
+    const branch = (await import("./commands/preview-cli.js")).buildPreviewCommand(getLoaded);
     try {
       await branch.parseAsync(rest.slice(1), { from: "user" });
     } catch (e) {
@@ -2745,7 +2737,7 @@ async function main(): Promise<void> {
   if (cmd === "nav") {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
-    const branch = buildNavCommands(getLoaded);
+    const branch = (await import("./commands/nav-cli.js")).buildNavCommands(getLoaded);
     if (!sub) {
       branch.outputHelp();
       return;
@@ -2763,7 +2755,7 @@ async function main(): Promise<void> {
   if (cmd === "campaign") {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
-    const branch = buildCampaignCommands(getLoaded);
+    const branch = (await import("./commands/campaign-cli.js")).buildCampaignCommands(getLoaded);
     if (!sub) {
       branch.outputHelp();
       return;
@@ -2781,7 +2773,7 @@ async function main(): Promise<void> {
   if (cmd === "schedule") {
     const loaded = meshLoaded(profileArg);
     const getLoaded = () => loaded;
-    const branch = buildScheduleCommand(getLoaded);
+    const branch = (await import("./commands/schedule-cli.js")).buildScheduleCommand(getLoaded);
     try {
       await branch.parseAsync(rest.slice(1), { from: "user" });
     } catch (e) {
