@@ -504,6 +504,26 @@ status-queryability and role-death resilience, not the underlying mechanism.
   dispatch to lazy `await import()` per branch — mechanical but large (the file is
   2700+ lines with dozens of branches); not attempted wholesale in this pass, see
   11.3a below for what *did* land.
+  **Revisited 2026-09-23 — measured why the rest doesn't help the common case,
+  not just assumed more lazy imports = faster**: `sm --skill` (needs *zero*
+  `@seat-mesh/tmux` functionality) takes the same ~0.35s as `sm kind list`
+  (needs plenty) — proof the two giant top-level imports (`@seat-mesh/core`
+  ~27 names, `@seat-mesh/tmux` ~120 names) are paid by *every* invocation
+  regardless of which branch runs, since they're module-level, not
+  branch-scoped. Tried the obvious fix — move both into a single lazy,
+  memoized load inside `main()`, skipped only by the true zero-dependency
+  fast paths (`--skill`, `--help`, blank invocation) — and hit a real blocker:
+  `meshLoaded()` (a module-level helper, not inside `main()`) calls
+  `loadProfile` **synchronously**, and it's called from ~60+ of `main()`'s
+  command branches. Lazy-loading `@seat-mesh/core` means `import()`, which is
+  inherently async, which means `meshLoaded` would need to become async, which
+  cascades into `await`-ing it at every one of those 60+ call sites — a much
+  bigger, invasive, correctness-risky refactor than "add a few more lazy
+  imports," and one that specifically wouldn't even help the highest-value
+  case (`sm agent whoami`, called "every turn" per `.sm/AGENTS.md`) since that
+  path needs `@seat-mesh/core`/`tmux` regardless of how the import is timed.
+  **Not attempted this pass** — real fix needs a deliberate design/migration
+  plan for `meshLoaded`'s async-ification, not a rushed 60-call-site change.
 - [x] **11.3a** Lazy-loaded 9 command builders (`campaign`, `nav`, `room`,
   `contract`, `chat`, `notify`, `preview`, `schedule`, `mds`; `host` was already
   lazy) — each was already dynamically dispatched through a
