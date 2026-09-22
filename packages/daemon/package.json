@@ -11,9 +11,9 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@seat-mesh/core": "file:../core",
-    "@seat-mesh/providers": "file:../providers",
-    "@seat-mesh/tmux": "file:../tmux",
+    "@seat-mesh/core": "^1.2.5",
+    "@seat-mesh/providers": "^1.2.5",
+    "@seat-mesh/tmux": "^1.2.5",
     "@types/ws": "^8.18.1",
     "bullmq": "^6.3.4",
     "ioredis": "^6.0.0",
