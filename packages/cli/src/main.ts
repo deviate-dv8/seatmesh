@@ -2535,16 +2535,32 @@ async function main(): Promise<void> {
     );
     for (const p of dropIn.providers) reg.register(p);
     if (sub === "list") {
+      if (rest.includes("--json") || tail.includes("--json")) {
+        console.log(JSON.stringify({ providers: reg.all().map((p) => p.id) }, null, 2));
+        return;
+      }
       for (const p of reg.all()) console.log(p.id);
       return;
     }
     if (sub === "scan") {
-      const session = tail[0] ?? liveMeshSession(loaded);
+      const scanJson = rest.includes("--json") || tail.includes("--json");
+      const session = tail.find((a) => a !== "--json") ?? liveMeshSession(loaded);
       const panes = listSessionPanes(session);
       if (!panes.length) {
         console.error(`no panes in session ${session} (tmux running?)`);
         process.exit(1);
       }
+      const rows: {
+        paneId: string;
+        role: string;
+        providerId: string | null;
+        resumeId: string | null;
+        phase: string;
+        limitKind: string | null;
+        slot: string;
+        ports: string;
+        window: string;
+      }[] = [];
       for (const paneId of panes) {
         const snap = capturePaneSnapshot(paneId);
         if (!snap) continue;
@@ -2554,13 +2570,28 @@ async function main(): Promise<void> {
         const role = snap.options.mesh_role?.trim() || "plain";
         const slot = snap.options.mesh_slot || "-";
         const ports = snap.options.mesh_ports || "-";
+        if (scanJson) {
+          rows.push({
+            paneId,
+            role,
+            providerId: prov?.id ?? null,
+            resumeId: det?.resumeId ?? null,
+            phase: state.phase,
+            limitKind: state.limitKind ?? null,
+            slot,
+            ports,
+            window: snap.windowName,
+          });
+          continue;
+        }
         console.log(
           `${paneId}\trole=${role}\t${prov?.id ?? "?"}\t${det?.resumeId ?? "-"}\t${state.phase}${state.limitKind ? `:${state.limitKind}` : ""}\tslot=${slot}\tports=${ports}\t${snap.windowName}`,
         );
       }
+      if (scanJson) console.log(JSON.stringify({ session, panes: rows }, null, 2));
       return;
     }
-    console.error("usage: providers list|scan [session]");
+    console.error("usage: providers list|scan [session] [--json]");
     process.exit(2);
   }
 

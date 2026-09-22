@@ -512,8 +512,12 @@ status-queryability and role-death resilience, not the underlying mechanism.
   give most of what a sidebar needs, same "shell out, no SDK" shape TODO 11.8's
   `--skill` manifest established. One real gap found, not assumed: the
   literal "which agents" (kind per pane) data is `sm providers scan`, not
-  `contexts` — and `providers scan` has no `--json` today (small, separable
-  prerequisite). Buildable independently of 10.1; the only real open question
+  `contexts`. **`providers scan --json` (+ `providers list --json`) landed
+  2026-09-23** — the one real prerequisite this design doc found, closing it
+  before 10.2b even starts. Live-verified against zsign's actual live
+  session (real panes, real provider/resumeId/composer-state data), backward
+  compatible (plain tab-separated output unchanged when `--json` isn't
+  passed). Buildable independently of 10.1; the only real open question
   left is the render target (tray app / TUI / page), an operator preference,
   not an engineering one.
 

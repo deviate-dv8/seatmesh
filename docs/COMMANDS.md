@@ -745,7 +745,7 @@ prompt [--manager] <target> <text...>
 ## providers
 
 ```text
-providers list|scan [session]
+providers list|scan [session] [--json]
   Detect live CLIs
 ```
 

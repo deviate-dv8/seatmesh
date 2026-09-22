@@ -391,7 +391,7 @@ const HELP: Record<string, string> = {
   proxy: `proxy status|check|reset
   Profile proxy driver`,
 
-  providers: `providers list|scan [session]
+  providers: `providers list|scan [session] [--json]
   Detect live CLIs`,
 
   base: `base ensure|realign
