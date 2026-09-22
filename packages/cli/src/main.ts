@@ -40,8 +40,7 @@ import {
   printAgentUnauthorized,
   stripAgentFromArgv,
   AGENT_META,
-  capturePaneSnapshot,
-  listSessionPanes,
+  scanSessionPanes,
   sessionAttach,
   sessionUp,
   finishSessionUp,
@@ -835,6 +834,19 @@ async function main(): Promise<void> {
     const loaded = meshLoaded(profileArg);
     const { runTpCommand } = await import("./commands/tp-cli.js");
     await runTpCommand(loaded, sub, tail);
+    return;
+  }
+
+  if (cmd === "sidebar") {
+    const { runSidebar } = await import("./commands/sidebar-cli.js");
+    const once = rest.includes("--once");
+    const intervalIdx = rest.indexOf("--interval");
+    const intervalSec =
+      intervalIdx >= 0 && rest[intervalIdx + 1] ? Number.parseInt(rest[intervalIdx + 1]!, 10) : 5;
+    await runSidebar({
+      once,
+      intervalMs: Number.isFinite(intervalSec) && intervalSec > 0 ? intervalSec * 1000 : 5000,
+    });
     return;
   }
 
@@ -2545,50 +2557,20 @@ async function main(): Promise<void> {
     if (sub === "scan") {
       const scanJson = rest.includes("--json") || tail.includes("--json");
       const session = tail.find((a) => a !== "--json") ?? liveMeshSession(loaded);
-      const panes = listSessionPanes(session);
-      if (!panes.length) {
+      const rows = scanSessionPanes(reg, session);
+      if (!rows.length) {
         console.error(`no panes in session ${session} (tmux running?)`);
         process.exit(1);
       }
-      const rows: {
-        paneId: string;
-        role: string;
-        providerId: string | null;
-        resumeId: string | null;
-        phase: string;
-        limitKind: string | null;
-        slot: string;
-        ports: string;
-        window: string;
-      }[] = [];
-      for (const paneId of panes) {
-        const snap = capturePaneSnapshot(paneId);
-        if (!snap) continue;
-        const prov = reg.detect(snap);
-        const det = prov?.detect(snap);
-        const state = prov?.composerState(snap) ?? { phase: "plain_shell" };
-        const role = snap.options.mesh_role?.trim() || "plain";
-        const slot = snap.options.mesh_slot || "-";
-        const ports = snap.options.mesh_ports || "-";
-        if (scanJson) {
-          rows.push({
-            paneId,
-            role,
-            providerId: prov?.id ?? null,
-            resumeId: det?.resumeId ?? null,
-            phase: state.phase,
-            limitKind: state.limitKind ?? null,
-            slot,
-            ports,
-            window: snap.windowName,
-          });
-          continue;
-        }
+      if (scanJson) {
+        console.log(JSON.stringify({ session, panes: rows }, null, 2));
+        return;
+      }
+      for (const r of rows) {
         console.log(
-          `${paneId}\trole=${role}\t${prov?.id ?? "?"}\t${det?.resumeId ?? "-"}\t${state.phase}${state.limitKind ? `:${state.limitKind}` : ""}\tslot=${slot}\tports=${ports}\t${snap.windowName}`,
+          `${r.paneId}\trole=${r.role}\t${r.providerId ?? "?"}\t${r.resumeId ?? "-"}\t${r.phase}${r.limitKind ? `:${r.limitKind}` : ""}\tslot=${r.slot}\tports=${r.ports}\t${r.window}`,
         );
       }
-      if (scanJson) console.log(JSON.stringify({ session, panes: rows }, null, 2));
       return;
     }
     console.error("usage: providers list|scan [session] [--json]");

@@ -536,9 +536,33 @@ status-queryability and role-death resilience, not the underlying mechanism.
   before 10.2b even starts. Live-verified against zsign's actual live
   session (real panes, real provider/resumeId/composer-state data), backward
   compatible (plain tab-separated output unchanged when `--json` isn't
-  passed). Buildable independently of 10.1; the only real open question
-  left is the render target (tray app / TUI / page), an operator preference,
-  not an engineering one.
+  passed). Buildable independently of 10.1.
+  **10.2b landed 2026-09-23, first minimal version, not the final interactive
+  form**: `sm sidebar [--once] [--interval SEC]` — auto-refreshing terminal
+  overview of every registered mesh, live/stopped state, and (for live ones)
+  each pane's detected agent kind + composer phase. Didn't wait on the
+  render-target decision (tray/TUI/page) — built the lowest-risk, most
+  verifiable v1 instead: a plain refreshing status print, not a full
+  interactive dropdown (which would need a TUI framework I can't visually
+  verify here). Extracted `scanSessionPanes()` out of `providers scan`'s
+  inline implementation into a shared `@seat-mesh/tmux` function so both
+  commands use the exact same detection logic instead of two copies drifting
+  — `providers scan`'s own output re-verified byte-identical after the
+  refactor. Works from anywhere (added to `bin/seatmesh`'s
+  `allow_outside_mesh`). 14 new unit tests (5 for `scanSessionPanes`, 9 for
+  the sidebar's `buildSidebarView`/`renderSidebar`) + live-verified through
+  the real `bin/seatmesh` entrypoint from outside any workspace, both
+  `--once` (deterministic single snapshot) and the real refresh loop
+  (backgrounded, timed, confirmed multiple ticks + clean SIGINT exit).
+  **One honest limitation found, not hidden**: each refresh tick is
+  synchronous and spawns real `tmux` subprocesses per pane
+  (`capturePaneSnapshot`'s several `display-message`/`capture-pane` calls) —
+  for a busy live session (zsign, 8 panes) a 2s `--interval` measured closer
+  to ~3.5s actual cadence. Fine for a first version; a truly snappy
+  always-on sidebar would want to memoize/batch that, not a blocker for
+  landing this. Render target (tray app / TUI / page) is still an open
+  operator preference for a *future*, fully-interactive version — this v1
+  intentionally sidesteps that decision rather than waiting on it.
 
 ---
 

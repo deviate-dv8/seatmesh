@@ -427,6 +427,13 @@ const HELP: Record<string, string> = {
   command list. Plain shell-out integration (no SDK) — works from anywhere,
   no .sm/ workspace needed. --json for machine-readable output.`,
 
+  sidebar: `sidebar [--once] [--interval SEC]
+  Auto-refreshing terminal overview of every registered mesh + which agent is
+  live in each pane (TODO 10.2, first minimal version — not the final
+  interactive form). Works from anywhere, no .sm/ workspace needed.
+  --once: print one snapshot and exit (scripting). --interval: refresh
+  seconds, default 5. Ctrl+C to exit.`,
+
   campaign: `campaign create <title> [--objective "..."] [--assign <seat>] [--json]
   campaign list [--status open|done|cancelled|all] [--json]
   campaign show <id> [--json]
