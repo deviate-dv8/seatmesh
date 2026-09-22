@@ -22,13 +22,23 @@ required to *be* one of those five things.
   (excluding tests) hits **98 files**: 52 in `tmux`, 22 in `core`, 15 in `daemon`,
   9 in `cli`.
 - There are **two independent closed-role type systems**, not one:
-  `schema/seat-kind.ts`'s `SeatKind` (the live one — backs layout, authz, CLI
-  dispatch) and `slot/types.ts`'s separate `SlotRole`/`SlotId` zod enums with their
-  own `parseSlotId`. Checked whether the second one is actually live: it's
-  imported in exactly one other file (`tmux/agents/agent-card.ts`), for one
-  function parameter's *type* only — not a second enforced authz path. Lower
-  priority than it first looks, but still a redundant closed enum that would need
-  reconciling or deleting, not two systems to open in parallel.
+  `schema/seat-kind.ts`'s `SeatKind` (backs layout, `requireRole`/`requireCoordRole`
+  authz, CLI dispatch) and `slot/types.ts` + `slot/guards.ts`'s separate
+  `SlotRole`/`CommsAction`/`SlotGuard`/`guardAllows()`. **Correction, 2026-09-23**:
+  this session's first pass at that finding was wrong — checked one import path
+  (`slot/types.ts` alone) and concluded "vestigial, one caller, type-only." Checked
+  properly this time: `slot/guards.ts`'s `guardAllows(role, action)` is a real
+  function, actively called from `tmux/agents/agent-dispatch.ts` (`roleAllowsVerb`,
+  gating `sm agent`'s own can/cannot capability card — the single most-invoked
+  command in the whole CLI per `.sm/AGENTS.md`'s "every turn: sm agent whoami").
+  Not vestigial at all — it's a **second, independently-defined, currently
+  load-bearing authz enforcement path**, running in parallel with `seat-kind.ts`'s.
+  This raises 8.1's real risk, not lowers it: unifying these two enums means
+  touching the exact authz logic gating every agent's every command, not a safe,
+  isolated cleanup — do not treat this as a "warm-up" step. 8.1b's planned
+  per-hit categorization (below) needs to explicitly separate "SeatKind-based" vs
+  "SlotRole-based" coupling as two related but distinct systems to reconcile, not
+  one.
 - Sampling `tmux` (the largest bucket, 84 of its 98 hits are literal `role ===
   "manager"`-style branches, not just defaults) shows this is **real behavioral
   coupling, not just fallback values**: `cold-start-inject.ts` injects a
@@ -78,12 +88,18 @@ explicitly sequenced after P7 concluding.
 
 ## Proposed TODO.md breakdown (not started)
 
-- **8.1a** — reconcile or delete `slot/types.ts`'s redundant `SlotRole`/`SlotId`
-  enums (low-risk, single real caller, good warm-up before touching the live
-  `SeatKind` system).
+- **8.1a** — reconcile `slot/types.ts`/`slot/guards.ts`'s `SlotRole`/`CommsAction`/
+  `guardAllows()` with `seat-kind.ts`'s `SeatKind` (same 5 values, two separate
+  definitions). **Not** a low-risk warm-up — corrected 2026-09-23: `guardAllows`
+  is live-load-bearing for `sm agent`'s capability card via
+  `tmux/agents/agent-dispatch.ts`'s `roleAllowsVerb`. Needs its own careful pass
+  (agent-dispatch.ts + agent-card.ts both consume these types functionally, not
+  just as parameter annotations) before 8.1c can safely build on a single
+  unified enum.
 - **8.1b** — categorize all 98 hits precisely (not sampled): default/fallback value
   (safe to leave), display/routing branch (needs an open-persona equivalent),
-  authz-relevant (needs the same `seatKindFromId` treatment 8.6 gave `requireRole`).
+  authz-relevant (needs the same `seatKindFromId` treatment 8.6 gave `requireRole`,
+  now including the separate `SlotRole`/`guardAllows` path 8.1a covers).
   Turns "98 files" into an actual per-category plan instead of one scary number.
 - **8.1c** — open `SeatKind` itself (or introduce a parallel open persona-id concept
   that `SeatKind` becomes a special case of) — the real engine-type change, blocked

@@ -339,13 +339,17 @@ status-queryability and role-death resilience, not the underlying mechanism.
   literally (52 tmux, 22 core, 15 daemon, 9 cli); sampling shows most of these are
   genuine behavioral branches (cold-start prompts, switch/launch logic, hub
   display, fanout routing), not just default values — a multi-subsystem migration,
-  not a bounded change like 8.4/8.6. Also found a second, mostly-vestigial closed
-  role-enum system (`slot/types.ts`'s `SlotRole`/`SlotId`, one real caller) separate
-  from the live `SeatKind` one. **Recommendation: do not implement** without a
-  phased plan (broken into 8.1a-d in the design doc) — the "default project" half
-  also needs one more clarifying pass on what the bare-terminal first-run actually
-  says before it's buildable, and its window-9 piece is explicitly sequenced after
-  P7 (7.2/7.4) concluding, which hasn't happened.
+  not a bounded change like 8.4/8.6. Also found a second closed role-enum system
+  (`slot/types.ts`+`slot/guards.ts`'s `SlotRole`/`CommsAction`/`guardAllows()`)
+  separate from the live `SeatKind` one. **Correction 2026-09-23**: first pass
+  called this "mostly vestigial" — wrong, checked one import path only.
+  `guardAllows` is actually live-load-bearing, gating `sm agent`'s capability
+  card via `agent-dispatch.ts` — the highest-frequency command in the CLI.
+  Raises 8.1's real risk rather than lowering it (see design doc's corrected
+  8.1a). **Recommendation: do not implement** without a phased plan (8.1a-d in
+  the design doc) — the "default project" half (already landed as 11.4's bare
+  terminal) resolved the echo-content question; window-9 is still sequenced
+  after P7 (7.2/7.4) concluding, which hasn't happened.
 - [~] **8.2** Campaign contract — **TODO slices** (assignable work units, need
   **dependency edges** across balancers/teams — flat lists can't express "this FE
   slice depends on that API slice") + **Objectives** (the missing piece today: lets
