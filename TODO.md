@@ -490,6 +490,12 @@ status-queryability and role-death resilience, not the underlying mechanism.
 
 ## P10 — modular architecture + sidebar UI (long-term vision, operator direction 2026-09-19 — not scoped, explicitly "in the future" not near-term)
 
+Design prerequisite: [TODO-prereq.md#optional-session-relation](TODO-prereq.md#optional-session-relation)
+— seatmesh modules (notify, etc.) should be usable independently by external
+callers (e.g. a different agent harness), with the mesh/session relation as
+optional tagged metadata rather than a hard `getLoaded()` requirement. Voiced
+2026-09-23 re: herdr interop; not scoped, feeds this section's eventual work.
+
 - [~] **10.1** Split the web hub / markdown hosting / notifications so they're usable
   standalone or composed with a different core engine (name-dropped: "workmux", a
   separate/adjacent tool, not part of this repo) — seatmesh-the-engine and
